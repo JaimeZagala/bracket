@@ -1,0 +1,12 @@
+# Build output (also holds generated large test files)
+/target/
+
+# Editors
+.vs/
+.vscode/
+.idea/
+
+# Original planning prompt (kept locally, not part of the repository)
+/Editor de código ligero para Windows arquitectura, plan y prompt.docx
+/Editor de código ligero para Windows arquitectura, plan y prompt.md
+/Editor de código ligero para Windows arquitectura, plan y prompt.pdf

@@ -1,0 +1,15 @@
+[package]
+name = "bracket-ui"
+description = "egui user interface: editor view, tabs, project tree, palette and status bar."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+bracket-core.workspace = true
+
+[lints]
+workspace = true

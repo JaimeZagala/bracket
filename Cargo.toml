@@ -1,0 +1,43 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/bracket-core",
+    "crates/bracket-syntax",
+    "crates/bracket-index",
+    "crates/bracket-search",
+    "crates/bracket-session",
+    "crates/bracket-update",
+    "crates/bracket-ui",
+    "crates/bracket-app",
+]
+
+# Single source of truth for version and metadata; every crate inherits it.
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/JaimeZagala/bracket"
+publish = false
+
+[workspace.dependencies]
+bracket-core = { path = "crates/bracket-core" }
+bracket-syntax = { path = "crates/bracket-syntax" }
+bracket-index = { path = "crates/bracket-index" }
+bracket-search = { path = "crates/bracket-search" }
+bracket-session = { path = "crates/bracket-session" }
+bracket-update = { path = "crates/bracket-update" }
+bracket-ui = { path = "crates/bracket-ui" }
+
+[workspace.lints.rust]
+# `deny` (not `forbid`) so a justified exception can opt out locally with a SAFETY comment.
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "deny"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

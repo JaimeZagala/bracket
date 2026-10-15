@@ -1,0 +1,20 @@
+[package]
+name = "bracket-app"
+description = "Bracket executable: startup, single instance, command line and Windows integration."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "bracket"
+path = "src/main.rs"
+
+[dependencies]
+bracket-ui.workspace = true
+bracket-update.workspace = true
+
+[lints]
+workspace = true
