@@ -10,6 +10,7 @@ Fase 1 (editor base, 0.1.0) en curso; Fase 0 completada. Sin versión publicada.
 
 ```powershell
 ./scripts/check.ps1                         # todo lo de abajo, en orden
+./scripts/check.ps1 -Perf                   # además: build release y presupuesto de arranque (150 ms)
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace

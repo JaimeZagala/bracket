@@ -78,3 +78,32 @@ Scrolling (`./scripts/measure.ps1 -Exe <exe> -Arguments target\large-1m.txt -Scr
 | iced + tiny-skia | 8.6 ms | 14.8 ms | 66 (no vsync) |
 
 Note: during these tests the machine had a varying background load (12–43 % CPU); startups measured in interleaved rounds are slower than in the previous tables, which were taken at a quiet moment.
+
+## Phase 1, step 1 — startup analysis (2026-10-15, machine A, background load < 10 %)
+
+`measure.ps1` now breaks startup down using timestamps from the application itself (app created and first `ui()` call):
+
+| Phase | Warm median |
+|---|---|
+| Launch → `main` | 12–14 ms |
+| `main` → app created (event loop, window, WGL, OpenGL context, egui painter) | 74–79 ms |
+| App created → first `ui()` call | 1.5 ms |
+| First `ui()` call → first frame presented | 35–38 ms |
+| **Total** | **123–133 ms** |
+
+Breakdown of "`main` → app created", from eframe's log messages with timestamps:
+
+| Part | Time |
+|---|---|
+| winit event loop | ~5.5 ms |
+| Window + WGL initialization (loading `opengl32` and the driver, pixel format selection) | ~60 ms |
+| OpenGL context and making it current | ~8 ms |
+| egui painter (OpenGL version, shaders, VAO) | ~5 ms |
+
+Settings tried in interleaved rounds (12 rounds; noise between identical variants: ±8 ms): `vsync = false`, `dithering = false`, hardware acceleration required, no drag and drop, no emoji fonts, and the Hack font only. None changes startup beyond the noise.
+
+Conclusions:
+
+- Most of the startup is OpenGL initialization on Windows (driver included), outside the application's control. With a quiet machine startup meets the budget (123–133 ms < 150 ms) with about 20 ms to spare.
+- `./scripts/check.ps1 -Perf` builds in release and fails if the warm median exceeds 150 ms. It does not run in continuous integration (runners have no GPU) and should be run with little background load.
+- Everything added in later phases must stay off the first frame's path (on threads or deferred).

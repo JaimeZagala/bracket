@@ -62,7 +62,7 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 Still to be solved; each item states the planned phase.
 
 - **Fonts (Phase 1):** egui only ships Hack, Ubuntu and emoji fonts; CJK characters (Chinese, Japanese, Korean) show as boxes. System fonts must be loaded from `C:\Windows\Fonts` (a monospace one such as Consolas or Cascadia Mono and a CJK fallback), measuring their cost in startup and memory.
-- **Startup (Phase 1):** ~140 ms without load, at the limit of the 150 ms budget. Profile eframe (OpenGL context, fonts, first frame) and watch for regressions (see [decisions/0001-ui.md](decisions/0001-ui.md)).
+- **Startup (all phases):** 123–133 ms without load; about 60 ms are OpenGL initialization on Windows and no eframe setting reduces it (see [measurements.md](measurements.md)). About 20 ms of margin remain: new work must stay off the first frame's path, and `check.ps1 -Perf` watches for regressions.
 - **Encodings (Phase 1):** UTF-8 only; anything else opens read-only.
 - **Saving (Phase 1):** the rename does not keep the original file's attributes, ACLs or hard links (use `ReplaceFileW` from the Windows layer); saving from the unsaved-changes dialog blocks the interface.
 - **Modified state (Phase 1):** undoing back to the saved state still marks the document as modified.

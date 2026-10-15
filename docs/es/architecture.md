@@ -62,7 +62,7 @@ En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync
 Pendiente de resolver; cada punto indica la fase prevista.
 
 - **Fuentes (Fase 1):** egui solo trae Hack, Ubuntu y emoji; los caracteres CJK (chino, japonés, coreano) se ven como cuadros. Hay que cargar fuentes del sistema desde `C:\Windows\Fonts` (una monoespaciada como Consolas o Cascadia Mono y una CJK de respaldo) midiendo su coste en arranque y memoria.
-- **Arranque (Fase 1):** ~140 ms sin carga, al límite del presupuesto de 150 ms. Perfilar eframe (contexto OpenGL, fuentes, primer frame) y vigilar regresiones (ver [decisions/0001-ui.md](decisions/0001-ui.md)).
+- **Arranque (todas las fases):** 123–133 ms sin carga; unos 60 ms son la inicialización de OpenGL en Windows y ninguna opción de eframe lo reduce (ver [measurements.md](measurements.md)). Quedan unos 20 ms de margen: lo nuevo debe ir fuera del camino del primer frame, y `check.ps1 -Perf` vigila las regresiones.
 - **Codificaciones (Fase 1):** solo UTF-8; el resto se abre en solo lectura.
 - **Guardado (Fase 1):** el renombrado no conserva atributos, ACL ni hard links del fichero original (usar `ReplaceFileW` desde la capa de Windows); el guardado desde el diálogo de cambios sin guardar bloquea la interfaz.
 - **Estado modificado (Fase 1):** deshacer hasta el estado guardado sigue marcando el documento como modificado.

@@ -78,3 +78,32 @@ Scroll (`./scripts/measure.ps1 -Exe <exe> -Arguments target\large-1m.txt -Scroll
 | iced + tiny-skia | 8,6 ms | 14,8 ms | 66 (sin vsync) |
 
 Nota: durante estas pruebas el equipo tenía carga de fondo variable (12–43 % de CPU); los arranques medidos en rondas intercaladas salen más lentos que los de las tablas anteriores, tomadas en un momento tranquilo.
+
+## Fase 1, paso 1 — análisis del arranque (2026-10-15, equipo A, carga de fondo < 10 %)
+
+`measure.ps1` desglosa ahora el arranque con marcas de la propia aplicación (app creada y primera llamada a `ui()`):
+
+| Fase | Mediana en caliente |
+|---|---|
+| Lanzamiento → `main` | 12–14 ms |
+| `main` → app creada (bucle de eventos, ventana, WGL, contexto OpenGL, pintor de egui) | 74–79 ms |
+| App creada → primera llamada a `ui()` | 1,5 ms |
+| Primera llamada a `ui()` → primer frame presentado | 35–38 ms |
+| **Total** | **123–133 ms** |
+
+Detalle de "`main` → app creada", según los mensajes de log de eframe con marca de tiempo:
+
+| Tramo | Tiempo |
+|---|---|
+| Bucle de eventos de winit | ~5,5 ms |
+| Ventana + inicialización de WGL (carga de `opengl32` y del driver, elección del formato de píxel) | ~60 ms |
+| Contexto OpenGL y hacerlo actual | ~8 ms |
+| Pintor de egui (versión de OpenGL, shaders, VAO) | ~5 ms |
+
+Opciones probadas en rondas intercaladas (12 rondas; ruido entre variantes idénticas: ±8 ms): `vsync = false`, `dithering = false`, aceleración por hardware obligatoria, sin arrastrar y soltar, sin fuentes de emoji y solo la fuente Hack. Ninguna cambia el arranque más allá del ruido.
+
+Conclusiones:
+
+- La mayor parte del arranque es la inicialización de OpenGL en Windows (driver incluido), fuera del alcance de la aplicación. Con la máquina tranquila el arranque cumple el presupuesto (123–133 ms < 150 ms) con un margen de unos 20 ms.
+- `./scripts/check.ps1 -Perf` compila en release y falla si la mediana en caliente supera 150 ms. No corre en la integración continua (los runners no tienen GPU) y conviene ejecutarlo con poca carga de fondo.
+- Todo lo que se añada en las fases siguientes debe quedar fuera del camino del primer frame (en hilos o diferido).
