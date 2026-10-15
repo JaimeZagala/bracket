@@ -64,3 +64,17 @@ Conclusiones:
 
 - El fichero de 100 MB queda visible en 0,36 s, por debajo del presupuesto de 1 s, sin bloquear la interfaz (la carga va en un hilo de trabajo).
 - Un frame con scroll cuesta 0,4 ms de CPU: hay margen de sobra para 60 Hz.
+
+## Fase 0 — comparación de frameworks de interfaz (2026-10-15, equipo A)
+
+Prototipo de iced 0.14.0 en `experiments/ui-iced` (variantes wgpu y tiny-skia) frente a `bracket.exe`. Tabla completa y análisis en [decisions/0001-ui.md](decisions/0001-ui.md).
+
+Scroll (`./scripts/measure.ps1 -Exe <exe> -Arguments target\large-1m.txt -Scroll [-Maximized]`, ejecuciones intercaladas): una página por frame durante 300 frames.
+
+| | CPU por frame, 1000×700 | CPU por frame, maximizada | fps maximizada |
+|---|---|---|---|
+| egui + glow (`bracket.exe`) | 3,8 ms | 4,2 ms | ~100 (vsync) |
+| iced + wgpu | 3,3 ms | 3,4 ms | ~100 (vsync) |
+| iced + tiny-skia | 8,6 ms | 14,8 ms | 66 (sin vsync) |
+
+Nota: durante estas pruebas el equipo tenía carga de fondo variable (12–43 % de CPU); los arranques medidos en rondas intercaladas salen más lentos que los de las tablas anteriores, tomadas en un momento tranquilo.

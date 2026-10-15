@@ -64,3 +64,17 @@ Conclusions:
 
 - The 100 MB file is visible in 0.36 s, under the 1 s budget, without blocking the interface (loading runs on a worker thread).
 - A scrolling frame costs 0.4 ms of CPU: plenty of headroom for 60 Hz.
+
+## Phase 0 — interface framework comparison (2026-10-15, machine A)
+
+iced 0.14.0 prototype in `experiments/ui-iced` (wgpu and tiny-skia variants) against `bracket.exe`. Full table and analysis in [decisions/0001-ui.md](decisions/0001-ui.md).
+
+Scrolling (`./scripts/measure.ps1 -Exe <exe> -Arguments target\large-1m.txt -Scroll [-Maximized]`, interleaved runs): one page per frame for 300 frames.
+
+| | CPU per frame, 1000×700 | CPU per frame, maximized | fps maximized |
+|---|---|---|---|
+| egui + glow (`bracket.exe`) | 3.8 ms | 4.2 ms | ~100 (vsync) |
+| iced + wgpu | 3.3 ms | 3.4 ms | ~100 (vsync) |
+| iced + tiny-skia | 8.6 ms | 14.8 ms | 66 (no vsync) |
+
+Note: during these tests the machine had a varying background load (12–43 % CPU); startups measured in interleaved rounds are slower than in the previous tables, which were taken at a quiet moment.
