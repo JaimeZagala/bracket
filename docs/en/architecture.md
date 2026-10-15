@@ -12,10 +12,10 @@ Status: Phase 0. This document describes the agreed structure; each section stat
 | `bracket-syntax` | Loading of built-in and external languages, incremental line-based highlighting with cache, themes. | `bracket-core` (planned) | Empty |
 | `bracket-index` | Project walking, symbol extraction (tree-sitter and regex), incremental index, fuzzy search, references by name. | `bracket-core` (planned) | Empty |
 | `bracket-search` | Cancellable regex find and replace in a file and across a folder, with streamed results. | `bracket-core` (planned) | Empty |
-| `bracket-session` | TOML configuration, portable mode, recoverable session, recent files, file watching, command registry. | `bracket-core` (planned) | Empty |
+| `bracket-session` | TOML configuration, portable mode, recoverable session, recent files, file watching, command registry. | `bracket-core` | Phase 1: paths (portable mode or `%APPDATA%`) and TOML configuration |
 | `bracket-update` | Release channel checks, download, checksum and signature verification, apply and rollback. | — | Empty |
-| `bracket-ui` | egui interface: editor view, tabs, project tree, palette, status bar. | `bracket-core` | Phase 0: prototype (editor view, window, minimal status bar, text catalog) |
-| `bracket-app` | `bracket.exe` binary: startup, single instance, arguments, Windows manifest, HKCU registration. | `bracket-ui`, `bracket-update` | Phase 0: startup and file argument |
+| `bracket-ui` | egui interface: editor view, tabs, project tree, palette, status bar. | `bracket-core`, `bracket-session` | Phase 0: prototype (editor view, window, minimal status bar, text catalog) |
+| `bracket-app` | `bracket.exe` binary: startup, single instance, arguments, Windows manifest, HKCU registration. | `bracket-ui`, `bracket-session`, `bracket-update` | Phase 0: startup and file argument. Phase 1: resolves paths and loads the configuration |
 
 ## Dependency rules
 

@@ -48,7 +48,7 @@ Se miden, no se suponen. Si alguno no es alcanzable, se informa con datos y alte
 - **Resaltado:** syntect con la feature `default-fancy` (sin dependencias de C), gramáticas `.sublime-syntax`/`.tmLanguage`.
 - **Símbolos:** tree-sitter para C#, CSS, JSON y XML. T-SQL por reglas regex (CREATE/ALTER de PROCEDURE, FUNCTION, VIEW, TABLE, TRIGGER; `GO` como separador). Razor en tres capas: resaltado TextMate; símbolos de directivas (`@page`, `@inject`, `@using`, `@inherits`) y bloques `@code` pasados al extractor de C#; navegación de `<MiComponente />` a `MiComponente.razor` por nombre de fichero.
 - **Proyecto y búsqueda:** ignore, regex + grep-searcher, nucleo-matcher.
-- **Otros:** notify, similar, encoding_rs + chardetng, serde + toml, anyhow + thiserror + tracing, crossbeam-channel.
+- **Otros:** notify, similar, encoding_rs + chardetng, toml_edit (configuración: conserva comentarios al guardar y lee clave a clave; sustituye a serde + toml desde la Fase 1), anyhow + thiserror + tracing, crossbeam-channel.
 - **Distribución:** winreg, winresource o embed-resource, ureq, semver, sha2 + ed25519-dalek, self-replace, zip. Instalador con Inno Setup. Publicación con GitHub Actions en runner de Windows.
 - **Pruebas:** cargo test, proptest, criterion.
 

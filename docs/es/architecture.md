@@ -12,10 +12,10 @@ Estado: Fase 0. Este documento describe la estructura acordada; cada sección in
 | `bracket-syntax` | Carga de lenguajes integrados y externos, resaltado incremental por líneas con caché, temas. | `bracket-core` (previsto) | Vacía |
 | `bracket-index` | Recorrido de proyecto, extracción de símbolos (tree-sitter y regex), índice incremental, búsqueda difusa, referencias por nombre. | `bracket-core` (previsto) | Vacía |
 | `bracket-search` | Buscar y reemplazar con regex en fichero y carpeta, cancelable, con resultados en streaming. | `bracket-core` (previsto) | Vacía |
-| `bracket-session` | Configuración TOML, modo portable, sesión recuperable, recientes, vigilancia de ficheros, registro de comandos. | `bracket-core` (previsto) | Vacía |
+| `bracket-session` | Configuración TOML, modo portable, sesión recuperable, recientes, vigilancia de ficheros, registro de comandos. | `bracket-core` | Fase 1: rutas (modo portable o `%APPDATA%`) y configuración TOML |
 | `bracket-update` | Comprobación de versiones por canal, descarga, verificación de suma y firma, aplicación y vuelta atrás. | — | Vacía |
-| `bracket-ui` | Interfaz egui: vista del editor, pestañas, árbol de proyecto, paleta, barra de estado. | `bracket-core` | Fase 0: prototipo (vista del editor, ventana, barra de estado mínima, catálogo de textos) |
-| `bracket-app` | Binario `bracket.exe`: arranque, instancia única, argumentos, manifiesto de Windows, registro en HKCU. | `bracket-ui`, `bracket-update` | Fase 0: arranque y fichero por argumento |
+| `bracket-ui` | Interfaz egui: vista del editor, pestañas, árbol de proyecto, paleta, barra de estado. | `bracket-core`, `bracket-session` | Fase 0: prototipo (vista del editor, ventana, barra de estado mínima, catálogo de textos) |
+| `bracket-app` | Binario `bracket.exe`: arranque, instancia única, argumentos, manifiesto de Windows, registro en HKCU. | `bracket-ui`, `bracket-session`, `bracket-update` | Fase 0: arranque y fichero por argumento. Fase 1: resuelve rutas y carga la configuración |
 
 ## Reglas de dependencias
 

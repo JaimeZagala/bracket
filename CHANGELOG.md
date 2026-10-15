@@ -15,3 +15,6 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - Doble licencia MIT o Apache-2.0.
 - Ventana principal de `bracket.exe` (egui/eframe con backend OpenGL) y script de medición de tamaño, arranque y memoria.
 - Prototipo del editor: abrir un fichero UTF-8 (argumento o arrastrar a la ventana), editar con selecciones múltiples, deshacer/rehacer, portapapeles, IME, tabulaciones y guardado atómico que conserva BOM y saltos de línea. Los ficheros que no son UTF-8 se abren en solo lectura.
+- Configuración en `config.toml` (idioma de la interfaz, tamaño de letra, ancho de tabulación y salto de línea de los ficheros nuevos) con avisos en la barra de estado si algún valor no es válido.
+- Modo portable: con `portable.toml` junto al exe, todos los datos se guardan en esa carpeta.
+- Guía de usuario en `docs/es/user-guide.md`.
