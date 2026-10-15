@@ -6,8 +6,10 @@ Bracket is under development (Phase 1). This guide describes what already works 
 
 ## Opening and saving
 
-- Open a file by passing it as an argument (`bracket.exe file.txt`) or by dropping it on the window.
-- Ctrl+S saves. Saving is atomic and keeps the file's BOM and line endings.
+- **File** menu: New (Ctrl+N), Open (Ctrl+O), Save (Ctrl+S), Save As (Ctrl+Shift+S) and Exit. Open and Save As use the Windows dialogs.
+- A file can also be opened by passing it as an argument (`bracket.exe file.txt`) or by dropping it on the window.
+- Saving an untitled document opens Save As. Saving is atomic and keeps the file's BOM and line endings.
+- If there are unsaved changes, Bracket asks before opening another file, creating a new one or exiting.
 - Bracket detects the encoding when opening (UTF-8, UTF-16 and legacy encodings such as windows-1252) and saves in the same one, byte for byte. If a file cannot be written back exactly the same, it opens read-only and the status bar says so.
 
 ## Encoding and line endings

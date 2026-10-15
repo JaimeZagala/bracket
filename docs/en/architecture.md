@@ -52,6 +52,11 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 - **Document:** buffer + path + encoding + line ending + saved version. Atomic save: temporary file in the same folder, `sync_all` and rename over the target.
 - **Encodings (`encoding.rs`):** detection by BOM, UTF-16 without BOM (zero-byte pattern), valid UTF-8 and otherwise `chardetng`. A file is only editable if encoding its text again reproduces exactly its bytes; otherwise it is read-only. When saving, a character that does not exist in the encoding makes the save fail (encoding_rs would replace it with `&#NNNN;`). UTF-16 is encoded by hand because encoding_rs only writes UTF-8 for it. Valid UTF-8 is decoded without copying the bytes.
 
+## Files and shortcuts (Phase 1)
+
+- `dialogs.rs` wraps `rfd`'s native dialogs with Bracket's window as parent: they are modal and run on the UI thread, as in any editor.
+- Application shortcuts (Ctrl+N/O/S, Ctrl+Shift+S) are consumed by the app before the editor paints, so they work wherever the focus is. Saving an untitled document goes through Save As.
+
 ## Fonts (Phase 1)
 
 - `bracket-app` (`system_fonts.rs`) finds installed fonts by family name in the Windows registry (HKCU, then HKLM) and implements the `FontSource` trait.

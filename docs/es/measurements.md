@@ -117,6 +117,7 @@ Conclusiones:
 | Paso 3: traducciones y selector de idioma | 6.099.456 B | +128 KB | Catálogos y menú de idioma. El mecanismo de catálogos mide +7,5 KB aislado (ver [decisions/0002-i18n.md](decisions/0002-i18n.md)); el resto debe de ser el código de menús de egui, enlazado por primera vez (no se midió por separado) |
 | Paso 4: fuentes del sistema | 4.736.000 B | −1.363 KB | Sin las fuentes integradas de egui (`default_fonts`); entra `winreg` |
 | Paso 5: codificaciones | 5.165.568 B | +430 KB | `encoding_rs` (tablas de todas las codificaciones WHATWG) y `chardetng` |
+| Paso 6: diálogos de ficheros | 5.216.256 B | +50 KB | `rfd` y el menú Archivo. Arranque intercalado frente al paso 5: 135,6 frente a 134,3 ms |
 
 Paso 5, arranque intercalado frente al paso 4 (15 rondas): 144,9 ms frente a 148,6 ms, dentro del ruido. Ese día las medianas absolutas rondaron 145–149 ms con el equipo cargado: el margen frente a los 150 ms es mínimo.
 

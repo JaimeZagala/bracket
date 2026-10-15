@@ -52,6 +52,11 @@ En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync
 - **Documento:** buffer + ruta + codificación + salto de línea + versión guardada. Guardado atómico: fichero temporal en la misma carpeta, `sync_all` y renombrado sobre el destino.
 - **Codificaciones (`encoding.rs`):** detección por BOM, UTF-16 sin BOM (patrón de bytes cero), UTF-8 válido y, si no, `chardetng`. Un fichero solo es editable si codificar de nuevo su texto reproduce exactamente sus bytes; si no, solo lectura. Al guardar, un carácter que no existe en la codificación hace fallar el guardado (encoding_rs lo sustituiría por `&#NNNN;`). UTF-16 se codifica a mano porque encoding_rs solo escribe UTF-8 para él. El UTF-8 válido se decodifica sin copiar los bytes.
 
+## Ficheros y atajos (Fase 1)
+
+- `dialogs.rs` envuelve los diálogos nativos de `rfd` con la ventana de Bracket como padre: son modales y se ejecutan en el hilo de interfaz, como en cualquier editor.
+- Los atajos de la aplicación (Ctrl+N/O/S, Ctrl+Mayús+S) se consumen en la app antes de pintar el editor, así que funcionan esté donde esté el foco. Guardar un documento sin título pasa por Guardar como.
+
 ## Fuentes (Fase 1)
 
 - `bracket-app` (`system_fonts.rs`) encuentra fuentes instaladas por nombre de familia leyendo el registro de Windows (HKCU y luego HKLM) e implementa el trait `FontSource`.

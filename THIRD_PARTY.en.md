@@ -18,6 +18,7 @@ Direct dependencies only; transitive ones will be reviewed with a license tool b
 | [winreg](https://crates.io/crates/winreg) | 0.56.0 | MIT | Reading installed fonts from the Windows registry in `bracket-app` (and, in Phase 5, file associations) | Included in the step 4 change (−1.36 MB overall after removing the bundled fonts) |
 | [encoding_rs](https://crates.io/crates/encoding_rs) | 0.8.42 | (Apache-2.0 OR MIT) AND BSD-3-Clause | Decoding and encoding text (UTF-8, UTF-16 and legacy encodings) in `bracket-core` | +430 KB together with chardetng |
 | [chardetng](https://crates.io/crates/chardetng) | 1.0.0 | Apache-2.0 OR MIT | Guessing the encoding of files that are not UTF-8 | (included above) |
+| [rfd](https://crates.io/crates/rfd) | 0.17.2 | MIT | Native Open and Save As dialogs (Windows `IFileDialog`) in `bracket-ui` | +50 KB together with the File menu |
 
 The BSD-3-Clause part of encoding_rs (WHATWG data tables) requires its copyright notice to be reproduced in binary distributions: it will be included in the third-party license file shipped with the installer and the zip (Phase 5).
 
