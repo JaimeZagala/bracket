@@ -90,12 +90,40 @@ impl Texts {
         self.fill("position", &[("line", &line), ("column", &column)])
     }
 
-    pub fn saved(&self) -> &str {
-        self.get("saved")
+    pub fn menu_file(&self) -> &str {
+        self.get("menu_file")
     }
 
-    pub fn save_needs_path(&self) -> &str {
-        self.get("save_needs_path")
+    pub fn menu_new(&self) -> &str {
+        self.get("menu_new")
+    }
+
+    pub fn menu_open(&self) -> &str {
+        self.get("menu_open")
+    }
+
+    pub fn menu_save(&self) -> &str {
+        self.get("menu_save")
+    }
+
+    pub fn menu_save_as(&self) -> &str {
+        self.get("menu_save_as")
+    }
+
+    pub fn menu_exit(&self) -> &str {
+        self.get("menu_exit")
+    }
+
+    pub fn dialog_open_title(&self) -> &str {
+        self.get("dialog_open_title")
+    }
+
+    pub fn dialog_save_as_title(&self) -> &str {
+        self.get("dialog_save_as_title")
+    }
+
+    pub fn saved(&self) -> &str {
+        self.get("saved")
     }
 
     pub fn save_read_only(&self) -> &str {
@@ -254,8 +282,15 @@ mod tests {
                 ("read_only", t.read_only().to_owned()),
                 ("drop_hint", t.drop_hint().to_owned()),
                 ("position", t.position(1, 2)),
+                ("menu_file", t.menu_file().to_owned()),
+                ("menu_new", t.menu_new().to_owned()),
+                ("menu_open", t.menu_open().to_owned()),
+                ("menu_save", t.menu_save().to_owned()),
+                ("menu_save_as", t.menu_save_as().to_owned()),
+                ("menu_exit", t.menu_exit().to_owned()),
+                ("dialog_open_title", t.dialog_open_title().to_owned()),
+                ("dialog_save_as_title", t.dialog_save_as_title().to_owned()),
                 ("saved", t.saved().to_owned()),
-                ("save_needs_path", t.save_needs_path().to_owned()),
                 ("save_read_only", t.save_read_only().to_owned()),
                 ("open_failed", t.open_failed("e")),
                 ("save_failed", t.save_failed("e")),

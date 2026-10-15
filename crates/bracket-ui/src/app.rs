@@ -12,9 +12,10 @@ use bracket_core::document::{self, Document, LineEnding, SaveError};
 use bracket_core::encoding::{self, TextEncoding};
 use bracket_core::movement::{self, Motion};
 use bracket_session::{Config, ConfigWarning, Language, LoadedConfig, config};
-use eframe::egui::{self, Id, Key, Modifiers, ViewportCommand};
+use eframe::egui::{self, Id, Key, KeyboardShortcut, Modifiers, ViewportCommand};
 
 use crate::Launch;
+use crate::dialogs;
 use crate::editor_view::EditorView;
 use crate::fonts::{self, Fallback, FontFile, FontSource};
 use crate::i18n::{self, LANGUAGES, Texts};
@@ -37,6 +38,45 @@ enum StatusAction {
 enum PendingAction {
     Close,
     Open(PathBuf),
+    New,
+    /// Show the Open dialog.
+    OpenDialog,
+}
+
+/// File menu commands, also bound to keyboard shortcuts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FileCommand {
+    New,
+    Open,
+    Save,
+    SaveAs,
+    Exit,
+}
+
+impl FileCommand {
+    const SHORTCUTS: [(Self, KeyboardShortcut); 4] = [
+        // Save As before Save, so Ctrl+Shift+S is not taken as Ctrl+S.
+        (
+            Self::SaveAs,
+            KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S),
+        ),
+        (
+            Self::Save,
+            KeyboardShortcut::new(Modifiers::COMMAND, Key::S),
+        ),
+        (Self::New, KeyboardShortcut::new(Modifiers::COMMAND, Key::N)),
+        (
+            Self::Open,
+            KeyboardShortcut::new(Modifiers::COMMAND, Key::O),
+        ),
+    ];
+
+    fn shortcut(self) -> Option<KeyboardShortcut> {
+        Self::SHORTCUTS
+            .iter()
+            .find(|(command, _)| *command == self)
+            .map(|(_, shortcut)| *shortcut)
+    }
 }
 
 pub struct BracketApp {
@@ -210,8 +250,8 @@ impl BracketApp {
             self.status = Some(self.texts.save_read_only().to_owned());
             return;
         }
+        // Untitled documents go through Save As first, so there is always a path here.
         let Some(request) = self.doc.save_request() else {
-            self.status = Some(self.texts.save_needs_path().to_owned());
             return;
         };
         let (tx, rx) = mpsc::channel();
@@ -254,7 +294,15 @@ impl BracketApp {
 
     /// Saves on the UI thread. Only used from the unsaved-changes dialog, where the next
     /// action must wait for the result anyway.
-    fn save_now(&mut self) -> bool {
+    fn save_now(&mut self, frame: &eframe::Frame) -> bool {
+        if self.doc.path().is_none() {
+            let Some(path) =
+                dialogs::pick_file_to_save(frame, self.texts.dialog_save_as_title(), None)
+            else {
+                return false;
+            };
+            self.doc.set_path(path);
+        }
         match self.doc.save_request() {
             Some(request) => match request.write() {
                 Ok(()) => {
@@ -267,20 +315,106 @@ impl BracketApp {
                 }
             },
             None => {
-                self.status = Some(self.texts.save_needs_path().to_owned());
+                self.status = Some(self.texts.save_read_only().to_owned());
                 false
             }
         }
     }
 
-    fn run_pending(&mut self, ctx: &egui::Context, action: PendingAction) {
+    fn run_pending(&mut self, ctx: &egui::Context, frame: &eframe::Frame, action: PendingAction) {
         match action {
             PendingAction::Close => {
                 self.allow_close = true;
                 ctx.send_viewport_cmd(ViewportCommand::Close);
             }
             PendingAction::Open(path) => self.start_loading(ctx, path, None),
+            PendingAction::New => self.new_document(ctx),
+            PendingAction::OpenDialog => self.open_with_dialog(ctx, frame),
         }
+    }
+
+    fn run_file_command(
+        &mut self,
+        ctx: &egui::Context,
+        frame: &eframe::Frame,
+        command: FileCommand,
+    ) {
+        match command {
+            FileCommand::New if self.doc.is_dirty() => self.pending = Some(PendingAction::New),
+            FileCommand::New => self.new_document(ctx),
+            FileCommand::Open if self.doc.is_dirty() => {
+                self.pending = Some(PendingAction::OpenDialog);
+            }
+            FileCommand::Open => self.open_with_dialog(ctx, frame),
+            FileCommand::Save if self.doc.path().is_none() => self.save_as(ctx, frame),
+            FileCommand::Save => self.start_saving(ctx),
+            FileCommand::SaveAs => self.save_as(ctx, frame),
+            // Closing goes through the unsaved-changes check in handle_window_events.
+            FileCommand::Exit => ctx.send_viewport_cmd(ViewportCommand::Close),
+        }
+        ctx.memory_mut(|m| m.request_focus(self.view.id()));
+    }
+
+    fn new_document(&mut self, ctx: &egui::Context) {
+        let mut doc = Document::new_empty(self.config.line_ending, self.config.encoding);
+        doc.buffer.set_tab_width(self.config.tab_width);
+        self.doc = doc;
+        self.view.reset();
+        self.status = None;
+        ctx.memory_mut(|m| m.request_focus(self.view.id()));
+    }
+
+    fn open_with_dialog(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
+        let start_dir = self.doc.path().and_then(|p| p.parent()).map(PathBuf::from);
+        let title = self.texts.dialog_open_title();
+        if let Some(path) = dialogs::pick_file_to_open(frame, title, start_dir.as_deref()) {
+            self.start_loading(ctx, path, None);
+        }
+    }
+
+    fn save_as(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
+        if self.doc.is_read_only() {
+            self.status = Some(self.texts.save_read_only().to_owned());
+            return;
+        }
+        let title = self.texts.dialog_save_as_title();
+        if let Some(path) = dialogs::pick_file_to_save(frame, title, self.doc.path()) {
+            self.doc.set_path(path);
+            self.start_saving(ctx);
+        }
+    }
+
+    /// Draws the menu bar. Returns the command picked, if any.
+    fn menu_bar(&self, ui: &mut egui::Ui) -> Option<FileCommand> {
+        let mut picked = None;
+        let items = [
+            (FileCommand::New, self.texts.menu_new()),
+            (FileCommand::Open, self.texts.menu_open()),
+            (FileCommand::Save, self.texts.menu_save()),
+            (FileCommand::SaveAs, self.texts.menu_save_as()),
+        ];
+        egui::Panel::top("menu").show(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
+                ui.menu_button(self.texts.menu_file(), |ui| {
+                    for (command, label) in items {
+                        let mut button = egui::Button::new(label);
+                        if let Some(shortcut) = command.shortcut() {
+                            button = button.shortcut_text(ui.ctx().format_shortcut(&shortcut));
+                        }
+                        if ui.add(button).clicked() {
+                            picked = Some(command);
+                            ui.close();
+                        }
+                    }
+                    ui.separator();
+                    if ui.button(self.texts.menu_exit()).clicked() {
+                        picked = Some(FileCommand::Exit);
+                        ui.close();
+                    }
+                });
+            });
+        });
+        picked
     }
 
     fn handle_window_events(&mut self, ctx: &egui::Context) {
@@ -465,7 +599,7 @@ impl BracketApp {
         }
     }
 
-    fn unsaved_dialog(&mut self, ctx: &egui::Context) {
+    fn unsaved_dialog(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
         let Some(action) = self.pending.clone() else {
             return;
         };
@@ -490,13 +624,13 @@ impl BracketApp {
         match choice {
             Some(true) => {
                 self.pending = None;
-                if self.save_now() {
-                    self.run_pending(ctx, action);
+                if self.save_now(frame) {
+                    self.run_pending(ctx, frame, action);
                 }
             }
             Some(false) => {
                 self.pending = None;
-                self.run_pending(ctx, action);
+                self.run_pending(ctx, frame, action);
             }
             None => {}
         }
@@ -538,7 +672,7 @@ impl BracketApp {
 }
 
 impl eframe::App for BracketApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.poll_loading(&ctx);
         self.poll_saving();
@@ -548,8 +682,13 @@ impl eframe::App for BracketApp {
 
         // Application shortcuts work wherever the keyboard focus is (for example after using a
         // status bar menu); consuming them keeps the editor from seeing them too.
-        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::S)) {
-            self.start_saving(&ctx);
+        let shortcut = FileCommand::SHORTCUTS
+            .iter()
+            .find(|(_, shortcut)| ctx.input_mut(|i| i.consume_shortcut(shortcut)))
+            .map(|(command, _)| *command);
+        let menu_command = self.menu_bar(ui);
+        if let Some(command) = shortcut.or(menu_command) {
+            self.run_file_command(&ctx, frame, command);
         }
         if let Some(action) = self.status_bar(ui) {
             self.run_status_action(&ctx, action);
@@ -566,7 +705,7 @@ impl eframe::App for BracketApp {
                 }
             }
         });
-        self.unsaved_dialog(&ctx);
+        self.unsaved_dialog(&ctx, frame);
         self.update_title(&ctx);
 
         self.run_probe(&ctx);

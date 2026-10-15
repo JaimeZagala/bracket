@@ -1,6 +1,7 @@
 //! egui user interface: editor view, tabs, project tree, palette and status bar.
 
 mod app;
+mod dialogs;
 mod editor_view;
 pub mod fonts;
 mod i18n;

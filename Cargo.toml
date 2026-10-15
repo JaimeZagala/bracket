@@ -45,6 +45,8 @@ winreg = "0.56.0"
 # Encodings: decoding/encoding (WHATWG set) and guessing legacy encodings.
 encoding_rs = "0.8.42"
 chardetng = "1.0.0"
+# Native file dialogs (IFileDialog on Windows); Linux portal features off.
+rfd = { version = "0.17.2", default-features = false }
 
 [workspace.lints.rust]
 # `deny` (not `forbid`) so a justified exception can opt out locally with a SAFETY comment.

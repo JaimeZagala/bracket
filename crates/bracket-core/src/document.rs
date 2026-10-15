@@ -221,6 +221,11 @@ impl Document {
         self.path.as_deref()
     }
 
+    /// Binds the document to another file ("save as"). The next save writes there.
+    pub fn set_path(&mut self, path: PathBuf) {
+        self.path = Some(path);
+    }
+
     pub fn encoding(&self) -> TextEncoding {
         self.encoding
     }
@@ -471,6 +476,25 @@ mod tests {
         assert_eq!(doc.line_ending(), LineEnding::Lf);
         doc.buffer.undo();
         assert_eq!(doc.buffer.text().to_string(), "a\r\nb\rc\n");
+    }
+
+    #[test]
+    fn save_as_writes_to_the_new_path() {
+        let dir = temp_dir("save-as");
+        let mut doc = Document::new_empty(LineEnding::Lf, TextEncoding::UTF8);
+        assert!(
+            doc.save_request().is_none(),
+            "an untitled document has nowhere to go"
+        );
+        doc.buffer.insert("hola");
+        let path = dir.join("nuevo.txt");
+        doc.set_path(path.clone());
+        let request = doc.save_request().unwrap();
+        request.write().unwrap();
+        doc.mark_saved(request.version, request.encoding);
+        assert_eq!(fs::read(&path).unwrap(), b"hola");
+        assert!(!doc.is_dirty());
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
