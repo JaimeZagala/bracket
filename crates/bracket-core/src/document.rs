@@ -269,10 +269,12 @@ impl Document {
         })
     }
 
-    /// Records that the text at `version`, in `encoding`, is now on disk.
+    /// Records that the text at `version`, in `encoding`, is now on disk. The next edit starts a
+    /// new undo step, so undo can always return exactly to the saved text.
     pub fn mark_saved(&mut self, version: u64, encoding: TextEncoding) {
         self.saved_version = version;
         self.saved_encoding = encoding;
+        self.buffer.seal_undo_step();
     }
 }
 
@@ -495,6 +497,40 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), b"hola");
         assert!(!doc.is_dirty());
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn undoing_back_to_the_saved_text_is_not_modified() {
+        let mut doc = Document::new_empty(LineEnding::Lf, TextEncoding::UTF8);
+        doc.buffer.insert("a");
+        doc.buffer.insert("b");
+        doc.mark_saved(doc.buffer.version(), TextEncoding::UTF8);
+        assert!(!doc.is_dirty());
+
+        doc.buffer.insert("c");
+        assert!(
+            doc.is_dirty(),
+            "typing after a save is a change even if it could merge"
+        );
+        doc.buffer.undo();
+        assert!(!doc.is_dirty(), "undo returned exactly to the saved text");
+        doc.buffer.redo();
+        assert!(doc.is_dirty());
+        doc.buffer.undo();
+        doc.buffer.undo();
+        assert!(doc.is_dirty(), "undoing past the save is a change too");
+        doc.buffer.redo();
+        assert!(!doc.is_dirty(), "redo back to the saved text");
+    }
+
+    #[test]
+    fn a_new_edit_after_undo_is_modified_even_if_it_looks_alike() {
+        let mut doc = Document::new_empty(LineEnding::Lf, TextEncoding::UTF8);
+        doc.buffer.insert("x");
+        doc.mark_saved(doc.buffer.version(), TextEncoding::UTF8);
+        doc.buffer.undo();
+        doc.buffer.insert("y");
+        assert!(doc.is_dirty(), "ids are never reused");
     }
 
     #[test]

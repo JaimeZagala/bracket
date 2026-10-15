@@ -24,8 +24,6 @@ pub struct Buffer {
     selections: Selections,
     history: History,
     tab_width: usize,
-    /// Incremented on every change to the text (edit, undo or redo).
-    version: u64,
 }
 
 impl Default for Buffer {
@@ -46,7 +44,6 @@ impl Buffer {
             selections: Selections::caret(0),
             history: History::default(),
             tab_width: DEFAULT_TAB_WIDTH,
-            version: 0,
         }
     }
 
@@ -57,7 +54,6 @@ impl Buffer {
             selections: Selections::caret(0),
             history: History::default(),
             tab_width: DEFAULT_TAB_WIDTH,
-            version: 0,
         })
     }
 
@@ -78,9 +74,11 @@ impl Buffer {
         &self.selections
     }
 
-    /// Changes whenever the text changes. Comparing versions tells whether there are unsaved edits.
+    /// Identifies the current text state: it changes with every edit and returns to an earlier
+    /// value when undo or redo restores that text. Comparing it with the saved value tells
+    /// exactly whether there are unsaved changes.
     pub fn version(&self) -> u64 {
-        self.version
+        self.history.state()
     }
 
     pub fn tab_width(&self) -> usize {
@@ -157,7 +155,6 @@ impl Buffer {
             after: self.selections.clone(),
         };
         self.history.push(transaction, EditKind::Other);
-        self.version += 1;
         true
     }
 
@@ -232,7 +229,6 @@ impl Buffer {
             return false;
         };
         transaction.revert(&mut self.text);
-        self.version += 1;
         self.selections = transaction.before;
         true
     }
@@ -243,7 +239,6 @@ impl Buffer {
             return false;
         };
         transaction.apply(&mut self.text);
-        self.version += 1;
         self.selections = transaction.after;
         true
     }
@@ -322,7 +317,6 @@ impl Buffer {
                 after: self.selections.clone(),
             };
             self.history.push(transaction, kind);
-            self.version += 1;
         }
     }
 }
