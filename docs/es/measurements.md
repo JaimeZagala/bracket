@@ -67,7 +67,7 @@ Conclusiones:
 
 ## Fase 0 — comparación de frameworks de interfaz (2026-10-15, equipo A)
 
-Prototipo de iced 0.14.0 en `experiments/ui-iced` (variantes wgpu y tiny-skia) frente a `bracket.exe`. Tabla completa y análisis en [decisions/0001-ui.md](decisions/0001-ui.md).
+Prototipo de iced 0.14.0 (variantes wgpu y tiny-skia) frente a `bracket.exe`; su código quedó en el historial (commit `61c1712`). Tabla completa y análisis en [decisions/0001-ui.md](decisions/0001-ui.md).
 
 Scroll (`./scripts/measure.ps1 -Exe <exe> -Arguments target\large-1m.txt -Scroll [-Maximized]`, ejecuciones intercaladas): una página por frame durante 300 frames.
 

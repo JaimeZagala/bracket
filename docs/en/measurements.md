@@ -67,7 +67,7 @@ Conclusions:
 
 ## Phase 0 — interface framework comparison (2026-10-15, machine A)
 
-iced 0.14.0 prototype in `experiments/ui-iced` (wgpu and tiny-skia variants) against `bracket.exe`. Full table and analysis in [decisions/0001-ui.md](decisions/0001-ui.md).
+iced 0.14.0 prototype (wgpu and tiny-skia variants) against `bracket.exe`; its code remains in the history (commit `61c1712`). Full table and analysis in [decisions/0001-ui.md](decisions/0001-ui.md).
 
 Scrolling (`./scripts/measure.ps1 -Exe <exe> -Arguments target\large-1m.txt -Scroll [-Maximized]`, interleaved runs): one page per frame for 300 frames.
 

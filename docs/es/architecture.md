@@ -57,6 +57,18 @@ En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync
 - Límite conocido: egui usa coordenadas `f32`. Con 1M de líneas (unos 17 millones de píxeles) la precisión es de unos 2 px al final del documento; por encima de unos pocos millones de líneas hará falta un scroll propio basado en líneas.
 - Los textos visibles están en `i18n.rs` (español e inglés). La solución definitiva de traducción se decide en la Fase 1.
 
+## Deuda técnica conocida
+
+Pendiente de resolver; cada punto indica la fase prevista.
+
+- **Fuentes (Fase 1):** egui solo trae Hack, Ubuntu y emoji; los caracteres CJK (chino, japonés, coreano) se ven como cuadros. Hay que cargar fuentes del sistema desde `C:\Windows\Fonts` (una monoespaciada como Consolas o Cascadia Mono y una CJK de respaldo) midiendo su coste en arranque y memoria.
+- **Arranque (Fase 1):** ~140 ms sin carga, al límite del presupuesto de 150 ms. Perfilar eframe (contexto OpenGL, fuentes, primer frame) y vigilar regresiones (ver [decisions/0001-ui.md](decisions/0001-ui.md)).
+- **Codificaciones (Fase 1):** solo UTF-8; el resto se abre en solo lectura.
+- **Guardado (Fase 1):** el renombrado no conserva atributos, ACL ni hard links del fichero original (usar `ReplaceFileW` desde la capa de Windows); el guardado desde el diálogo de cambios sin guardar bloquea la interfaz.
+- **Estado modificado (Fase 1):** deshacer hasta el estado guardado sigue marcando el documento como modificado.
+- **Unidades de texto (Fase 4):** los clústeres de grafemas no se tratan como unidad y los caracteres anchos (CJK) cuentan como una columna.
+- **Ficheros grandes (Fase 4):** las líneas muy largas se maquetan enteras, y el `ScrollArea` de egui pierde precisión en `f32` por encima de ~1M de líneas (hará falta un scroll propio basado en líneas).
+
 ## Decisiones
 
 Las decisiones de arquitectura se registran en [decisions/](decisions/).

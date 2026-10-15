@@ -57,6 +57,18 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 - Known limit: egui uses `f32` coordinates. With 1M lines (about 17 million pixels) precision is about 2 px at the end of the document; beyond a few million lines a custom line-based scroll will be needed.
 - Visible texts live in `i18n.rs` (Spanish and English). The final translation approach is decided in Phase 1.
 
+## Known technical debt
+
+Still to be solved; each item states the planned phase.
+
+- **Fonts (Phase 1):** egui only ships Hack, Ubuntu and emoji fonts; CJK characters (Chinese, Japanese, Korean) show as boxes. System fonts must be loaded from `C:\Windows\Fonts` (a monospace one such as Consolas or Cascadia Mono and a CJK fallback), measuring their cost in startup and memory.
+- **Startup (Phase 1):** ~140 ms without load, at the limit of the 150 ms budget. Profile eframe (OpenGL context, fonts, first frame) and watch for regressions (see [decisions/0001-ui.md](decisions/0001-ui.md)).
+- **Encodings (Phase 1):** UTF-8 only; anything else opens read-only.
+- **Saving (Phase 1):** the rename does not keep the original file's attributes, ACLs or hard links (use `ReplaceFileW` from the Windows layer); saving from the unsaved-changes dialog blocks the interface.
+- **Modified state (Phase 1):** undoing back to the saved state still marks the document as modified.
+- **Text units (Phase 4):** grapheme clusters are not treated as a unit and wide (CJK) characters count as one column.
+- **Large files (Phase 4):** very long lines are laid out whole, and egui's `ScrollArea` loses `f32` precision beyond ~1M lines (a custom line-based scroll will be needed).
+
 ## Decisions
 
 Architecture decisions are recorded in [decisions/](decisions/).

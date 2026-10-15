@@ -43,7 +43,7 @@ Measured, not assumed. If a budget cannot be met, it is reported with data and a
 
 ## Stack
 
-- **Interface:** egui + eframe (glow backend). Provisional decision, validated in Phase 0 (see `decisions/`). The UI sits behind a thin layer.
+- **Interface:** egui + eframe (glow backend). Decision accepted in Phase 0 after measuring it against iced ([decisions/0001-ui.md](decisions/0001-ui.md)). The UI sits behind a thin layer.
 - **Buffer:** ropey. Multiple selections from the start. Custom transactional undo/redo (a multi-cursor edit or a bulk replace is one step).
 - **Highlighting:** syntect with the `default-fancy` feature (no C dependencies), `.sublime-syntax`/`.tmLanguage` grammars.
 - **Symbols:** tree-sitter for C#, CSS, JSON and XML. T-SQL through regex rules (CREATE/ALTER of PROCEDURE, FUNCTION, VIEW, TABLE, TRIGGER; `GO` as separator). Razor in three layers: TextMate highlighting; directive symbols (`@page`, `@inject`, `@using`, `@inherits`) and `@code` blocks passed to the C# extractor; navigation from `<MyComponent />` to `MyComponent.razor` by file name.

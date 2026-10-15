@@ -43,7 +43,7 @@ Se miden, no se suponen. Si alguno no es alcanzable, se informa con datos y alte
 
 ## Stack
 
-- **Interfaz:** egui + eframe (backend glow). Decisión provisional, validada en la Fase 0 (ver `decisions/`). La UI queda detrás de una capa fina.
+- **Interfaz:** egui + eframe (backend glow). Decisión aceptada en la Fase 0 tras medirla frente a iced ([decisions/0001-ui.md](decisions/0001-ui.md)). La UI queda detrás de una capa fina.
 - **Buffer:** ropey. Selección múltiple desde el inicio. Deshacer/rehacer propio por transacciones (un multicursor o un reemplazo masivo es un solo paso).
 - **Resaltado:** syntect con la feature `default-fancy` (sin dependencias de C), gramáticas `.sublime-syntax`/`.tmLanguage`.
 - **Símbolos:** tree-sitter para C#, CSS, JSON y XML. T-SQL por reglas regex (CREATE/ALTER de PROCEDURE, FUNCTION, VIEW, TABLE, TRIGGER; `GO` como separador). Razor en tres capas: resaltado TextMate; símbolos de directivas (`@page`, `@inject`, `@using`, `@inherits`) y bloques `@code` pasados al extractor de C#; navegación de `<MiComponente />` a `MiComponente.razor` por nombre de fichero.
