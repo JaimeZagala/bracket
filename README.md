@@ -1,0 +1,69 @@
+[English](README.en.md) · **Español**
+
+# Bracket
+
+Editor de código nativo y ligero para Windows 10/11 (x64), escrito en Rust. Pensado para quien quiere algo más que Notepad++ (proyecto, símbolos, búsqueda en carpeta) sin el peso de VS Code, y sigue usando un IDE completo para el trabajo de fondo.
+
+> **Estado: Fase 0 (prototipo).** Todavía no hay ninguna versión publicada ni nada que instalar. Este README describe el objetivo; la sección [Hoja de ruta](#hoja-de-ruta) dice qué existe ya.
+
+**No es Brackets.** Bracket (en singular) no tiene relación con Brackets, el editor de Adobe ya descontinuado, ni con sus sucesores Brackets Continued y Phoenix Code.
+
+## Para quién
+
+Desarrolladores en Windows que abren muchos ficheros sueltos y carpetas de proyecto (C#, Razor, CSS, T-SQL, JSON, XML) y quieren un editor que arranque al instante, navegue por símbolos y busque en el proyecto, sin extensiones ni configuración.
+
+## Funcionalidades previstas
+
+- Pestañas, sesión recuperable y recarga automática si el fichero cambia en disco.
+- Guardado atómico que conserva codificación, BOM y saltos de línea. Los XML/XSIG se guardan byte a byte (no invalida ficheros firmados).
+- Carpeta como proyecto: árbol lateral que respeta `.gitignore`, Ctrl+P (fichero), Ctrl+T (símbolo en el proyecto), Ctrl+Shift+O (símbolo en el fichero), paleta de comandos, buscar y reemplazar con regex en fichero y carpeta.
+- Navegación por símbolos sin compilador: outline, ir a definición y referencias por nombre (aproximadas).
+- Resaltado y símbolos para C#, Razor, CSS, T-SQL, JSON y XML/XSIG, integrados en el ejecutable. Otros lenguajes se añaden copiando una carpeta, sin recompilar.
+- Instalador por usuario (sin administrador) o zip portable. "Abrir con" y asociaciones de ficheros.
+- Actualizaciones solo cuando el usuario las acepta, con canal estable y canal preliminar opcional.
+- Interfaz en español (predeterminado) e inglés.
+- Sin telemetría. La única conexión de red es la comprobación de actualizaciones, desactivable.
+
+## Objetivos de rendimiento
+
+Son objetivos, no resultados: se medirán y publicarán con el método, la versión y el equipo de prueba.
+
+| Medida | Objetivo |
+|---|---|
+| Tamaño del ejecutable | < 15 MB |
+| Arranque en frío hasta poder escribir | < 150 ms |
+| RAM en reposo con 10 pestañas | < 80 MB |
+| Fichero de 100 MB | visible en < 1 s sin bloquear la interfaz |
+| Ctrl+P en un proyecto de 50.000 ficheros | < 50 ms por pulsación |
+
+Límites conocidos: sin sistema de extensiones y sin LSP de serie (LSP opcional previsto para la 1.1.0).
+
+## Compilar desde el código
+
+Requisitos: Windows 10/11 x64, [rustup](https://rustup.rs) y las Build Tools de Visual Studio con la carga de trabajo de C++ (MSVC y Windows SDK). La versión de Rust se instala sola a partir de `rust-toolchain.toml`.
+
+```powershell
+git clone https://github.com/JaimeZagala/bracket.git
+cd bracket
+cargo build --release -p bracket-app
+# Ejecutable: target\release\bracket.exe
+./scripts/check.ps1   # formato, clippy, tests y documentación
+```
+
+## Hoja de ruta
+
+| Fase | Versión | Contenido | Estado |
+|---|---|---|---|
+| 0 | — | Cimientos y prototipo del editor | En curso |
+| 1 | 0.1.0 | Editor base: pestañas, sesión, codificaciones, resaltado, temas, configuración, idiomas | Pendiente |
+| 2 | 0.2.0 | Proyectos: árbol de carpetas, Ctrl+P, paleta, buscar y reemplazar en carpeta | Pendiente |
+| 3 | 0.3.0 | Símbolos y navegación | Pendiente |
+| 4 | 0.4.0 | Edición avanzada: multicursor, plegado, diff, ficheros grandes | Pendiente |
+| 5 | 0.5.0 → 1.0.0 | Instalador, zip portable, actualizador, firma y publicación | Pendiente |
+| 6 | 1.1.0 | LSP opcional | Pendiente |
+
+Detalle: [docs/es/plan.md](docs/es/plan.md). Arquitectura: [docs/es/architecture.md](docs/es/architecture.md). Cambios: [CHANGELOG.md](CHANGELOG.md).
+
+## Licencia
+
+Bracket se distribuye bajo doble licencia, a elección de quien lo use: [MIT](LICENSE-MIT) o [Apache-2.0](LICENSE-APACHE). Componentes de terceros: [THIRD_PARTY.md](THIRD_PARTY.md).
