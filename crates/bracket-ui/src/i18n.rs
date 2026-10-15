@@ -1,112 +1,158 @@
-//! User-visible texts. Every string shown in the interface lives here, in Spanish (the default
-//! and reference language) and English.
+//! User-visible texts. Every string shown in the interface comes from here.
 //!
-//! Phase 0 uses this minimal hand-written catalog; the translation approach for the real
-//! interface is decided in Phase 1 by measuring its impact on executable size.
+//! The texts live in one TOML catalog per language (`locales/es.toml`, the reference, and
+//! `locales/en.toml`), embedded in the executable and parsed on first use. Code asks for texts
+//! through typed methods (`texts.untitled()`), so a typo does not compile; tests check that both
+//! catalogs have exactly the same keys and the same `{placeholders}`, and that every method
+//! finds its key.
+//!
+//! Decision record: `docs/es/decisions/0002-i18n.md`.
+
+use std::collections::HashMap;
+use std::fmt::Display;
+use std::sync::OnceLock;
 
 use bracket_session::ConfigWarning;
 pub use bracket_session::Language;
 
+const SPANISH_CATALOG: &str = include_str!("../locales/es.toml");
+const ENGLISH_CATALOG: &str = include_str!("../locales/en.toml");
+
+/// Languages offered by the interface, in menu order.
+pub const LANGUAGES: [Language; 2] = [Language::Spanish, Language::English];
+
+/// The texts of one language.
 pub struct Texts {
-    pub untitled: &'static str,
-    pub loading: &'static str,
-    pub read_only: &'static str,
-    pub drop_hint: &'static str,
-    pub position: fn(line: usize, column: usize) -> String,
-    pub saved: &'static str,
-    pub save_needs_path: &'static str,
-    pub save_read_only: &'static str,
-    pub open_failed: fn(error: &str) -> String,
-    pub save_failed: fn(error: &str) -> String,
-    pub unsaved_title: &'static str,
-    pub unsaved_message: &'static str,
-    pub save: &'static str,
-    pub discard: &'static str,
-    pub cancel: &'static str,
-    pub config_unreadable: fn(error: &str) -> String,
-    pub config_syntax: fn(error: &str) -> String,
-    pub config_invalid_value: fn(key: &str, found: &str) -> String,
-    pub config_unknown_key: fn(key: &str) -> String,
-    pub more_warnings: fn(count: usize) -> String,
+    strings: HashMap<String, String>,
 }
 
+/// Texts for `language`. Each catalog is parsed once and kept for the rest of the run.
 pub fn texts(language: Language) -> &'static Texts {
+    static SPANISH: OnceLock<Texts> = OnceLock::new();
+    static ENGLISH: OnceLock<Texts> = OnceLock::new();
     match language {
-        Language::Spanish => &SPANISH,
-        Language::English => &ENGLISH,
+        Language::Spanish => SPANISH.get_or_init(|| Texts::parse(SPANISH_CATALOG)),
+        Language::English => ENGLISH.get_or_init(|| Texts::parse(ENGLISH_CATALOG)),
     }
 }
 
-static SPANISH: Texts = Texts {
-    untitled: "Sin título",
-    loading: "Cargando…",
-    read_only: "Solo lectura (no es UTF-8)",
-    drop_hint: "Arrastra un fichero a la ventana para abrirlo",
-    position: |line, column| format!("Lín {line}, Col {column}"),
-    saved: "Guardado",
-    save_needs_path: "Este documento no tiene ruta; ábrelo desde un fichero para poder guardarlo",
-    save_read_only: "El fichero está en solo lectura y no se puede guardar",
-    open_failed: |error| format!("No se pudo abrir el fichero: {error}"),
-    save_failed: |error| format!("No se pudo guardar el fichero: {error}"),
-    unsaved_title: "Cambios sin guardar",
-    unsaved_message: "El documento tiene cambios sin guardar. ¿Qué quieres hacer?",
-    save: "Guardar",
-    discard: "Descartar cambios",
-    cancel: "Cancelar",
-    config_unreadable: |error| format!("No se pudo leer la configuración: {error}"),
-    config_syntax: |error| {
-        format!(
-            "La configuración tiene un error de sintaxis y se usan los valores por defecto: {error}"
-        )
-    },
-    config_invalid_value: |key, found| {
-        format!("Valor no válido en la configuración: {key} = {found}; se usa el valor por defecto")
-    },
-    config_unknown_key: |key| format!("Clave desconocida en la configuración: {key}"),
-    more_warnings: |count| match count {
-        1 => "(y 1 aviso más)".to_owned(),
-        n => format!("(y {n} avisos más)"),
-    },
-};
-
-static ENGLISH: Texts = Texts {
-    untitled: "Untitled",
-    loading: "Loading…",
-    read_only: "Read-only (not UTF-8)",
-    drop_hint: "Drop a file on the window to open it",
-    position: |line, column| format!("Ln {line}, Col {column}"),
-    saved: "Saved",
-    save_needs_path: "This document has no path; open it from a file to be able to save it",
-    save_read_only: "The file is read-only and cannot be saved",
-    open_failed: |error| format!("Could not open the file: {error}"),
-    save_failed: |error| format!("Could not save the file: {error}"),
-    unsaved_title: "Unsaved changes",
-    unsaved_message: "The document has unsaved changes. What do you want to do?",
-    save: "Save",
-    discard: "Discard changes",
-    cancel: "Cancel",
-    config_unreadable: |error| format!("Could not read the configuration: {error}"),
-    config_syntax: |error| {
-        format!("The configuration has a syntax error and defaults are used: {error}")
-    },
-    config_invalid_value: |key, found| {
-        format!("Invalid value in the configuration: {key} = {found}; the default is used")
-    },
-    config_unknown_key: |key| format!("Unknown key in the configuration: {key}"),
-    more_warnings: |count| match count {
-        1 => "(1 more warning)".to_owned(),
-        n => format!("({n} more warnings)"),
-    },
-};
-
 impl Texts {
+    /// Built-in catalogs are checked by the tests below, so a parse error is a bug.
+    fn parse(source: &str) -> Self {
+        let doc: toml_edit::DocumentMut = source.parse().expect("built-in catalog is valid TOML");
+        let strings = doc
+            .iter()
+            .filter_map(|(key, item)| Some((key.to_owned(), item.as_str()?.to_owned())))
+            .collect();
+        Self { strings }
+    }
+
+    /// The text for `key`, or the key itself if it is missing (tests prevent that).
+    fn get<'a>(&'a self, key: &'a str) -> &'a str {
+        self.strings.get(key).map(String::as_str).unwrap_or(key)
+    }
+
+    /// The text for `key` with each `{name}` replaced by its value.
+    fn fill(&self, key: &str, args: &[(&str, &dyn Display)]) -> String {
+        let mut text = self.get(key).to_owned();
+        for (name, value) in args {
+            text = text.replace(&format!("{{{name}}}"), &value.to_string());
+        }
+        text
+    }
+
+    /// The language's own name, as shown in the language menu.
+    pub fn language_name(&self) -> &str {
+        self.get("language_name")
+    }
+
+    pub fn language_tooltip(&self) -> &str {
+        self.get("language_tooltip")
+    }
+
+    pub fn untitled(&self) -> &str {
+        self.get("untitled")
+    }
+
+    pub fn loading(&self) -> &str {
+        self.get("loading")
+    }
+
+    pub fn read_only(&self) -> &str {
+        self.get("read_only")
+    }
+
+    pub fn drop_hint(&self) -> &str {
+        self.get("drop_hint")
+    }
+
+    pub fn position(&self, line: usize, column: usize) -> String {
+        self.fill("position", &[("line", &line), ("column", &column)])
+    }
+
+    pub fn saved(&self) -> &str {
+        self.get("saved")
+    }
+
+    pub fn save_needs_path(&self) -> &str {
+        self.get("save_needs_path")
+    }
+
+    pub fn save_read_only(&self) -> &str {
+        self.get("save_read_only")
+    }
+
+    pub fn open_failed(&self, error: &str) -> String {
+        self.fill("open_failed", &[("error", &error)])
+    }
+
+    pub fn save_failed(&self, error: &str) -> String {
+        self.fill("save_failed", &[("error", &error)])
+    }
+
+    pub fn unsaved_title(&self) -> &str {
+        self.get("unsaved_title")
+    }
+
+    pub fn unsaved_message(&self) -> &str {
+        self.get("unsaved_message")
+    }
+
+    pub fn save(&self) -> &str {
+        self.get("save")
+    }
+
+    pub fn discard(&self) -> &str {
+        self.get("discard")
+    }
+
+    pub fn cancel(&self) -> &str {
+        self.get("cancel")
+    }
+
+    pub fn config_save_failed(&self, error: &str) -> String {
+        self.fill("config_save_failed", &[("error", &error)])
+    }
+
     /// Translated text for a configuration warning.
     pub fn config_warning(&self, warning: &ConfigWarning) -> String {
         match warning {
-            ConfigWarning::Unreadable { error } => (self.config_unreadable)(error),
-            ConfigWarning::Syntax { error } => (self.config_syntax)(error),
-            ConfigWarning::InvalidValue { key, found } => (self.config_invalid_value)(key, found),
-            ConfigWarning::UnknownKey { key } => (self.config_unknown_key)(key),
+            ConfigWarning::Unreadable { error } => {
+                self.fill("config_unreadable", &[("error", error)])
+            }
+            ConfigWarning::Syntax { error } => self.fill("config_syntax", &[("error", error)]),
+            ConfigWarning::InvalidValue { key, found } => {
+                self.fill("config_invalid_value", &[("key", key), ("found", found)])
+            }
+            ConfigWarning::UnknownKey { key } => self.fill("config_unknown_key", &[("key", key)]),
+        }
+    }
+
+    /// "(and N more warnings)", with the singular form for one.
+    pub fn more_warnings(&self, count: usize) -> String {
+        match count {
+            1 => self.get("more_warnings_one").to_owned(),
+            n => self.fill("more_warnings_many", &[("count", &n)]),
         }
     }
 }
@@ -114,57 +160,98 @@ impl Texts {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
+
+    /// `{name}` placeholders in a text.
+    fn placeholders(text: &str) -> BTreeSet<String> {
+        let mut found = BTreeSet::new();
+        let mut rest = text;
+        while let Some(start) = rest.find('{') {
+            let Some(len) = rest[start..].find('}') else {
+                break;
+            };
+            found.insert(rest[start + 1..start + len].to_owned());
+            rest = &rest[start + len + 1..];
+        }
+        found
+    }
 
     #[test]
-    fn both_catalogs_are_complete_and_differ() {
+    fn catalogs_have_the_same_keys_and_placeholders() {
         let es = texts(Language::Spanish);
         let en = texts(Language::English);
-        for (a, b) in [
-            (es.untitled, en.untitled),
-            (es.unsaved_title, en.unsaved_title),
-            (es.discard, en.discard),
-        ] {
-            assert!(!a.is_empty() && !b.is_empty());
-            assert_ne!(a, b);
+        let es_keys: BTreeSet<_> = es.strings.keys().collect();
+        let en_keys: BTreeSet<_> = en.strings.keys().collect();
+        assert_eq!(
+            es_keys, en_keys,
+            "es.toml and en.toml must have the same keys"
+        );
+        for key in es_keys {
+            assert_eq!(
+                placeholders(&es.strings[key]),
+                placeholders(&en.strings[key]),
+                "placeholders of `{key}` differ between languages"
+            );
         }
-        assert_eq!((es.position)(3, 7), "Lín 3, Col 7");
-        assert_eq!((en.position)(3, 7), "Ln 3, Col 7");
     }
 
     #[test]
-    fn config_warnings_are_translated() {
-        let warning = ConfigWarning::InvalidValue {
-            key: "editor.tab_width".into(),
-            found: "0".into(),
-        };
-        assert!(
-            texts(Language::Spanish)
-                .config_warning(&warning)
-                .starts_with("Valor no válido")
-        );
-        assert!(
-            texts(Language::English)
-                .config_warning(&warning)
-                .starts_with("Invalid value")
-        );
+    fn catalogs_contain_only_text_values() {
+        for source in [SPANISH_CATALOG, ENGLISH_CATALOG] {
+            let doc: toml_edit::DocumentMut = source.parse().unwrap();
+            for (key, item) in doc.iter() {
+                assert!(item.as_str().is_some(), "`{key}` must be a plain string");
+            }
+        }
+    }
+
+    /// Each method paired with the key it reads. Add new methods here.
+    #[test]
+    fn every_method_finds_its_key() {
+        let warning = ConfigWarning::UnknownKey { key: "k".into() };
+        for language in LANGUAGES {
+            let t = texts(language);
+            let pairs = [
+                ("language_name", t.language_name().to_owned()),
+                ("language_tooltip", t.language_tooltip().to_owned()),
+                ("untitled", t.untitled().to_owned()),
+                ("loading", t.loading().to_owned()),
+                ("read_only", t.read_only().to_owned()),
+                ("drop_hint", t.drop_hint().to_owned()),
+                ("position", t.position(1, 2)),
+                ("saved", t.saved().to_owned()),
+                ("save_needs_path", t.save_needs_path().to_owned()),
+                ("save_read_only", t.save_read_only().to_owned()),
+                ("open_failed", t.open_failed("e")),
+                ("save_failed", t.save_failed("e")),
+                ("unsaved_title", t.unsaved_title().to_owned()),
+                ("unsaved_message", t.unsaved_message().to_owned()),
+                ("save", t.save().to_owned()),
+                ("discard", t.discard().to_owned()),
+                ("cancel", t.cancel().to_owned()),
+                ("config_save_failed", t.config_save_failed("e")),
+                ("config_unknown_key", t.config_warning(&warning)),
+                ("more_warnings_one", t.more_warnings(1)),
+                ("more_warnings_many", t.more_warnings(2)),
+            ];
+            for (key, text) in pairs {
+                assert!(
+                    t.strings.contains_key(key),
+                    "`{key}` missing in {language:?}"
+                );
+                assert_ne!(text, key, "`{key}` fell back to the key in {language:?}");
+                assert!(!text.contains('{'), "unfilled placeholder in `{text}`");
+            }
+        }
     }
 
     #[test]
-    fn more_warnings_uses_singular_and_plural() {
+    fn placeholders_are_filled() {
+        assert_eq!(texts(Language::Spanish).position(3, 7), "Lín 3, Col 7");
+        assert_eq!(texts(Language::English).position(3, 7), "Ln 3, Col 7");
+        assert_eq!(texts(Language::Spanish).more_warnings(1), "(y 1 aviso más)");
         assert_eq!(
-            (texts(Language::Spanish).more_warnings)(1),
-            "(y 1 aviso más)"
-        );
-        assert_eq!(
-            (texts(Language::Spanish).more_warnings)(3),
-            "(y 3 avisos más)"
-        );
-        assert_eq!(
-            (texts(Language::English).more_warnings)(1),
-            "(1 more warning)"
-        );
-        assert_eq!(
-            (texts(Language::English).more_warnings)(3),
+            texts(Language::English).more_warnings(3),
             "(3 more warnings)"
         );
     }
@@ -172,5 +259,6 @@ mod tests {
     #[test]
     fn spanish_is_the_default() {
         assert_eq!(Language::default(), Language::Spanish);
+        assert_eq!(LANGUAGES[0], Language::Spanish);
     }
 }

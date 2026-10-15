@@ -16,6 +16,7 @@ pub use measure::Probe;
 pub fn run(
     path: Option<PathBuf>,
     settings: bracket_session::LoadedConfig,
+    config_path: PathBuf,
     probe: Option<Probe>,
 ) -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -34,6 +35,7 @@ pub fn run(
                 &cc.egui_ctx,
                 path,
                 settings,
+                config_path,
                 probe,
             )))
         }),

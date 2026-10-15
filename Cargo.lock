@@ -533,6 +533,7 @@ dependencies = [
  "bracket-session",
  "criterion",
  "eframe",
+ "toml_edit",
 ]
 
 [[package]]

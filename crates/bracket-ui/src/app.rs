@@ -8,11 +8,11 @@ use std::thread;
 
 use bracket_core::document::{self, Document, LineEnding};
 use bracket_core::movement::{self, Motion};
-use bracket_session::{Config, LoadedConfig};
+use bracket_session::{Config, ConfigWarning, Language, LoadedConfig, config};
 use eframe::egui::{self, Id, ViewportCommand};
 
 use crate::editor_view::EditorView;
-use crate::i18n::{self, Texts};
+use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
 
 /// What to do once the user has dealt with unsaved changes.
@@ -31,8 +31,10 @@ pub struct BracketApp {
     saving: Option<Receiver<(u64, io::Result<()>)>>,
     /// Latest result of a user action (open, save...).
     status: Option<String>,
-    /// Configuration warnings, shown while there is no other status message.
-    config_notice: Option<String>,
+    /// Configuration warnings, shown (translated) while there is no other status message.
+    config_warnings: Vec<ConfigWarning>,
+    config_path: PathBuf,
+    config_saving: Option<Receiver<Result<(), String>>>,
     pending: Option<PendingAction>,
     allow_close: bool,
     title: String,
@@ -45,6 +47,7 @@ impl BracketApp {
         ctx: &egui::Context,
         path: Option<PathBuf>,
         settings: LoadedConfig,
+        config_path: PathBuf,
         mut probe: Option<Probe>,
     ) -> Self {
         if let Some(Probe::Startup(startup)) = &mut probe {
@@ -62,7 +65,9 @@ impl BracketApp {
             loading: None,
             saving: None,
             status: None,
-            config_notice: warnings_summary(texts, &warnings),
+            config_warnings: warnings,
+            config_path,
+            config_saving: None,
             pending: None,
             allow_close: false,
             title: String::new(),
@@ -105,7 +110,7 @@ impl BracketApp {
                 ctx.memory_mut(|m| m.request_focus(self.view.id()));
             }
             Ok(Err(err)) => {
-                self.status = Some((self.texts.open_failed)(&err.to_string()));
+                self.status = Some(self.texts.open_failed(&err.to_string()));
                 self.loading = None;
             }
             Err(TryRecvError::Empty) => {}
@@ -119,11 +124,11 @@ impl BracketApp {
             return;
         }
         if self.doc.is_read_only() {
-            self.status = Some(self.texts.save_read_only.to_owned());
+            self.status = Some(self.texts.save_read_only().to_owned());
             return;
         }
         let Some(request) = self.doc.save_request() else {
-            self.status = Some(self.texts.save_needs_path.to_owned());
+            self.status = Some(self.texts.save_needs_path().to_owned());
             return;
         };
         let (tx, rx) = mpsc::channel();
@@ -140,11 +145,11 @@ impl BracketApp {
         match rx.try_recv() {
             Ok((version, Ok(()))) => {
                 self.doc.mark_saved(version);
-                self.status = Some(self.texts.saved.to_owned());
+                self.status = Some(self.texts.saved().to_owned());
                 self.saving = None;
             }
             Ok((_, Err(err))) => {
-                self.status = Some((self.texts.save_failed)(&err.to_string()));
+                self.status = Some(self.texts.save_failed(&err.to_string()));
                 self.saving = None;
             }
             Err(TryRecvError::Empty) => {}
@@ -162,12 +167,12 @@ impl BracketApp {
                     true
                 }
                 Err(err) => {
-                    self.status = Some((self.texts.save_failed)(&err.to_string()));
+                    self.status = Some(self.texts.save_failed(&err.to_string()));
                     false
                 }
             },
             None => {
-                self.status = Some(self.texts.save_needs_path.to_owned());
+                self.status = Some(self.texts.save_needs_path().to_owned());
                 false
             }
         }
@@ -206,7 +211,7 @@ impl BracketApp {
             .path()
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| self.texts.untitled.to_owned());
+            .unwrap_or_else(|| self.texts.untitled().to_owned());
         let dirty = if self.doc.is_dirty() { " ●" } else { "" };
         let title = format!("{name}{dirty} — Bracket");
         if title != self.title {
@@ -215,14 +220,16 @@ impl BracketApp {
         }
     }
 
-    fn status_bar(&self, ui: &mut egui::Ui) {
+    /// Draws the status bar. Returns the language picked in its menu, if any.
+    fn status_bar(&self, ui: &mut egui::Ui) -> Option<Language> {
+        let mut picked = None;
         egui::Panel::bottom("status").show(ui, |ui| {
             ui.horizontal(|ui| {
                 let text = self.doc.buffer.text();
                 let head = self.doc.buffer.selections().primary().head;
                 let line = movement::line_of(text, head) + 1;
                 let column = movement::visual_column(text, head, self.doc.buffer.tab_width()) + 1;
-                ui.label((self.texts.position)(line, column));
+                ui.label(self.texts.position(line, column));
                 ui.separator();
                 ui.label(match self.doc.line_ending() {
                     LineEnding::CrLf => "CRLF",
@@ -237,16 +244,72 @@ impl BracketApp {
                 });
                 if self.doc.is_read_only() {
                     ui.separator();
-                    ui.label(self.texts.read_only);
+                    ui.label(self.texts.read_only());
                 }
                 ui.separator();
-                match self.status.as_ref().or(self.config_notice.as_ref()) {
+                let config_notice = warnings_summary(self.texts, &self.config_warnings);
+                match self.status.as_ref().or(config_notice.as_ref()) {
                     Some(message) => ui.label(message.as_str()),
-                    None if self.doc.path().is_none() => ui.weak(self.texts.drop_hint),
+                    None if self.doc.path().is_none() => ui.weak(self.texts.drop_hint()),
                     None => ui.label(""),
                 };
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.menu_button(self.texts.language_name(), |ui| {
+                        for language in LANGUAGES {
+                            let name = i18n::texts(language).language_name();
+                            if ui
+                                .selectable_label(language == self.config.language, name)
+                                .clicked()
+                            {
+                                picked = Some(language);
+                                ui.close();
+                            }
+                        }
+                    })
+                    .response
+                    .on_hover_text(self.texts.language_tooltip());
+                });
             });
         });
+        picked
+    }
+
+    /// Switches the interface language at once and saves it in the configuration.
+    fn set_language(&mut self, ctx: &egui::Context, language: Language) {
+        if language == self.config.language {
+            return;
+        }
+        self.config.language = language;
+        self.texts = i18n::texts(language);
+        self.start_config_save(ctx);
+    }
+
+    /// Writes the configuration on a worker thread (comments in the file are kept).
+    fn start_config_save(&mut self, ctx: &egui::Context) {
+        let (tx, rx) = mpsc::channel();
+        let ctx = ctx.clone();
+        let (config, path) = (self.config.clone(), self.config_path.clone());
+        thread::spawn(move || {
+            let _ = tx.send(config::save(&config, &path).map_err(|e| e.to_string()));
+            ctx.request_repaint();
+        });
+        self.config_saving = Some(rx);
+    }
+
+    fn poll_config_saving(&mut self) {
+        let Some(rx) = &self.config_saving else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(result) => {
+                if let Err(error) = result {
+                    self.status = Some(self.texts.config_save_failed(&error));
+                }
+                self.config_saving = None;
+            }
+            Err(TryRecvError::Empty) => {}
+            Err(TryRecvError::Disconnected) => self.config_saving = None,
+        }
     }
 
     fn unsaved_dialog(&mut self, ctx: &egui::Context) {
@@ -256,17 +319,17 @@ impl BracketApp {
         let texts = self.texts;
         let mut choice = None;
         egui::Modal::new(Id::new("unsaved-changes")).show(ctx, |ui| {
-            ui.heading(texts.unsaved_title);
-            ui.label(texts.unsaved_message);
+            ui.heading(texts.unsaved_title());
+            ui.label(texts.unsaved_message());
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                if ui.button(texts.save).clicked() {
+                if ui.button(texts.save()).clicked() {
                     choice = Some(true);
                 }
-                if ui.button(texts.discard).clicked() {
+                if ui.button(texts.discard()).clicked() {
                     choice = Some(false);
                 }
-                if ui.button(texts.cancel).clicked() {
+                if ui.button(texts.cancel()).clicked() {
                     self.pending = None;
                 }
             });
@@ -326,12 +389,15 @@ impl eframe::App for BracketApp {
         let ctx = ui.ctx().clone();
         self.poll_loading(&ctx);
         self.poll_saving();
+        self.poll_config_saving();
         self.handle_window_events(&ctx);
 
-        self.status_bar(ui);
+        if let Some(language) = self.status_bar(ui) {
+            self.set_language(&ctx, language);
+        }
         egui::CentralPanel::default().show(ui, |ui| {
             if self.loading.is_some() {
-                ui.centered_and_justified(|ui| ui.label(self.texts.loading));
+                ui.centered_and_justified(|ui| ui.label(self.texts.loading()));
             } else {
                 let output = self.view.show(ui, &mut self.doc);
                 if output.save_requested {
@@ -347,10 +413,10 @@ impl eframe::App for BracketApp {
 }
 
 /// The first configuration warning, translated, plus how many more there are.
-fn warnings_summary(texts: &Texts, warnings: &[bracket_session::ConfigWarning]) -> Option<String> {
+fn warnings_summary(texts: &Texts, warnings: &[ConfigWarning]) -> Option<String> {
     let first = texts.config_warning(warnings.first()?);
     Some(match warnings.len() - 1 {
         0 => first,
-        more => format!("{first} {}", (texts.more_warnings)(more)),
+        more => format!("{first} {}", texts.more_warnings(more)),
     })
 }

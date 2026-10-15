@@ -1,0 +1,31 @@
+# Interface texts in English.
+# Every key must also exist in es.toml (the reference), with the same {placeholders}.
+
+language_name = "English"
+language_tooltip = "Interface language"
+
+untitled = "Untitled"
+loading = "Loading…"
+read_only = "Read-only (not UTF-8)"
+drop_hint = "Drop a file on the window to open it"
+position = "Ln {line}, Col {column}"
+
+saved = "Saved"
+save_needs_path = "This document has no path; open it from a file to be able to save it"
+save_read_only = "The file is read-only and cannot be saved"
+open_failed = "Could not open the file: {error}"
+save_failed = "Could not save the file: {error}"
+
+unsaved_title = "Unsaved changes"
+unsaved_message = "The document has unsaved changes. What do you want to do?"
+save = "Save"
+discard = "Discard changes"
+cancel = "Cancel"
+
+config_unreadable = "Could not read the configuration: {error}"
+config_syntax = "The configuration has a syntax error and defaults are used: {error}"
+config_invalid_value = "Invalid value in the configuration: {key} = {found}; the default is used"
+config_unknown_key = "Unknown key in the configuration: {key}"
+config_save_failed = "Could not save the configuration: {error}"
+more_warnings_one = "(1 more warning)"
+more_warnings_many = "({count} more warnings)"

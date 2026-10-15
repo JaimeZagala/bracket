@@ -1,0 +1,31 @@
+# Textos de la interfaz en español (idioma predeterminado y de referencia).
+# Cada clave debe existir también en en.toml, con los mismos marcadores {así}.
+
+language_name = "Español"
+language_tooltip = "Idioma de la interfaz"
+
+untitled = "Sin título"
+loading = "Cargando…"
+read_only = "Solo lectura (no es UTF-8)"
+drop_hint = "Arrastra un fichero a la ventana para abrirlo"
+position = "Lín {line}, Col {column}"
+
+saved = "Guardado"
+save_needs_path = "Este documento no tiene ruta; ábrelo desde un fichero para poder guardarlo"
+save_read_only = "El fichero está en solo lectura y no se puede guardar"
+open_failed = "No se pudo abrir el fichero: {error}"
+save_failed = "No se pudo guardar el fichero: {error}"
+
+unsaved_title = "Cambios sin guardar"
+unsaved_message = "El documento tiene cambios sin guardar. ¿Qué quieres hacer?"
+save = "Guardar"
+discard = "Descartar cambios"
+cancel = "Cancelar"
+
+config_unreadable = "No se pudo leer la configuración: {error}"
+config_syntax = "La configuración tiene un error de sintaxis y se usan los valores por defecto: {error}"
+config_invalid_value = "Valor no válido en la configuración: {key} = {found}; se usa el valor por defecto"
+config_unknown_key = "Clave desconocida en la configuración: {key}"
+config_save_failed = "No se pudo guardar la configuración: {error}"
+more_warnings_one = "(y 1 aviso más)"
+more_warnings_many = "(y {count} avisos más)"

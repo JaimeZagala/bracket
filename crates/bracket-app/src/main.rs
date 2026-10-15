@@ -20,6 +20,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let paths = Paths::resolve(exe_dir, app_data.as_deref());
     let settings = config::load(&paths.config_file());
 
-    bracket_ui::run(path, settings, probe)?;
+    bracket_ui::run(path, settings, paths.config_file(), probe)?;
     Ok(())
 }
