@@ -35,3 +35,32 @@ Conclusions:
 - glow versus wgpu: half the size, about 120 ms less startup and one sixth of the memory on this GPU. glow is used.
 - `accesskit` (screen reader accessibility) costs 0.3 MB and nothing measurable at startup. It is included.
 - Startup of an empty window is already close to the 150 ms budget: about 125 ms are spent inside eframe creating the window, the OpenGL context and the first frame. Very little margin is left for the rest of the application.
+
+## Phase 0 — editor prototype (2026-10-15, machine A)
+
+`bracket.exe` 0.0.0 with the editor prototype (commit `feat(ui): add editor prototype`). Files generated with `cargo run --release -p bracket-core --example generate_large_file -- <lines> <path>` (CRLF, tabs, non-ASCII text).
+
+| Case | Size | Launch → content visible (warm median) | Private memory |
+|---|---|---|---|
+| No file | 5.53 MB | 143 ms | 28 MB |
+| 1,000,000 lines (52.6 MB) | 5.53 MB | 263 ms | 88 MB |
+| 2,000,000 lines (100.2 MB) | 5.53 MB | 363 ms | 146 MB |
+
+Idle memory varies by about ±10 MB between runs (the empty window measured 40 MB and later 28 MB).
+
+### Benchmarks (criterion, `cargo bench --workspace`)
+
+| Benchmark | Time (median) |
+|---|---|
+| `open/rope_from_str_1m_lines`: build the 1M-line rope from memory | 23 ms |
+| `open/load_file_1m_lines`: read from disk, validate UTF-8 and create the document | 50 ms |
+| `insert_char_middle_1m_lines`: insert one char in the middle | 1.6 µs |
+| `frame_1000x700_middle_of_1m_lines`: full frame with no changes (cached galleys) | 91 µs |
+| `frame_1000x700_scrolling_page_down_1m_lines`: frame showing a new page of lines | 393 µs |
+
+Frame time is CPU only (egui layout, painting and tessellation); GPU work and presentation are not included.
+
+Conclusions:
+
+- The 100 MB file is visible in 0.36 s, under the 1 s budget, without blocking the interface (loading runs on a worker thread).
+- A scrolling frame costs 0.4 ms of CPU: plenty of headroom for 60 Hz.

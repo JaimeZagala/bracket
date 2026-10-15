@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use eframe::egui;
 
+pub use editor_view::{EditorView, ViewOutput};
 pub use startup::StartupProbe;
 
 /// Opens the main window, optionally loading `path`, and runs the event loop until it closes.

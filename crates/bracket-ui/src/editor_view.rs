@@ -49,6 +49,11 @@ impl EditorView {
         self.id
     }
 
+    /// Scrolls the primary caret into view on the next frame.
+    pub fn request_scroll_to_caret(&mut self) {
+        self.scroll_to_caret = true;
+    }
+
     /// Forgets per-document state after another document is loaded.
     pub fn reset(&mut self) {
         let id = self.id;

@@ -16,6 +16,8 @@ cargo test --workspace
 ./scripts/check-doc-pairs.ps1               # parejas de idioma de la documentación
 cargo build --release -p bracket-app        # target/release/bracket.exe
 ./scripts/measure.ps1 -Exe target/release/bracket.exe -Runs 12   # tamaño, arranque, RAM
+cargo bench --workspace                     # benchmarks (criterion)
+cargo run --release -p bracket-core --example generate_large_file   # target/large-1m.txt
 ```
 
 Las mediciones se anotan en `docs/es/measurements.md` y `docs/en/measurements.md` con fecha, versión y equipo.

@@ -22,6 +22,7 @@ No se incluyen en el ejecutable.
 | Crate | Versión | Licencia | Uso |
 |---|---|---|---|
 | [proptest](https://crates.io/crates/proptest) | 1.12.0 | MIT OR Apache-2.0 | Tests de propiedades |
+| [criterion](https://crates.io/crates/criterion) | 0.8.2 | Apache-2.0 OR MIT | Benchmarks |
 
 ## Gramáticas y temas
 

@@ -12,5 +12,12 @@ publish.workspace = true
 bracket-core.workspace = true
 eframe.workspace = true
 
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "viewport"
+harness = false
+
 [lints]
 workspace = true

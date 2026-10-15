@@ -35,3 +35,32 @@ Conclusiones:
 - glow frente a wgpu: la mitad de tamaño, unos 120 ms menos de arranque y una sexta parte de memoria en esta GPU. Se usa glow.
 - `accesskit` (accesibilidad para lectores de pantalla) cuesta 0,3 MB y nada medible en arranque. Se incluye.
 - El arranque de una ventana vacía ya ronda el presupuesto de 150 ms: unos 125 ms son la creación de la ventana, el contexto OpenGL y el primer frame dentro de eframe. Queda muy poco margen para el resto de la aplicación.
+
+## Fase 0 — prototipo del editor (2026-10-15, equipo A)
+
+`bracket.exe` 0.0.0 con el prototipo del editor (commit `feat(ui): add editor prototype`). Ficheros generados con `cargo run --release -p bracket-core --example generate_large_file -- <líneas> <ruta>` (CRLF, tabulaciones, texto no ASCII).
+
+| Caso | Tamaño | Lanzamiento → contenido visible (mediana en caliente) | Memoria privada |
+|---|---|---|---|
+| Sin fichero | 5,53 MB | 143 ms | 28 MB |
+| 1.000.000 de líneas (52,6 MB) | 5,53 MB | 263 ms | 88 MB |
+| 2.000.000 de líneas (100,2 MB) | 5,53 MB | 363 ms | 146 MB |
+
+La memoria en reposo varía unos ±10 MB entre ejecuciones (la ventana vacía midió 40 MB y luego 28 MB).
+
+### Benchmarks (criterion, `cargo bench --workspace`)
+
+| Benchmark | Tiempo (mediana) |
+|---|---|
+| `open/rope_from_str_1m_lines`: construir el rope de 1M líneas desde memoria | 23 ms |
+| `open/load_file_1m_lines`: leer del disco, validar UTF-8 y crear el documento | 50 ms |
+| `insert_char_middle_1m_lines`: insertar un carácter en medio | 1,6 µs |
+| `frame_1000x700_middle_of_1m_lines`: frame completo sin cambios (galleys en caché) | 91 µs |
+| `frame_1000x700_scrolling_page_down_1m_lines`: frame con una página nueva de líneas | 393 µs |
+
+El tiempo de frame es solo CPU (maquetación, pintado y teselado de egui); no incluye la GPU ni la presentación.
+
+Conclusiones:
+
+- El fichero de 100 MB queda visible en 0,36 s, por debajo del presupuesto de 1 s, sin bloquear la interfaz (la carga va en un hilo de trabajo).
+- Un frame con scroll cuesta 0,4 ms de CPU: hay margen de sobra para 60 Hz.
