@@ -32,6 +32,8 @@ pub struct EditorView {
     /// Anchor of the selection being made with the mouse.
     drag_anchor: Option<usize>,
     scroll_to_caret: bool,
+    /// Lines that fit in the viewport, from the last frame (Page Up/Down distance).
+    page_lines: usize,
 }
 
 impl EditorView {
@@ -42,6 +44,7 @@ impl EditorView {
             max_line_width: 0.0,
             drag_anchor: None,
             scroll_to_caret: false,
+            page_lines: 1,
         }
     }
 
@@ -52,6 +55,11 @@ impl EditorView {
     /// Scrolls the primary caret into view on the next frame.
     pub fn request_scroll_to_caret(&mut self) {
         self.scroll_to_caret = true;
+    }
+
+    /// Lines that fit in the viewport, as measured in the last frame.
+    pub fn page_lines(&self) -> usize {
+        self.page_lines
     }
 
     /// Forgets per-document state after another document is loaded.
@@ -91,11 +99,11 @@ impl EditorView {
 
                 self.handle_pointer(ui, &response, doc, &layout);
 
+                self.page_lines = ((viewport.height() / row_height) as usize)
+                    .saturating_sub(1)
+                    .max(1);
                 if response.has_focus() {
-                    let page_lines = ((viewport.height() / row_height) as usize)
-                        .saturating_sub(1)
-                        .max(1);
-                    self.handle_events(ui, doc, page_lines, &mut output);
+                    self.handle_events(ui, doc, self.page_lines, &mut output);
                 }
 
                 let first =

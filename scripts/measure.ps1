@@ -13,12 +13,21 @@
 #
 # Usage:
 #   ./scripts/measure.ps1 -Exe target/release/bracket.exe [-Runs 10] [-Arguments 'file.txt']
+#       [-Maximized] [-Scroll [-ScrollRuns 5]]
+#
+# -Maximized starts the window maximized (BRACKET_MEASURE_MAXIMIZED=1).
+# -Scroll (needs a file in -Arguments) also runs BRACKET_MEASURE_SCROLL=<file>: after the first
+# content frame the app scrolls one page per frame for 300 frames and reports their wall time.
+# CPU per frame = (process CPU of a scroll run - median process CPU of a startup run) / frames.
 
 param(
     [Parameter(Mandatory = $true)][string]$Exe,
     [int]$Runs = 10,
     [string]$Arguments = '',
-    [int]$IdleSeconds = 3
+    [int]$IdleSeconds = 3,
+    [switch]$Maximized,
+    [switch]$Scroll,
+    [int]$ScrollRuns = 5
 )
 
 $ErrorActionPreference = 'Stop'
@@ -56,6 +65,7 @@ function Start-Target([hashtable]$extraEnv) {
     $psi.Arguments = $Arguments
     $psi.UseShellExecute = $false
     foreach ($k in $extraEnv.Keys) { $psi.EnvironmentVariables[$k] = $extraEnv[$k] }
+    if ($Maximized) { $psi.EnvironmentVariables['BRACKET_MEASURE_MAXIMIZED'] = '1' }
     return [System.Diagnostics.Process]::Start($psi)
 }
 
@@ -73,11 +83,13 @@ Write-Host ("Size: {0:N0} bytes ({1:N2} MB)" -f $bytes, ($bytes / 1MB))
 # Startup.
 $toMain = @()
 $toFrame = @()
+$startupCpu = @()
 for ($i = 1; $i -le $Runs; $i++) {
     $out = [System.IO.Path]::GetTempFileName()
     $launch = [PreciseClock]::UnixMicroseconds()
     $p = Start-Target @{ BRACKET_MEASURE_STARTUP = $out }
     if (-not $p.WaitForExit(30000)) { $p.Kill(); throw "Run $i did not exit within 30 s" }
+    $startupCpu += $p.TotalProcessorTime.TotalMilliseconds
     $values = @{}
     foreach ($line in Get-Content -LiteralPath $out) {
         if ($line -match '^(\w+)=([0-9.]+)$') { $values[$Matches[1]] = [double]$Matches[2] }
@@ -110,3 +122,31 @@ $privWs = if ($perf) { [double]$perf.WorkingSetPrivate } else { [double]::NaN }
 $p.Kill()
 $p.WaitForExit()
 Write-Host ("Idle memory after {0} s: private working set {1:N1} MB (Task Manager), working set {2:N1} MB, private bytes {3:N1} MB" -f $IdleSeconds, ($privWs / 1MB), ($ws / 1MB), ($priv / 1MB))
+
+# Scrolling cost.
+if ($Scroll) {
+    if (-not $Arguments) { throw '-Scroll needs a file in -Arguments' }
+    $baseCpu = Get-Median $startupCpu
+    $wallPerFrame = @()
+    $cpuPerFrame = @()
+    for ($i = 1; $i -le $ScrollRuns; $i++) {
+        $out = [System.IO.Path]::GetTempFileName()
+        $p = Start-Target @{ BRACKET_MEASURE_SCROLL = $out }
+        if (-not $p.WaitForExit(60000)) { $p.Kill(); throw "Scroll run $i did not exit within 60 s" }
+        $cpuMs = $p.TotalProcessorTime.TotalMilliseconds
+        $values = @{}
+        foreach ($line in Get-Content -LiteralPath $out) {
+            if ($line -match '^(\w+)=([0-9.]+)$') { $values[$Matches[1]] = [double]$Matches[2] }
+        }
+        Remove-Item -LiteralPath $out
+        if (-not $values.ContainsKey('scroll_ms')) { throw "Scroll run $i wrote no measurement" }
+        $frames = $values['frames']
+        $wall = $values['scroll_ms'] / $frames
+        $cpuFrame = ($cpuMs - $baseCpu) / $frames
+        $wallPerFrame += $wall
+        $cpuPerFrame += $cpuFrame
+        Write-Host ("  scroll run {0}: {1:N2} ms/frame ({2:N1} fps), CPU {3:N2} ms/frame" -f $i, $wall, (1000 / $wall), $cpuFrame)
+    }
+    $medianWall = Get-Median $wallPerFrame
+    Write-Host ("Scroll (one page per frame): median {0:N2} ms/frame ({1:N1} fps), CPU {2:N2} ms/frame" -f $medianWall, (1000 / $medianWall), (Get-Median $cpuPerFrame))
+}

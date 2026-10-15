@@ -3,21 +3,22 @@
 mod app;
 mod editor_view;
 mod i18n;
-mod startup;
+mod measure;
 
 use std::path::PathBuf;
 
 use eframe::egui;
 
 pub use editor_view::{EditorView, ViewOutput};
-pub use startup::StartupProbe;
+pub use measure::Probe;
 
 /// Opens the main window, optionally loading `path`, and runs the event loop until it closes.
-pub fn run(path: Option<PathBuf>, probe: Option<StartupProbe>) -> eframe::Result {
+pub fn run(path: Option<PathBuf>, probe: Option<Probe>) -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Bracket")
             .with_inner_size([1000.0, 700.0])
+            .with_maximized(measure::maximized_requested())
             .with_drag_and_drop(true),
         ..Default::default()
     };

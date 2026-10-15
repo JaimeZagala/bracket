@@ -7,12 +7,12 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 
 use bracket_core::document::{self, Document, LineEnding};
-use bracket_core::movement;
+use bracket_core::movement::{self, Motion};
 use eframe::egui::{self, Id, ViewportCommand};
 
-use crate::StartupProbe;
 use crate::editor_view::EditorView;
 use crate::i18n::{self, Language, Texts};
+use crate::measure::Probe;
 
 /// What to do once the user has dealt with unsaved changes.
 #[derive(Debug, Clone)]
@@ -31,12 +31,12 @@ pub struct BracketApp {
     pending: Option<PendingAction>,
     allow_close: bool,
     title: String,
-    probe: Option<StartupProbe>,
+    probe: Option<Probe>,
     frames_ready: u32,
 }
 
 impl BracketApp {
-    pub fn new(ctx: &egui::Context, path: Option<PathBuf>, probe: Option<StartupProbe>) -> Self {
+    pub fn new(ctx: &egui::Context, path: Option<PathBuf>, probe: Option<Probe>) -> Self {
         let mut app = Self {
             texts: i18n::texts(Language::from_env()),
             doc: Document::new_empty(),
@@ -264,6 +264,37 @@ impl BracketApp {
     }
 }
 
+impl BracketApp {
+    /// Drives the measurement probe, if any (see `measure.rs`).
+    fn run_probe(&mut self, ctx: &egui::Context) {
+        let Some(probe) = &mut self.probe else { return };
+        ctx.request_repaint();
+        // The second frame with the final content means the first one has been presented.
+        // Count frames, not passes: egui may run extra layout passes within one frame.
+        if self.loading.is_some() || ctx.current_pass_index() != 0 {
+            return;
+        }
+        self.frames_ready += 1;
+        if self.frames_ready < 2 {
+            return;
+        }
+        match probe {
+            Probe::Startup(startup) => startup.finish(),
+            Probe::Scroll(scroll) => {
+                // One page further every frame, wrapping at the end: each frame lays out new lines.
+                let buffer = &mut self.doc.buffer;
+                if buffer.selections().primary().head == buffer.len_chars() {
+                    buffer.set_selections(bracket_core::Selections::caret(0));
+                } else {
+                    buffer.move_selections(Motion::Down(self.view.page_lines()), false);
+                }
+                self.view.request_scroll_to_caret();
+                scroll.frame();
+            }
+        }
+    }
+}
+
 impl eframe::App for BracketApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
@@ -285,15 +316,6 @@ impl eframe::App for BracketApp {
         self.unsaved_dialog(&ctx);
         self.update_title(&ctx);
 
-        if let Some(probe) = &self.probe {
-            // Finish once a frame with the document (if any) has been presented.
-            if self.loading.is_none() {
-                self.frames_ready += 1;
-                if self.frames_ready >= 2 {
-                    probe.finish();
-                }
-            }
-            ctx.request_repaint();
-        }
+        self.run_probe(&ctx);
     }
 }
