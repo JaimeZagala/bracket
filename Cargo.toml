@@ -29,6 +29,11 @@ bracket-session = { path = "crates/bracket-session" }
 bracket-update = { path = "crates/bracket-update" }
 bracket-ui = { path = "crates/bracket-ui" }
 
+# External crates: versions are pinned here once and inherited with `.workspace = true`.
+# Only LF, CRLF and CR count as line breaks (`cr_lines`), like Notepad++ and VS Code.
+ropey = { version = "1.6.1", default-features = false, features = ["cr_lines", "simd"] }
+proptest = "1.12.0"
+
 [workspace.lints.rust]
 # `deny` (not `forbid`) so a justified exception can opt out locally with a SAFETY comment.
 unsafe_code = "deny"

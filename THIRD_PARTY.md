@@ -8,10 +8,19 @@ Cada dependencia nueva se justifica antes de entrar: mantenimiento activo, licen
 
 ## Crates de Rust
 
-Todavía no hay dependencias externas.
+Solo las dependencias directas; las transitivas se revisarán con una herramienta de licencias antes de la 1.0.0.
 
 | Crate | Versión | Licencia | Uso | Impacto medido |
 |---|---|---|---|---|
+| [ropey](https://crates.io/crates/ropey) | 1.6.1 | MIT | Buffer de texto (rope) en `bracket-core` | Se mide al enlazarlo en `bracket.exe` (Fase 0, paso 11) |
+
+## Solo para desarrollo y pruebas
+
+No se incluyen en el ejecutable.
+
+| Crate | Versión | Licencia | Uso |
+|---|---|---|---|
+| [proptest](https://crates.io/crates/proptest) | 1.12.0 | MIT OR Apache-2.0 | Tests de propiedades |
 
 ## Gramáticas y temas
 

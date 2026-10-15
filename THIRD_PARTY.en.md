@@ -8,10 +8,19 @@ Every new dependency is justified before it is added: active maintenance, a lice
 
 ## Rust crates
 
-There are no external dependencies yet.
+Direct dependencies only; transitive ones will be reviewed with a license tool before 1.0.0.
 
 | Crate | Version | License | Use | Measured impact |
 |---|---|---|---|---|
+| [ropey](https://crates.io/crates/ropey) | 1.6.1 | MIT | Text buffer (rope) in `bracket-core` | Measured once linked into `bracket.exe` (Phase 0, step 11) |
+
+## Development and testing only
+
+Not included in the executable.
+
+| Crate | Version | License | Use |
+|---|---|---|---|
+| [proptest](https://crates.io/crates/proptest) | 1.12.0 | MIT OR Apache-2.0 | Property tests |
 
 ## Grammars and themes
 
