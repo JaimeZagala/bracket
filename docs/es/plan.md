@@ -129,6 +129,34 @@ Cada fase termina con una versión usable. Criterios de cierre: tests y clippy e
 13. Prototipo comparable con iced fuera del workspace y mediciones.
 14. Decisión de interfaz (`decisions/0001-ui.md`) e informe final.
 
+### Fase 1 en detalle
+
+Aprobada el 2026-10-15. Pasos ordenados por dependencias; cada uno compila, tiene tests y lleva su propio commit.
+
+1. Arranque: perfilar eframe (ventana, contexto OpenGL, fuentes, primer frame), probar opciones de `NativeOptions` midiendo cada cambio y añadir un control del presupuesto de arranque.
+2. Configuración en TOML y modo portable (`bracket-session`): `portable.toml` junto al exe o `%APPDATA%\Bracket`.
+3. Traducciones: elegir la librería midiendo su tamaño, selector de idioma en la configuración y migración de los textos.
+4. Fuentes del sistema: familia configurable por nombre (Consolas por defecto, Cascadia Mono como alternativa, o cualquier fuente instalada, también las instaladas solo para el usuario) y una fuente CJK del sistema como respaldo. No se incluye ninguna fuente en el exe.
+5. Codificaciones y saltos de línea (encoding_rs + chardetng): detección, solo lectura si codificar de nuevo no reproduce los bytes exactos, y órdenes para reabrir o guardar con otra codificación y cambiar el salto de línea.
+6. Ficheros: Nuevo, Abrir, Guardar y Guardar como, con diálogos nativos.
+7. Guardado robusto: `ReplaceFileW` desde la capa de Windows (conserva atributos y ACL) y estado "modificado" exacto al deshacer.
+8. Pestañas: varios documentos, pregunta al cerrar con cambios, e insignia de lenguaje en cada pestaña (`C#`, `@`, `#`, `SQL`, `{}`, `<>`). El registro de lenguajes (identificador, nombre, extensiones e insignia) se crea aquí en `bracket-syntax`.
+9. Sesión recuperable: pestañas, posiciones y cambios sin guardar.
+10. Recarga por cambios en disco (notify).
+11. Instancia única y línea de comandos: `bracket fichero:línea`, `--version` y ayuda en los dos idiomas.
+12. Resaltado con syntect para los seis lenguajes integrados, en un hilo, con caché por línea y carga diferida de gramáticas.
+13. Paquetes de lenguaje externos (`languages/`, `format_version`) y asociación de `.xsig`, `.config` y `.csproj` a XML.
+14. Temas: tema del editor e interfaz clara u oscura.
+15. Barra de estado completa: lenguaje, codificación, salto de línea, posición y número de selecciones.
+16. Integración en `bracket-app`: manifiesto de Windows (DPI, rutas largas), versión e icono en los metadatos del exe.
+17. Cierre: mediciones frente a los presupuestos (incluida la RAM con 10 pestañas), CHANGELOG, README y documentación, y etiqueta local `v0.1.0`.
+
+Valores por defecto: ficheros nuevos en UTF-8 sin BOM con CRLF; tabulación de ancho 4. Ambos configurables.
+
+## Mejoras futuras sin fase asignada
+
+- Iconos SVG opcionales para los lenguajes, definidos en `language.toml` como alternativa a la insignia de texto. El formato de los paquetes se diseña desde la Fase 1 para admitirlos sin romper los existentes.
+
 ## Forma de trabajar
 
 1. Antes de escribir código: plan, dudas y riesgos; se espera aprobación.

@@ -129,6 +129,34 @@ Every phase ends with a usable version. Exit criteria: tests and clippy green, n
 13. Comparable iced prototype outside the workspace, with measurements.
 14. Interface decision (`decisions/0001-ui.md`) and final report.
 
+### Phase 1 in detail
+
+Approved on 2026-10-15. Steps ordered by dependencies; each one builds, has tests and gets its own commit.
+
+1. Startup: profile eframe (window, OpenGL context, fonts, first frame), try `NativeOptions` settings measuring each change, and add a startup budget check.
+2. TOML configuration and portable mode (`bracket-session`): `portable.toml` next to the exe or `%APPDATA%\Bracket`.
+3. Translations: choose the library by measuring its size, language selector in the configuration and migration of the texts.
+4. System fonts: family configurable by name (Consolas by default, Cascadia Mono as an alternative, or any installed font, including per-user installs) and a system CJK font as fallback. No font is bundled in the exe.
+5. Encodings and line endings (encoding_rs + chardetng): detection, read-only if re-encoding does not reproduce the exact bytes, and commands to reopen or save with another encoding and to change the line ending.
+6. Files: New, Open, Save and Save As, with native dialogs.
+7. Robust saving: `ReplaceFileW` from the Windows layer (keeps attributes and ACLs) and an exact "modified" state when undoing.
+8. Tabs: several documents, a prompt when closing with changes, and a language badge on each tab (`C#`, `@`, `#`, `SQL`, `{}`, `<>`). The language registry (id, name, extensions and badge) is created here in `bracket-syntax`.
+9. Recoverable session: tabs, positions and unsaved changes.
+10. Reload on disk changes (notify).
+11. Single instance and command line: `bracket file:line`, `--version` and help in both languages.
+12. Highlighting with syntect for the six built-in languages, on a thread, with a per-line cache and lazy grammar loading.
+13. External language packages (`languages/`, `format_version`) and mapping of `.xsig`, `.config` and `.csproj` to XML.
+14. Themes: editor theme and light or dark interface.
+15. Complete status bar: language, encoding, line ending, position and number of selections.
+16. `bracket-app` integration: Windows manifest (DPI, long paths), version and icon in the exe metadata.
+17. Wrap-up: measurements against the budgets (including RAM with 10 tabs), CHANGELOG, README and documentation, and a local `v0.1.0` tag.
+
+Defaults: new files in UTF-8 without BOM with CRLF; tab width 4. Both configurable.
+
+## Future improvements without an assigned phase
+
+- Optional SVG icons for languages, defined in `language.toml` as an alternative to the text badge. The package format is designed from Phase 1 to accept them without breaking existing packages.
+
 ## Way of working
 
 1. Before writing code: plan, open questions and risks; wait for approval.

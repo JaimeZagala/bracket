@@ -4,7 +4,7 @@
 
 A lightweight native code editor for Windows 10/11 (x64), written in Rust. Built for people who want more than Notepad++ (projects, symbols, folder search) without the weight of VS Code, and who still use a full IDE for in-depth work.
 
-> **Status: Phase 0 (prototype).** There is no released version and nothing to install yet. This README describes the goal; the [Roadmap](#roadmap) section says what exists today.
+> **Status: Phase 1 (base editor) in progress.** There is no released version and nothing to install yet. This README describes the goal; the [Roadmap](#roadmap) section says what exists today.
 
 **This is not Brackets.** Bracket (singular) is unrelated to Brackets, Adobe's discontinued editor, and to its successors Brackets Continued and Phoenix Code.
 
@@ -54,8 +54,8 @@ cargo build --release -p bracket-app
 
 | Phase | Version | Scope | Status |
 |---|---|---|---|
-| 0 | — | Foundations and editor prototype | In progress |
-| 1 | 0.1.0 | Base editor: tabs, session, encodings, highlighting, themes, configuration, languages | Pending |
+| 0 | — | Foundations and editor prototype | Done |
+| 1 | 0.1.0 | Base editor: tabs, session, encodings, highlighting, themes, configuration, languages | In progress |
 | 2 | 0.2.0 | Projects: folder tree, Ctrl+P, palette, find and replace in folder | Pending |
 | 3 | 0.3.0 | Symbols and navigation | Pending |
 | 4 | 0.4.0 | Advanced editing: multi-cursor, folding, diff, large files | Pending |
