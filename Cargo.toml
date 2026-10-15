@@ -42,6 +42,9 @@ criterion = { version = "0.8.2", default-features = false, features = ["cargo_be
 toml_edit = "0.25.17"
 # Windows registry (HKCU/HKLM): installed fonts now, file associations in Phase 5.
 winreg = "0.56.0"
+# Encodings: decoding/encoding (WHATWG set) and guessing legacy encodings.
+encoding_rs = "0.8.42"
+chardetng = "1.0.0"
 
 [workspace.lints.rust]
 # `deny` (not `forbid`) so a justified exception can opt out locally with a SAFETY comment.

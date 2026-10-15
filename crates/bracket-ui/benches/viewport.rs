@@ -66,8 +66,8 @@ fn new_document() -> Document {
         PathBuf::from("bench.txt"),
         LoadedText {
             text: large_text(LINES),
-            has_bom: false,
-            valid_utf8: true,
+            encoding: bracket_core::encoding::TextEncoding::UTF8,
+            exact: true,
         },
         LineEnding::CrLf,
     )

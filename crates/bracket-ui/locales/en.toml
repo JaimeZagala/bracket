@@ -6,7 +6,7 @@ language_tooltip = "Interface language"
 
 untitled = "Untitled"
 loading = "Loading…"
-read_only = "Read-only (not UTF-8)"
+read_only = "Read-only: saving would alter the file's bytes"
 drop_hint = "Drop a file on the window to open it"
 position = "Ln {line}, Col {column}"
 
@@ -31,3 +31,11 @@ more_warnings_one = "(1 more warning)"
 more_warnings_many = "({count} more warnings)"
 
 font_missing = "The font “{family}” is not installed; using {used}"
+
+encoding_tooltip = "Encoding"
+reopen_with_encoding = "Reopen with encoding"
+save_with_encoding = "Save with encoding"
+reopen_needs_clean = "Save or discard your changes before reopening with another encoding"
+save_encode_failed = "Cannot save as {encoding}: “{character}” does not exist in that encoding. Pick another one in “Save with encoding”"
+line_ending_tooltip = "Line ending"
+convert_line_endings = "Convert to {line_ending}"

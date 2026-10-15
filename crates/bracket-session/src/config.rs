@@ -16,6 +16,7 @@
 //!
 //! [files]
 //! line_ending = "crlf" # line ending of new files: "crlf", "lf" or "cr"
+//! encoding = "utf-8"  # encoding of new files: "utf-8", "utf-8-bom", or another label
 //! ```
 
 use std::fmt;
@@ -25,6 +26,7 @@ use std::path::Path;
 
 use bracket_core::LineEnding;
 use bracket_core::document::write_bytes_atomic;
+use bracket_core::encoding::TextEncoding;
 use toml_edit::{DocumentMut, Item, Table, Value};
 
 /// Interface language.
@@ -66,6 +68,8 @@ pub struct Config {
     pub tab_width: usize,
     /// Line ending used for new files.
     pub line_ending: LineEnding,
+    /// Encoding used for new files.
+    pub encoding: TextEncoding,
 }
 
 impl Default for Config {
@@ -76,6 +80,7 @@ impl Default for Config {
             font_size: 14.0,
             tab_width: 4,
             line_ending: LineEnding::CrLf,
+            encoding: TextEncoding::UTF8,
         }
     }
 }
@@ -164,6 +169,10 @@ pub fn parse(text: &str) -> LoadedConfig {
                     .as_str()
                     .and_then(line_ending_from_code)
                     .map(|v| config.line_ending = v),
+                ("files", "encoding") => item
+                    .as_str()
+                    .and_then(TextEncoding::from_code)
+                    .map(|v| config.encoding = v),
                 _ => {
                     warnings.push(ConfigWarning::UnknownKey { key: full_key });
                     continue;
@@ -273,6 +282,7 @@ pub fn save(config: &Config, path: &Path) -> Result<(), SaveError> {
         "line_ending",
         line_ending_code(config.line_ending).into(),
     );
+    set(&mut doc, "files", "encoding", config.encoding.code().into());
 
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(SaveError::Io)?;
@@ -337,6 +347,7 @@ mod tests {
                 font_size: 16.0,
                 tab_width: 2,
                 line_ending: LineEnding::Lf,
+                encoding: TextEncoding::UTF8,
             }
         );
     }
@@ -406,6 +417,7 @@ mod tests {
             font_size: 13.5,
             tab_width: 8,
             line_ending: LineEnding::Cr,
+            encoding: TextEncoding::UTF8_BOM,
         };
         save(&config, &path).unwrap();
         let loaded = load(&path);

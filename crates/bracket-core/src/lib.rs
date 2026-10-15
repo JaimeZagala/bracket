@@ -4,6 +4,7 @@
 
 pub mod buffer;
 pub mod document;
+pub mod encoding;
 pub mod history;
 pub mod movement;
 pub mod selection;

@@ -1,9 +1,10 @@
-//! A buffer bound to a file: loading, line ending detection and atomic saving.
+//! A buffer bound to a file: loading with encoding detection, line endings and atomic saving.
 //!
-//! Phase 0 supports UTF-8 (with or without BOM) only. A file that is not valid UTF-8 is shown
-//! with replacement characters and opened read-only, so it can never be overwritten with
-//! altered bytes.
+//! A file is editable only if its text can be written back to exactly the same bytes (see
+//! [`crate::encoding`]); otherwise it opens read-only and can never be overwritten with altered
+//! bytes. Saving never substitutes characters the encoding cannot represent: it fails instead.
 
+use std::fmt;
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -11,10 +12,12 @@ use std::path::{Path, PathBuf};
 use ropey::Rope;
 
 use crate::buffer::Buffer;
+use crate::encoding::{self, EncodeError, TextEncoding};
 
 const UTF8_BOM: &[u8] = &[0xEF, 0xBB, 0xBF];
 
-/// Line ending used when inserting new lines. Existing line endings are never changed.
+/// Line ending used when inserting new lines. Existing line endings are only changed by an
+/// explicit conversion ([`Document::convert_line_endings`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LineEnding {
     CrLf,
@@ -23,11 +26,22 @@ pub enum LineEnding {
 }
 
 impl LineEnding {
+    pub const ALL: [Self; 3] = [Self::CrLf, Self::Lf, Self::Cr];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::CrLf => "\r\n",
             Self::Lf => "\n",
             Self::Cr => "\r",
+        }
+    }
+
+    /// Short name for the status bar: `CRLF`, `LF` or `CR`.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::CrLf => "CRLF",
+            Self::Lf => "LF",
+            Self::Cr => "CR",
         }
     }
 
@@ -49,7 +63,7 @@ impl LineEnding {
         }
     }
 
-    /// Rewrites every line break in `text` (CRLF, LF or CR) as `self`. Used for pasted text.
+    /// Rewrites every line break in `text` (CRLF, LF or CR) as `self`.
     pub fn normalize(self, text: &str) -> String {
         let mut out = String::with_capacity(text.len());
         let mut chars = text.chars().peekable();
@@ -73,37 +87,35 @@ impl LineEnding {
 #[derive(Debug)]
 pub struct LoadedText {
     pub text: String,
-    pub has_bom: bool,
-    /// False when the bytes were not valid UTF-8 and had to be decoded lossily.
-    pub valid_utf8: bool,
+    pub encoding: TextEncoding,
+    /// False when writing `text` back would not reproduce the file's bytes (read-only).
+    pub exact: bool,
 }
 
-/// Reads a file. Never fails on invalid UTF-8: see [`LoadedText::valid_utf8`].
+impl From<encoding::Decoded> for LoadedText {
+    fn from(decoded: encoding::Decoded) -> Self {
+        Self {
+            text: decoded.text,
+            encoding: decoded.encoding,
+            exact: decoded.exact,
+        }
+    }
+}
+
+/// Reads a file and detects its encoding. Never fails on undecodable bytes: see
+/// [`LoadedText::exact`].
 pub fn load_text(path: &Path) -> io::Result<LoadedText> {
-    let bytes = fs::read(path)?;
-    let has_bom = bytes.starts_with(UTF8_BOM);
-    let body = if has_bom {
-        bytes[UTF8_BOM.len()..].to_vec()
-    } else {
-        bytes
-    };
-    Ok(match String::from_utf8(body) {
-        Ok(text) => LoadedText {
-            text,
-            has_bom,
-            valid_utf8: true,
-        },
-        Err(err) => LoadedText {
-            text: String::from_utf8_lossy(err.as_bytes()).into_owned(),
-            has_bom,
-            valid_utf8: false,
-        },
-    })
+    Ok(encoding::decode(fs::read(path)?).into())
 }
 
-/// Writes `text` to `path` atomically: the content goes to a temporary file in the same folder,
-/// is flushed to disk, and then replaces the target with a rename. If anything fails, the
-/// original file is left untouched and the temporary file is removed.
+/// Reads a file decoding it as `encoding` ("reopen with encoding").
+pub fn load_text_as(path: &Path, encoding: TextEncoding) -> io::Result<LoadedText> {
+    Ok(encoding::decode_as(&fs::read(path)?, encoding).into())
+}
+
+/// Writes UTF-8 `text` to `path` atomically: the content goes to a temporary file in the same
+/// folder, is flushed to disk, and then replaces the target with a rename. If anything fails,
+/// the original file is left untouched and the temporary file is removed.
 pub fn write_atomic(path: &Path, text: &Rope, has_bom: bool) -> io::Result<()> {
     write_atomic_with(path, |writer| {
         if has_bom {
@@ -165,7 +177,10 @@ fn write_and_replace(
 pub struct Document {
     pub buffer: Buffer,
     path: Option<PathBuf>,
-    has_bom: bool,
+    /// Encoding used for the next save.
+    encoding: TextEncoding,
+    /// Encoding of the file on disk; differs from `encoding` after "save with encoding".
+    saved_encoding: TextEncoding,
     read_only: bool,
     line_ending: LineEnding,
     saved_version: u64,
@@ -173,11 +188,12 @@ pub struct Document {
 
 impl Document {
     /// An empty, unsaved document that will use `line_ending` for new lines.
-    pub fn new_empty(line_ending: LineEnding) -> Self {
+    pub fn new_empty(line_ending: LineEnding, encoding: TextEncoding) -> Self {
         Self {
             buffer: Buffer::new(),
             path: None,
-            has_bom: false,
+            encoding,
+            saved_encoding: encoding,
             read_only: false,
             line_ending,
             saved_version: 0,
@@ -193,8 +209,9 @@ impl Document {
         Self {
             buffer,
             path: Some(path),
-            has_bom: loaded.has_bom,
-            read_only: !loaded.valid_utf8,
+            encoding: loaded.encoding,
+            saved_encoding: loaded.encoding,
+            read_only: !loaded.exact,
             line_ending,
             saved_version,
         }
@@ -204,8 +221,14 @@ impl Document {
         self.path.as_deref()
     }
 
-    pub fn has_bom(&self) -> bool {
-        self.has_bom
+    pub fn encoding(&self) -> TextEncoding {
+        self.encoding
+    }
+
+    /// Chooses the encoding for the next save ("save with encoding"). The document becomes
+    /// modified until it is saved.
+    pub fn set_encoding(&mut self, encoding: TextEncoding) {
+        self.encoding = encoding;
     }
 
     /// True when the file could not be decoded exactly and must not be saved.
@@ -217,8 +240,15 @@ impl Document {
         self.line_ending
     }
 
+    /// Rewrites every line break as `line_ending` in one undo step, and uses it for new lines.
+    pub fn convert_line_endings(&mut self, line_ending: LineEnding) {
+        self.line_ending = line_ending;
+        let converted = line_ending.normalize(&self.buffer.text().to_string());
+        self.buffer.replace_all_keeping_positions(&converted);
+    }
+
     pub fn is_dirty(&self) -> bool {
-        self.buffer.version() != self.saved_version
+        self.buffer.version() != self.saved_version || self.encoding != self.saved_encoding
     }
 
     /// Everything a background thread needs to save the current text. Cloning a rope is cheap.
@@ -229,29 +259,58 @@ impl Document {
         Some(SaveRequest {
             path: self.path.clone()?,
             text: self.buffer.text().clone(),
-            has_bom: self.has_bom,
+            encoding: self.encoding,
             version: self.buffer.version(),
         })
     }
 
-    /// Records that the text at `version` is now on disk.
-    pub fn mark_saved(&mut self, version: u64) {
+    /// Records that the text at `version`, in `encoding`, is now on disk.
+    pub fn mark_saved(&mut self, version: u64, encoding: TextEncoding) {
         self.saved_version = version;
+        self.saved_encoding = encoding;
     }
 }
+
+/// Why a save failed.
+#[derive(Debug)]
+pub enum SaveError {
+    /// A character cannot be represented in the chosen encoding. Nothing was written.
+    Encode(EncodeError),
+    Io(io::Error),
+}
+
+impl fmt::Display for SaveError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Encode(err) => write!(f, "{err}"),
+            Self::Io(err) => write!(f, "{err}"),
+        }
+    }
+}
+
+impl std::error::Error for SaveError {}
 
 /// A snapshot of a document to be written by [`SaveRequest::write`], possibly on another thread.
 #[derive(Debug, Clone)]
 pub struct SaveRequest {
     pub path: PathBuf,
     pub text: Rope,
-    pub has_bom: bool,
+    pub encoding: TextEncoding,
     pub version: u64,
 }
 
 impl SaveRequest {
-    pub fn write(&self) -> io::Result<()> {
-        write_atomic(&self.path, &self.text, self.has_bom)
+    pub fn write(&self) -> Result<(), SaveError> {
+        if self.encoding.is_utf8() {
+            // The common case streams the rope without building a single string.
+            return write_atomic(&self.path, &self.text, self.encoding.has_bom())
+                .map_err(SaveError::Io);
+        }
+        let bytes = self
+            .encoding
+            .encode(&self.text.to_string())
+            .map_err(SaveError::Encode)?;
+        write_bytes_atomic(&self.path, &bytes).map_err(SaveError::Io)
     }
 }
 
@@ -264,6 +323,14 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    fn open(path: &Path) -> Document {
+        Document::from_loaded(
+            path.to_path_buf(),
+            load_text(path).unwrap(),
+            LineEnding::CrLf,
+        )
     }
 
     #[test]
@@ -297,8 +364,8 @@ mod tests {
         let bytes = b"\xEF\xBB\xBFline1\r\nline2\nline3\rend \xC3\xB1";
         fs::write(&path, bytes).unwrap();
 
-        let doc = Document::from_loaded(path.clone(), load_text(&path).unwrap(), LineEnding::CrLf);
-        assert!(doc.has_bom());
+        let doc = open(&path);
+        assert_eq!(doc.encoding(), TextEncoding::UTF8_BOM);
         assert!(!doc.is_read_only());
         assert_eq!(doc.line_ending(), LineEnding::CrLf);
         doc.save_request().unwrap().write().unwrap();
@@ -310,26 +377,110 @@ mod tests {
     }
 
     #[test]
-    fn invalid_utf8_opens_read_only_and_cannot_be_saved() {
-        let dir = temp_dir("latin1");
-        let path = dir.join("latin1.txt");
-        fs::write(&path, b"caf\xE9").unwrap();
-
-        let doc = Document::from_loaded(path.clone(), load_text(&path).unwrap(), LineEnding::CrLf);
-        assert!(doc.is_read_only());
-        assert!(doc.save_request().is_none());
-        assert_eq!(fs::read(&path).unwrap(), b"caf\xE9");
+    fn legacy_and_utf16_files_round_trip_byte_exact() {
+        let dir = temp_dir("legacy");
+        let cases: [(&str, Vec<u8>); 2] = [
+            (
+                "latin1.txt",
+                b"Configuraci\xF3n del \xE1rbol con se\xF1al\r\n".to_vec(),
+            ),
+            (
+                "utf16.txt",
+                TextEncoding::UTF16LE.encode("Hola ñ 日本\r\n").unwrap(),
+            ),
+        ];
+        for (name, bytes) in cases {
+            let path = dir.join(name);
+            fs::write(&path, &bytes).unwrap();
+            let doc = open(&path);
+            assert!(!doc.is_read_only(), "{name} should be editable");
+            doc.save_request().unwrap().write().unwrap();
+            assert_eq!(fs::read(&path).unwrap(), bytes, "{name} changed on save");
+        }
         fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
+    fn undecodable_file_opens_read_only_and_cannot_be_saved() {
+        let dir = temp_dir("broken");
+        let path = dir.join("broken.txt");
+        let bytes = b"\xEF\xBB\xBFok \xFF\xFE broken";
+        fs::write(&path, bytes).unwrap();
+
+        let doc = open(&path);
+        assert!(doc.is_read_only());
+        assert!(doc.save_request().is_none());
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn saving_unrepresentable_text_fails_and_keeps_the_file() {
+        let dir = temp_dir("unmappable");
+        let path = dir.join("latin1.txt");
+        let bytes = b"caf\xE9 con se\xF1al y m\xE1s acentos del espa\xF1ol";
+        fs::write(&path, bytes).unwrap();
+
+        let mut doc = open(&path);
+        doc.buffer.insert("日");
+        let err = doc.save_request().unwrap().write().unwrap_err();
+        assert!(matches!(
+            err,
+            SaveError::Encode(EncodeError {
+                character: Some('日'),
+                ..
+            })
+        ));
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+
+        doc.set_encoding(TextEncoding::UTF8);
+        doc.save_request().unwrap().write().unwrap();
+        assert!(fs::read_to_string(&path).unwrap().starts_with("日café"));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn reopening_with_an_encoding_reinterprets_the_bytes() {
+        let dir = temp_dir("reopen");
+        let path = dir.join("short.txt");
+        fs::write(&path, b"caf\xE9").unwrap();
+        let loaded = load_text_as(&path, TextEncoding::from_code("windows-1252").unwrap()).unwrap();
+        assert_eq!(loaded.text, "café");
+        assert!(loaded.exact);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn changing_the_encoding_makes_the_document_modified() {
+        let mut doc = Document::new_empty(LineEnding::CrLf, TextEncoding::UTF8);
+        assert!(!doc.is_dirty());
+        doc.set_encoding(TextEncoding::UTF8_BOM);
+        assert!(doc.is_dirty());
+        doc.mark_saved(doc.buffer.version(), TextEncoding::UTF8_BOM);
+        assert!(!doc.is_dirty());
+    }
+
+    #[test]
+    fn converting_line_endings_is_one_undo_step() {
+        let mut doc = Document::new_empty(LineEnding::CrLf, TextEncoding::UTF8);
+        doc.buffer.insert("a");
+        doc.buffer.insert("\r\n");
+        doc.buffer.insert("b\rc\n");
+        doc.convert_line_endings(LineEnding::Lf);
+        assert_eq!(doc.buffer.text().to_string(), "a\nb\nc\n");
+        assert_eq!(doc.line_ending(), LineEnding::Lf);
+        doc.buffer.undo();
+        assert_eq!(doc.buffer.text().to_string(), "a\r\nb\rc\n");
+    }
+
+    #[test]
     fn dirty_tracks_edits_and_saves() {
-        let mut doc = Document::new_empty(LineEnding::CrLf);
+        let mut doc = Document::new_empty(LineEnding::CrLf, TextEncoding::UTF8);
         assert!(!doc.is_dirty());
         doc.buffer.insert("x");
         assert!(doc.is_dirty());
         let version = doc.buffer.version();
-        doc.mark_saved(version);
+        doc.mark_saved(version, TextEncoding::UTF8);
         assert!(!doc.is_dirty());
     }
 

@@ -6,7 +6,7 @@ language_tooltip = "Idioma de la interfaz"
 
 untitled = "Sin título"
 loading = "Cargando…"
-read_only = "Solo lectura (no es UTF-8)"
+read_only = "Solo lectura: guardar alteraría los bytes del fichero"
 drop_hint = "Arrastra un fichero a la ventana para abrirlo"
 position = "Lín {line}, Col {column}"
 
@@ -31,3 +31,11 @@ more_warnings_one = "(y 1 aviso más)"
 more_warnings_many = "(y {count} avisos más)"
 
 font_missing = "La fuente «{family}» no está instalada; se usa {used}"
+
+encoding_tooltip = "Codificación"
+reopen_with_encoding = "Reabrir con codificación"
+save_with_encoding = "Guardar con codificación"
+reopen_needs_clean = "Guarda o descarta los cambios antes de reabrir con otra codificación"
+save_encode_failed = "No se puede guardar en {encoding}: «{character}» no existe en esa codificación. Elige otra en «Guardar con codificación»"
+line_ending_tooltip = "Salto de línea"
+convert_line_endings = "Convertir a {line_ending}"

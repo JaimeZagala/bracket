@@ -6,7 +6,10 @@ use std::ops::Range;
 use ropey::Rope;
 
 use crate::history::{EditKind, History};
-use crate::movement::{Motion, apply_motion, is_inside_crlf, next_boundary, prev_boundary};
+use crate::movement::{
+    Motion, apply_motion, is_inside_crlf, line_end, line_of, line_start, next_boundary,
+    prev_boundary,
+};
 use crate::selection::{Selection, Selections};
 use crate::transaction::{Change, Transaction};
 
@@ -111,6 +114,51 @@ impl Buffer {
                 goal_column,
             }
         });
+    }
+
+    /// Replaces the whole text in one undo step (for example to convert line endings), keeping
+    /// each selection end on the same line and column, clamped to the new line length.
+    /// Returns false, and records nothing, if the text is already `new_text`.
+    pub fn replace_all_keeping_positions(&mut self, new_text: &str) -> bool {
+        if self.text == new_text {
+            return false;
+        }
+        let before = self.selections.clone();
+        let text = &self.text;
+        let to_line_col = |pos: usize| {
+            let line = line_of(text, pos);
+            (line, pos - line_start(text, line))
+        };
+        let ends: Vec<_> = before
+            .iter()
+            .map(|s| (to_line_col(s.anchor), to_line_col(s.head)))
+            .collect();
+
+        let change = Change {
+            start: 0,
+            removed: self.text.to_string(),
+            inserted: new_text.to_owned(),
+        };
+        change.apply(&mut self.text);
+
+        let text = &self.text;
+        let from_line_col = |(line, column): (usize, usize)| {
+            let line = line.min(text.len_lines() - 1);
+            (line_start(text, line) + column).min(line_end(text, line))
+        };
+        let selections = ends
+            .into_iter()
+            .map(|(anchor, head)| Selection::new(from_line_col(anchor), from_line_col(head)))
+            .collect();
+        self.selections = Selections::new(selections, before.primary_index());
+        let transaction = Transaction {
+            changes: vec![change],
+            before,
+            after: self.selections.clone(),
+        };
+        self.history.push(transaction, EditKind::Other);
+        self.version += 1;
+        true
     }
 
     /// Selects the whole text as a single selection.
@@ -461,6 +509,25 @@ mod tests {
         let mut b = buffer_with("abc\ndef", &[(1, 1), (5, 5)]);
         b.select_all();
         assert_eq!(b.selections().as_slice(), &[Selection::new(0, 7)]);
+    }
+
+    #[test]
+    fn replace_all_keeps_line_and_column_and_undoes_in_one_step() {
+        let mut b = buffer_with("ab\r\ncd\r\nef", &[(5, 6)]);
+        assert!(b.replace_all_keeping_positions("ab\ncd\nef"));
+        assert_eq!(b.text().to_string(), "ab\ncd\nef");
+        assert_eq!(
+            b.selections().primary(),
+            &Selection::new(4, 5),
+            "line 1, columns 1..2"
+        );
+        assert!(
+            !b.replace_all_keeping_positions("ab\ncd\nef"),
+            "no change, no step"
+        );
+        b.undo();
+        assert_eq!(b.text().to_string(), "ab\r\ncd\r\nef");
+        assert_eq!(b.selections().primary(), &Selection::new(5, 6));
     }
 
     #[test]

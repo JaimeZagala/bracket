@@ -23,7 +23,6 @@ const DEFAULT_FONT_SIZE: f32 = 14.0;
 /// What the view asks the application to do after handling input.
 #[derive(Debug, Default)]
 pub struct ViewOutput {
-    pub save_requested: bool,
     /// A visible character that no loaded font can draw (the app may load a fallback font).
     pub missing_glyph: Option<char>,
 }
@@ -128,7 +127,7 @@ impl EditorView {
                     .saturating_sub(1)
                     .max(1);
                 if response.has_focus() {
-                    self.handle_events(ui, doc, self.page_lines, &mut output);
+                    self.handle_events(ui, doc, self.page_lines);
                 }
 
                 // Input above may have edited the text: count the lines again before painting.
@@ -208,13 +207,7 @@ impl EditorView {
         }
     }
 
-    fn handle_events(
-        &mut self,
-        ui: &Ui,
-        doc: &mut Document,
-        page_lines: usize,
-        output: &mut ViewOutput,
-    ) {
+    fn handle_events(&mut self, ui: &Ui, doc: &mut Document, page_lines: usize) {
         // Keep Tab and the arrow keys for the editor instead of focus navigation.
         ui.memory_mut(|m| {
             m.set_focus_lock_filter(
@@ -251,7 +244,7 @@ impl EditorView {
                     pressed: true,
                     modifiers,
                     ..
-                } => self.handle_key(doc, key, modifiers, page_lines, output),
+                } => self.handle_key(doc, key, modifiers, page_lines),
                 _ => {}
             }
         }
@@ -277,7 +270,6 @@ impl EditorView {
         key: Key,
         modifiers: Modifiers,
         page_lines: usize,
-        output: &mut ViewOutput,
     ) {
         let command = modifiers.command;
         let shift = modifiers.shift;
@@ -320,7 +312,6 @@ impl EditorView {
             Key::Y if command => self.edit(doc, |d| {
                 d.buffer.redo();
             }),
-            Key::S if command => output.save_requested = true,
             _ => {}
         }
     }
@@ -623,8 +614,8 @@ mod tests {
             PathBuf::from("test.txt"),
             LoadedText {
                 text: text.to_owned(),
-                has_bom: false,
-                valid_utf8: true,
+                encoding: bracket_core::encoding::TextEncoding::UTF8,
+                exact: true,
             },
             bracket_core::LineEnding::CrLf,
         )

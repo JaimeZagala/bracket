@@ -8,16 +8,29 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 
-use bracket_core::document::{self, Document, LineEnding};
+use bracket_core::document::{self, Document, LineEnding, SaveError};
+use bracket_core::encoding::{self, TextEncoding};
 use bracket_core::movement::{self, Motion};
 use bracket_session::{Config, ConfigWarning, Language, LoadedConfig, config};
-use eframe::egui::{self, Id, ViewportCommand};
+use eframe::egui::{self, Id, Key, Modifiers, ViewportCommand};
 
 use crate::Launch;
 use crate::editor_view::EditorView;
 use crate::fonts::{self, Fallback, FontFile, FontSource};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
+
+/// Result of a background save: the version and encoding written, and whether it worked.
+type SaveOutcome = (u64, TextEncoding, Result<(), SaveError>);
+
+/// Something picked in a status bar menu.
+#[derive(Debug, Clone, Copy)]
+enum StatusAction {
+    Language(Language),
+    ConvertLineEndings(LineEnding),
+    ReopenWith(TextEncoding),
+    SaveWith(TextEncoding),
+}
 
 /// What to do once the user has dealt with unsaved changes.
 #[derive(Debug, Clone)]
@@ -32,7 +45,7 @@ pub struct BracketApp {
     doc: Document,
     view: EditorView,
     loading: Option<Receiver<io::Result<Document>>>,
-    saving: Option<Receiver<(u64, io::Result<()>)>>,
+    saving: Option<Receiver<SaveOutcome>>,
     /// Latest result of a user action (open, save...).
     status: Option<String>,
     /// Configuration warnings, shown (translated) while there is no other status message.
@@ -83,7 +96,7 @@ impl BracketApp {
         let (fallback_tx, fallback_rx) = mpsc::channel();
 
         let texts = i18n::texts(config.language);
-        let mut doc = Document::new_empty(config.line_ending);
+        let mut doc = Document::new_empty(config.line_ending, config.encoding);
         doc.buffer.set_tab_width(config.tab_width);
         let mut app = Self {
             texts,
@@ -109,7 +122,7 @@ impl BracketApp {
         };
         ctx.memory_mut(|m| m.request_focus(app.view.id()));
         if let Some(path) = file {
-            app.start_loading(ctx, path);
+            app.start_loading(ctx, path, None);
         }
         app
     }
@@ -142,12 +155,22 @@ impl BracketApp {
     }
 
     /// Loads a file on a worker thread; the UI keeps running and shows a loading message.
-    fn start_loading(&mut self, ctx: &egui::Context, path: PathBuf) {
+    /// `encoding` forces how the bytes are decoded ("reopen with encoding"); `None` detects it.
+    fn start_loading(
+        &mut self,
+        ctx: &egui::Context,
+        path: PathBuf,
+        encoding: Option<TextEncoding>,
+    ) {
         let (tx, rx) = mpsc::channel();
         let ctx = ctx.clone();
         let (line_ending, tab_width) = (self.config.line_ending, self.config.tab_width);
         thread::spawn(move || {
-            let result = document::load_text(&path).map(|loaded| {
+            let loaded = match encoding {
+                Some(encoding) => document::load_text_as(&path, encoding),
+                None => document::load_text(&path),
+            };
+            let result = loaded.map(|loaded| {
                 let mut doc = Document::from_loaded(path, loaded, line_ending);
                 doc.buffer.set_tab_width(tab_width);
                 doc
@@ -194,7 +217,8 @@ impl BracketApp {
         let (tx, rx) = mpsc::channel();
         let ctx = ctx.clone();
         thread::spawn(move || {
-            let _ = tx.send((request.version, request.write()));
+            let result = request.write();
+            let _ = tx.send((request.version, request.encoding, result));
             ctx.request_repaint();
         });
         self.saving = Some(rx);
@@ -203,17 +227,28 @@ impl BracketApp {
     fn poll_saving(&mut self) {
         let Some(rx) = &self.saving else { return };
         match rx.try_recv() {
-            Ok((version, Ok(()))) => {
-                self.doc.mark_saved(version);
+            Ok((version, encoding, Ok(()))) => {
+                self.doc.mark_saved(version, encoding);
                 self.status = Some(self.texts.saved().to_owned());
                 self.saving = None;
             }
-            Ok((_, Err(err))) => {
-                self.status = Some(self.texts.save_failed(&err.to_string()));
+            Ok((_, _, Err(err))) => {
+                self.status = Some(self.save_error_text(&err));
                 self.saving = None;
             }
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => self.saving = None,
+        }
+    }
+
+    fn save_error_text(&self, err: &SaveError) -> String {
+        match err {
+            SaveError::Encode(err) => {
+                let character = err.character.map(String::from).unwrap_or_default();
+                self.texts
+                    .save_encode_failed(&err.encoding.label(), &character)
+            }
+            SaveError::Io(err) => self.texts.save_failed(&err.to_string()),
         }
     }
 
@@ -223,11 +258,11 @@ impl BracketApp {
         match self.doc.save_request() {
             Some(request) => match request.write() {
                 Ok(()) => {
-                    self.doc.mark_saved(request.version);
+                    self.doc.mark_saved(request.version, request.encoding);
                     true
                 }
                 Err(err) => {
-                    self.status = Some(self.texts.save_failed(&err.to_string()));
+                    self.status = Some(self.save_error_text(&err));
                     false
                 }
             },
@@ -244,7 +279,7 @@ impl BracketApp {
                 self.allow_close = true;
                 ctx.send_viewport_cmd(ViewportCommand::Close);
             }
-            PendingAction::Open(path) => self.start_loading(ctx, path),
+            PendingAction::Open(path) => self.start_loading(ctx, path, None),
         }
     }
 
@@ -260,7 +295,7 @@ impl BracketApp {
             if self.doc.is_dirty() {
                 self.pending = Some(PendingAction::Open(path));
             } else {
-                self.start_loading(ctx, path);
+                self.start_loading(ctx, path, None);
             }
         }
     }
@@ -280,8 +315,8 @@ impl BracketApp {
         }
     }
 
-    /// Draws the status bar. Returns the language picked in its menu, if any.
-    fn status_bar(&self, ui: &mut egui::Ui) -> Option<Language> {
+    /// Draws the status bar. Returns what was picked in one of its menus, if anything.
+    fn status_bar(&self, ui: &mut egui::Ui) -> Option<StatusAction> {
         let mut picked = None;
         egui::Panel::bottom("status").show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -291,17 +326,46 @@ impl BracketApp {
                 let column = movement::visual_column(text, head, self.doc.buffer.tab_width()) + 1;
                 ui.label(self.texts.position(line, column));
                 ui.separator();
-                ui.label(match self.doc.line_ending() {
-                    LineEnding::CrLf => "CRLF",
-                    LineEnding::Lf => "LF",
-                    LineEnding::Cr => "CR",
-                });
+                let current_line_ending = self.doc.line_ending();
+                ui.menu_button(current_line_ending.label(), |ui| {
+                    for line_ending in LineEnding::ALL {
+                        let label = self.texts.convert_line_endings(line_ending.label());
+                        if ui
+                            .selectable_label(line_ending == current_line_ending, label)
+                            .clicked()
+                        {
+                            picked = Some(StatusAction::ConvertLineEndings(line_ending));
+                            ui.close();
+                        }
+                    }
+                })
+                .response
+                .on_hover_text(self.texts.line_ending_tooltip());
                 ui.separator();
-                ui.label(if self.doc.has_bom() {
-                    "UTF-8 BOM"
-                } else {
-                    "UTF-8"
-                });
+                let current_encoding = self.doc.encoding();
+                ui.menu_button(current_encoding.label(), |ui| {
+                    ui.menu_button(self.texts.reopen_with_encoding(), |ui| {
+                        for encoding in encoding::selectable() {
+                            if ui.button(encoding.label()).clicked() {
+                                picked = Some(StatusAction::ReopenWith(encoding));
+                                ui.close();
+                            }
+                        }
+                    });
+                    ui.menu_button(self.texts.save_with_encoding(), |ui| {
+                        for encoding in encoding::selectable() {
+                            if ui
+                                .selectable_label(encoding == current_encoding, encoding.label())
+                                .clicked()
+                            {
+                                picked = Some(StatusAction::SaveWith(encoding));
+                                ui.close();
+                            }
+                        }
+                    });
+                })
+                .response
+                .on_hover_text(self.texts.encoding_tooltip());
                 if self.doc.is_read_only() {
                     ui.separator();
                     ui.label(self.texts.read_only());
@@ -324,7 +388,7 @@ impl BracketApp {
                                 .selectable_label(language == self.config.language, name)
                                 .clicked()
                             {
-                                picked = Some(language);
+                                picked = Some(StatusAction::Language(language));
                                 ui.close();
                             }
                         }
@@ -335,6 +399,32 @@ impl BracketApp {
             });
         });
         picked
+    }
+
+    fn run_status_action(&mut self, ctx: &egui::Context, action: StatusAction) {
+        match action {
+            StatusAction::Language(language) => self.set_language(ctx, language),
+            StatusAction::ConvertLineEndings(line_ending) => {
+                if !self.doc.is_read_only() {
+                    self.doc.convert_line_endings(line_ending);
+                }
+            }
+            StatusAction::SaveWith(encoding) => {
+                if !self.doc.is_read_only() {
+                    self.doc.set_encoding(encoding);
+                }
+            }
+            StatusAction::ReopenWith(encoding) => {
+                let Some(path) = self.doc.path().map(PathBuf::from) else {
+                    return;
+                };
+                if self.doc.is_dirty() {
+                    self.status = Some(self.texts.reopen_needs_clean().to_owned());
+                } else {
+                    self.start_loading(ctx, path, Some(encoding));
+                }
+            }
+        }
     }
 
     /// Switches the interface language at once and saves it in the configuration.
@@ -456,17 +546,21 @@ impl eframe::App for BracketApp {
         self.poll_fallbacks(&ctx);
         self.handle_window_events(&ctx);
 
-        if let Some(language) = self.status_bar(ui) {
-            self.set_language(&ctx, language);
+        // Application shortcuts work wherever the keyboard focus is (for example after using a
+        // status bar menu); consuming them keeps the editor from seeing them too.
+        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::S)) {
+            self.start_saving(&ctx);
+        }
+        if let Some(action) = self.status_bar(ui) {
+            self.run_status_action(&ctx, action);
+            // Give the keyboard back to the editor after using a menu.
+            ctx.memory_mut(|m| m.request_focus(self.view.id()));
         }
         egui::CentralPanel::default().show(ui, |ui| {
             if self.loading.is_some() {
                 ui.centered_and_justified(|ui| ui.label(self.texts.loading()));
             } else {
                 let output = self.view.show(ui, &mut self.doc);
-                if output.save_requested {
-                    self.start_saving(&ctx);
-                }
                 if let Some(c) = output.missing_glyph {
                     self.request_fallback(&ctx, c);
                 }

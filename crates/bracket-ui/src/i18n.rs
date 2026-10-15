@@ -138,6 +138,37 @@ impl Texts {
         self.fill("font_missing", &[("family", &family), ("used", &used)])
     }
 
+    pub fn encoding_tooltip(&self) -> &str {
+        self.get("encoding_tooltip")
+    }
+
+    pub fn reopen_with_encoding(&self) -> &str {
+        self.get("reopen_with_encoding")
+    }
+
+    pub fn save_with_encoding(&self) -> &str {
+        self.get("save_with_encoding")
+    }
+
+    pub fn reopen_needs_clean(&self) -> &str {
+        self.get("reopen_needs_clean")
+    }
+
+    pub fn save_encode_failed(&self, encoding: &str, character: &str) -> String {
+        self.fill(
+            "save_encode_failed",
+            &[("encoding", &encoding), ("character", &character)],
+        )
+    }
+
+    pub fn line_ending_tooltip(&self) -> &str {
+        self.get("line_ending_tooltip")
+    }
+
+    pub fn convert_line_endings(&self, line_ending: &str) -> String {
+        self.fill("convert_line_endings", &[("line_ending", &line_ending)])
+    }
+
     /// Translated text for a configuration warning.
     pub fn config_warning(&self, warning: &ConfigWarning) -> String {
         match warning {
@@ -238,6 +269,13 @@ mod tests {
                 ("more_warnings_one", t.more_warnings(1)),
                 ("more_warnings_many", t.more_warnings(2)),
                 ("font_missing", t.font_missing("A", "B")),
+                ("encoding_tooltip", t.encoding_tooltip().to_owned()),
+                ("reopen_with_encoding", t.reopen_with_encoding().to_owned()),
+                ("save_with_encoding", t.save_with_encoding().to_owned()),
+                ("reopen_needs_clean", t.reopen_needs_clean().to_owned()),
+                ("save_encode_failed", t.save_encode_failed("X", "y")),
+                ("line_ending_tooltip", t.line_ending_tooltip().to_owned()),
+                ("convert_line_endings", t.convert_line_endings("LF")),
             ];
             for (key, text) in pairs {
                 assert!(
