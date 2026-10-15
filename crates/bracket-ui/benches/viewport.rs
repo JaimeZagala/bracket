@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use bracket_core::document::{Document, LoadedText};
+use bracket_core::document::{Document, LineEnding, LoadedText};
 use bracket_core::{Motion, Selections};
 use bracket_ui::EditorView;
 use criterion::{Criterion, criterion_group, criterion_main};
@@ -48,6 +48,7 @@ fn new_document() -> Document {
             has_bom: false,
             valid_utf8: true,
         },
+        LineEnding::CrLf,
     )
 }
 

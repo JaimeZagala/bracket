@@ -10,6 +10,7 @@ publish.workspace = true
 
 [dependencies]
 bracket-core.workspace = true
+bracket-session.workspace = true
 eframe.workspace = true
 
 [dev-dependencies]

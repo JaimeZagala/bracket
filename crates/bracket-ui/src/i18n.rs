@@ -4,12 +4,8 @@
 //! Phase 0 uses this minimal hand-written catalog; the translation approach for the real
 //! interface is decided in Phase 1 by measuring its impact on executable size.
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Language {
-    #[default]
-    Spanish,
-    English,
-}
+use bracket_session::ConfigWarning;
+pub use bracket_session::Language;
 
 pub struct Texts {
     pub untitled: &'static str,
@@ -27,17 +23,11 @@ pub struct Texts {
     pub save: &'static str,
     pub discard: &'static str,
     pub cancel: &'static str,
-}
-
-impl Language {
-    /// Phase 0 stand-in for the language setting: `BRACKET_LANGUAGE=en` selects English,
-    /// anything else keeps Spanish.
-    pub fn from_env() -> Self {
-        match std::env::var("BRACKET_LANGUAGE").as_deref() {
-            Ok("en") => Self::English,
-            _ => Self::Spanish,
-        }
-    }
+    pub config_unreadable: fn(error: &str) -> String,
+    pub config_syntax: fn(error: &str) -> String,
+    pub config_invalid_value: fn(key: &str, found: &str) -> String,
+    pub config_unknown_key: fn(key: &str) -> String,
+    pub more_warnings: fn(count: usize) -> String,
 }
 
 pub fn texts(language: Language) -> &'static Texts {
@@ -63,6 +53,20 @@ static SPANISH: Texts = Texts {
     save: "Guardar",
     discard: "Descartar cambios",
     cancel: "Cancelar",
+    config_unreadable: |error| format!("No se pudo leer la configuración: {error}"),
+    config_syntax: |error| {
+        format!(
+            "La configuración tiene un error de sintaxis y se usan los valores por defecto: {error}"
+        )
+    },
+    config_invalid_value: |key, found| {
+        format!("Valor no válido en la configuración: {key} = {found}; se usa el valor por defecto")
+    },
+    config_unknown_key: |key| format!("Clave desconocida en la configuración: {key}"),
+    more_warnings: |count| match count {
+        1 => "(y 1 aviso más)".to_owned(),
+        n => format!("(y {n} avisos más)"),
+    },
 };
 
 static ENGLISH: Texts = Texts {
@@ -81,7 +85,31 @@ static ENGLISH: Texts = Texts {
     save: "Save",
     discard: "Discard changes",
     cancel: "Cancel",
+    config_unreadable: |error| format!("Could not read the configuration: {error}"),
+    config_syntax: |error| {
+        format!("The configuration has a syntax error and defaults are used: {error}")
+    },
+    config_invalid_value: |key, found| {
+        format!("Invalid value in the configuration: {key} = {found}; the default is used")
+    },
+    config_unknown_key: |key| format!("Unknown key in the configuration: {key}"),
+    more_warnings: |count| match count {
+        1 => "(1 more warning)".to_owned(),
+        n => format!("({n} more warnings)"),
+    },
 };
+
+impl Texts {
+    /// Translated text for a configuration warning.
+    pub fn config_warning(&self, warning: &ConfigWarning) -> String {
+        match warning {
+            ConfigWarning::Unreadable { error } => (self.config_unreadable)(error),
+            ConfigWarning::Syntax { error } => (self.config_syntax)(error),
+            ConfigWarning::InvalidValue { key, found } => (self.config_invalid_value)(key, found),
+            ConfigWarning::UnknownKey { key } => (self.config_unknown_key)(key),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -101,6 +129,44 @@ mod tests {
         }
         assert_eq!((es.position)(3, 7), "Lín 3, Col 7");
         assert_eq!((en.position)(3, 7), "Ln 3, Col 7");
+    }
+
+    #[test]
+    fn config_warnings_are_translated() {
+        let warning = ConfigWarning::InvalidValue {
+            key: "editor.tab_width".into(),
+            found: "0".into(),
+        };
+        assert!(
+            texts(Language::Spanish)
+                .config_warning(&warning)
+                .starts_with("Valor no válido")
+        );
+        assert!(
+            texts(Language::English)
+                .config_warning(&warning)
+                .starts_with("Invalid value")
+        );
+    }
+
+    #[test]
+    fn more_warnings_uses_singular_and_plural() {
+        assert_eq!(
+            (texts(Language::Spanish).more_warnings)(1),
+            "(y 1 aviso más)"
+        );
+        assert_eq!(
+            (texts(Language::Spanish).more_warnings)(3),
+            "(y 3 avisos más)"
+        );
+        assert_eq!(
+            (texts(Language::English).more_warnings)(1),
+            "(1 more warning)"
+        );
+        assert_eq!(
+            (texts(Language::English).more_warnings)(3),
+            "(3 more warnings)"
+        );
     }
 
     #[test]

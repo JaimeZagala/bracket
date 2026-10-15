@@ -8,10 +8,11 @@ use std::thread;
 
 use bracket_core::document::{self, Document, LineEnding};
 use bracket_core::movement::{self, Motion};
+use bracket_session::{Config, LoadedConfig};
 use eframe::egui::{self, Id, ViewportCommand};
 
 use crate::editor_view::EditorView;
-use crate::i18n::{self, Language, Texts};
+use crate::i18n::{self, Texts};
 use crate::measure::Probe;
 
 /// What to do once the user has dealt with unsaved changes.
@@ -23,11 +24,15 @@ enum PendingAction {
 
 pub struct BracketApp {
     texts: &'static Texts,
+    config: Config,
     doc: Document,
     view: EditorView,
     loading: Option<Receiver<io::Result<Document>>>,
     saving: Option<Receiver<(u64, io::Result<()>)>>,
+    /// Latest result of a user action (open, save...).
     status: Option<String>,
+    /// Configuration warnings, shown while there is no other status message.
+    config_notice: Option<String>,
     pending: Option<PendingAction>,
     allow_close: bool,
     title: String,
@@ -36,17 +41,28 @@ pub struct BracketApp {
 }
 
 impl BracketApp {
-    pub fn new(ctx: &egui::Context, path: Option<PathBuf>, mut probe: Option<Probe>) -> Self {
+    pub fn new(
+        ctx: &egui::Context,
+        path: Option<PathBuf>,
+        settings: LoadedConfig,
+        mut probe: Option<Probe>,
+    ) -> Self {
         if let Some(Probe::Startup(startup)) = &mut probe {
             startup.mark_app_created();
         }
+        let LoadedConfig { config, warnings } = settings;
+        let texts = i18n::texts(config.language);
+        let mut doc = Document::new_empty(config.line_ending);
+        doc.buffer.set_tab_width(config.tab_width);
         let mut app = Self {
-            texts: i18n::texts(Language::from_env()),
-            doc: Document::new_empty(),
-            view: EditorView::new(),
+            texts,
+            doc,
+            view: EditorView::with_font_size(config.font_size),
+            config,
             loading: None,
             saving: None,
             status: None,
+            config_notice: warnings_summary(texts, &warnings),
             pending: None,
             allow_close: false,
             title: String::new(),
@@ -64,9 +80,13 @@ impl BracketApp {
     fn start_loading(&mut self, ctx: &egui::Context, path: PathBuf) {
         let (tx, rx) = mpsc::channel();
         let ctx = ctx.clone();
+        let (line_ending, tab_width) = (self.config.line_ending, self.config.tab_width);
         thread::spawn(move || {
-            let result =
-                document::load_text(&path).map(|loaded| Document::from_loaded(path, loaded));
+            let result = document::load_text(&path).map(|loaded| {
+                let mut doc = Document::from_loaded(path, loaded, line_ending);
+                doc.buffer.set_tab_width(tab_width);
+                doc
+            });
             // The receiver may be gone if the window closed; nothing to do then.
             let _ = tx.send(result);
             ctx.request_repaint();
@@ -220,7 +240,7 @@ impl BracketApp {
                     ui.label(self.texts.read_only);
                 }
                 ui.separator();
-                match &self.status {
+                match self.status.as_ref().or(self.config_notice.as_ref()) {
                     Some(message) => ui.label(message.as_str()),
                     None if self.doc.path().is_none() => ui.weak(self.texts.drop_hint),
                     None => ui.label(""),
@@ -324,4 +344,13 @@ impl eframe::App for BracketApp {
 
         self.run_probe(&ctx);
     }
+}
+
+/// The first configuration warning, translated, plus how many more there are.
+fn warnings_summary(texts: &Texts, warnings: &[bracket_session::ConfigWarning]) -> Option<String> {
+    let first = texts.config_warning(warnings.first()?);
+    Some(match warnings.len() - 1 {
+        0 => first,
+        more => format!("{first} {}", (texts.more_warnings)(more)),
+    })
 }

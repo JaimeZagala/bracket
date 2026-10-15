@@ -37,6 +37,9 @@ proptest = "1.12.0"
 # (measured in Phase 0, see docs/es/measurements.md).
 eframe = { version = "0.36.2", default-features = false, features = ["glow", "default_fonts", "accesskit"] }
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
+# Configuration: keeps comments and order when saving; read key by key so one bad value does
+# not discard the whole file.
+toml_edit = "0.25.17"
 
 [workspace.lints.rust]
 # `deny` (not `forbid`) so a justified exception can opt out locally with a SAFETY comment.

@@ -15,7 +15,7 @@ use eframe::egui::{
     Pos2, Rect, ScrollArea, Sense, Ui, Vec2, pos2, vec2,
 };
 
-const FONT_SIZE: f32 = 14.0;
+const DEFAULT_FONT_SIZE: f32 = 14.0;
 
 /// What the view asks the application to do after handling input.
 #[derive(Debug, Default)]
@@ -34,9 +34,17 @@ pub struct EditorView {
     scroll_to_caret: bool,
     /// Lines that fit in the viewport, from the last frame (Page Up/Down distance).
     page_lines: usize,
+    font_size: f32,
 }
 
 impl EditorView {
+    pub fn with_font_size(font_size: f32) -> Self {
+        Self {
+            font_size,
+            ..Self::new()
+        }
+    }
+
     pub fn new() -> Self {
         Self {
             id: Id::new("bracket-editor"),
@@ -45,6 +53,7 @@ impl EditorView {
             drag_anchor: None,
             scroll_to_caret: false,
             page_lines: 1,
+            font_size: DEFAULT_FONT_SIZE,
         }
     }
 
@@ -64,14 +73,16 @@ impl EditorView {
 
     /// Forgets per-document state after another document is loaded.
     pub fn reset(&mut self) {
-        let id = self.id;
-        *self = Self::new();
-        self.id = id;
+        *self = Self {
+            id: self.id,
+            font_size: self.font_size,
+            ..Self::new()
+        };
     }
 
     pub fn show(&mut self, ui: &mut Ui, doc: &mut Document) -> ViewOutput {
         let mut output = ViewOutput::default();
-        let font = FontId::monospace(FONT_SIZE);
+        let font = FontId::monospace(self.font_size);
         let (row_height, char_width) =
             ui.fonts_mut(|f| (f.row_height(&font), f.glyph_width(&font, 'M')));
         let metrics = Metrics {
@@ -566,6 +577,7 @@ mod tests {
                 has_bom: false,
                 valid_utf8: true,
             },
+            bracket_core::LineEnding::CrLf,
         )
     }
 

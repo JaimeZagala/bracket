@@ -105,6 +105,26 @@ pub fn load_text(path: &Path) -> io::Result<LoadedText> {
 /// is flushed to disk, and then replaces the target with a rename. If anything fails, the
 /// original file is left untouched and the temporary file is removed.
 pub fn write_atomic(path: &Path, text: &Rope, has_bom: bool) -> io::Result<()> {
+    write_atomic_with(path, |writer| {
+        if has_bom {
+            writer.write_all(UTF8_BOM)?;
+        }
+        for chunk in text.chunks() {
+            writer.write_all(chunk.as_bytes())?;
+        }
+        Ok(())
+    })
+}
+
+/// Writes `bytes` to `path` atomically, like [`write_atomic`].
+pub fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    write_atomic_with(path, |writer| writer.write_all(bytes))
+}
+
+fn write_atomic_with(
+    path: &Path,
+    write: impl FnOnce(&mut BufWriter<File>) -> io::Result<()>,
+) -> io::Result<()> {
     let file_name = path
         .file_name()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no file name"))?;
@@ -118,7 +138,7 @@ pub fn write_atomic(path: &Path, text: &Rope, has_bom: bool) -> io::Result<()> {
         std::process::id()
     ));
 
-    let result = write_and_replace(&temp, path, text, has_bom);
+    let result = write_and_replace(&temp, path, write);
     if result.is_err() {
         // Best effort clean-up; the original error is what matters.
         let _ = fs::remove_file(&temp);
@@ -126,15 +146,14 @@ pub fn write_atomic(path: &Path, text: &Rope, has_bom: bool) -> io::Result<()> {
     result
 }
 
-fn write_and_replace(temp: &Path, target: &Path, text: &Rope, has_bom: bool) -> io::Result<()> {
+fn write_and_replace(
+    temp: &Path,
+    target: &Path,
+    write: impl FnOnce(&mut BufWriter<File>) -> io::Result<()>,
+) -> io::Result<()> {
     let file = File::create(temp)?;
     let mut writer = BufWriter::new(file);
-    if has_bom {
-        writer.write_all(UTF8_BOM)?;
-    }
-    for chunk in text.chunks() {
-        writer.write_all(chunk.as_bytes())?;
-    }
+    write(&mut writer)?;
     let file = writer.into_inner().map_err(|e| e.into_error())?;
     file.sync_all()?;
     drop(file);
@@ -153,21 +172,23 @@ pub struct Document {
 }
 
 impl Document {
-    /// An empty, unsaved document. New files use CRLF, the Windows convention.
-    pub fn new_empty() -> Self {
+    /// An empty, unsaved document that will use `line_ending` for new lines.
+    pub fn new_empty(line_ending: LineEnding) -> Self {
         Self {
             buffer: Buffer::new(),
             path: None,
             has_bom: false,
             read_only: false,
-            line_ending: LineEnding::CrLf,
+            line_ending,
             saved_version: 0,
         }
     }
 
-    pub fn from_loaded(path: PathBuf, loaded: LoadedText) -> Self {
+    /// A document for text read from `path`. New lines use the file's first line ending, or
+    /// `fallback` if it has none.
+    pub fn from_loaded(path: PathBuf, loaded: LoadedText, fallback: LineEnding) -> Self {
         let buffer = Buffer::from_text(&loaded.text);
-        let line_ending = LineEnding::detect(buffer.text()).unwrap_or(LineEnding::CrLf);
+        let line_ending = LineEnding::detect(buffer.text()).unwrap_or(fallback);
         let saved_version = buffer.version();
         Self {
             buffer,
@@ -276,7 +297,7 @@ mod tests {
         let bytes = b"\xEF\xBB\xBFline1\r\nline2\nline3\rend \xC3\xB1";
         fs::write(&path, bytes).unwrap();
 
-        let doc = Document::from_loaded(path.clone(), load_text(&path).unwrap());
+        let doc = Document::from_loaded(path.clone(), load_text(&path).unwrap(), LineEnding::CrLf);
         assert!(doc.has_bom());
         assert!(!doc.is_read_only());
         assert_eq!(doc.line_ending(), LineEnding::CrLf);
@@ -294,7 +315,7 @@ mod tests {
         let path = dir.join("latin1.txt");
         fs::write(&path, b"caf\xE9").unwrap();
 
-        let doc = Document::from_loaded(path.clone(), load_text(&path).unwrap());
+        let doc = Document::from_loaded(path.clone(), load_text(&path).unwrap(), LineEnding::CrLf);
         assert!(doc.is_read_only());
         assert!(doc.save_request().is_none());
         assert_eq!(fs::read(&path).unwrap(), b"caf\xE9");
@@ -303,7 +324,7 @@ mod tests {
 
     #[test]
     fn dirty_tracks_edits_and_saves() {
-        let mut doc = Document::new_empty();
+        let mut doc = Document::new_empty(LineEnding::CrLf);
         assert!(!doc.is_dirty());
         doc.buffer.insert("x");
         assert!(doc.is_dirty());

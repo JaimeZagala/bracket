@@ -13,6 +13,7 @@ name = "bracket"
 path = "src/main.rs"
 
 [dependencies]
+bracket-session.workspace = true
 bracket-ui.workspace = true
 bracket-update.workspace = true
 

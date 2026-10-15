@@ -3,7 +3,7 @@
 use std::hint::black_box;
 use std::path::PathBuf;
 
-use bracket_core::document::{self, Document};
+use bracket_core::document::{self, Document, LineEnding};
 use bracket_core::{Buffer, Selections};
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 
@@ -37,7 +37,7 @@ fn open(c: &mut Criterion) {
     group.bench_function("load_file_1m_lines", |b| {
         b.iter(|| {
             let loaded = document::load_text(&path).expect("load benchmark file");
-            Document::from_loaded(path.clone(), loaded)
+            Document::from_loaded(path.clone(), loaded, LineEnding::CrLf)
         })
     });
     group.finish();

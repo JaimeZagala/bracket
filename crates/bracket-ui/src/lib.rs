@@ -13,7 +13,11 @@ pub use editor_view::{EditorView, ViewOutput};
 pub use measure::Probe;
 
 /// Opens the main window, optionally loading `path`, and runs the event loop until it closes.
-pub fn run(path: Option<PathBuf>, probe: Option<Probe>) -> eframe::Result {
+pub fn run(
+    path: Option<PathBuf>,
+    settings: bracket_session::LoadedConfig,
+    probe: Option<Probe>,
+) -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Bracket")
@@ -25,6 +29,13 @@ pub fn run(path: Option<PathBuf>, probe: Option<Probe>) -> eframe::Result {
     eframe::run_native(
         "Bracket",
         options,
-        Box::new(move |cc| Ok(Box::new(app::BracketApp::new(&cc.egui_ctx, path, probe)))),
+        Box::new(move |cc| {
+            Ok(Box::new(app::BracketApp::new(
+                &cc.egui_ctx,
+                path,
+                settings,
+                probe,
+            )))
+        }),
     )
 }
