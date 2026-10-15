@@ -106,6 +106,9 @@ impl EditorView {
                     self.handle_events(ui, doc, self.page_lines, &mut output);
                 }
 
+                // Input above may have edited the text: count the lines again before painting.
+                // The content size allocated earlier is one frame behind, which is harmless.
+                let line_count = doc.buffer.len_lines();
                 let first =
                     ((viewport.min.y / row_height).floor().max(0.0) as usize).min(line_count);
                 let last = ((viewport.max.y / row_height).ceil().max(0.0) as usize).min(line_count);
@@ -595,5 +598,46 @@ mod tests {
     fn gutter_fits_the_line_count() {
         assert_eq!(gutter_width(10, 1.0), 5.0);
         assert_eq!(gutter_width(1_000_000, 1.0), 9.0);
+    }
+
+    /// Runs one headless frame of the view with `events` as input.
+    fn frame(ctx: &egui::Context, view: &mut EditorView, doc: &mut Document, events: Vec<Event>) {
+        let input = egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 700.0))),
+            events,
+            ..Default::default()
+        };
+        let mut output = ctx.run_ui(input, |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
+                view.show(ui, doc);
+            });
+        });
+        // There is no renderer to upload font textures to; egui asserts they are handled.
+        output.textures_delta.clear();
+    }
+
+    /// Regression: an edit made by input inside a frame that leaves fewer lines than were on
+    /// screen used to paint with the line count from before the edit and panic in ropey.
+    #[test]
+    fn deleting_visible_lines_within_a_frame_does_not_panic() {
+        let text: Vec<String> = (1..=50).map(|i| format!("line {i}")).collect();
+        let mut d = doc(&text.join("\r\n"));
+        let ctx = egui::Context::default();
+        let mut view = EditorView::new();
+        ctx.memory_mut(|m| m.request_focus(view.id()));
+        frame(&ctx, &mut view, &mut d, Vec::new());
+
+        d.buffer.select_all();
+        let delete = Event::Key {
+            key: Key::Delete,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Modifiers::NONE,
+        };
+        frame(&ctx, &mut view, &mut d, vec![delete]);
+
+        assert_eq!(d.buffer.len_chars(), 0, "the Delete key reached the editor");
+        frame(&ctx, &mut view, &mut d, Vec::new());
     }
 }
