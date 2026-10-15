@@ -33,6 +33,9 @@ bracket-ui = { path = "crates/bracket-ui" }
 # Only LF, CRLF and CR count as line breaks (`cr_lines`), like Notepad++ and VS Code.
 ropey = { version = "1.6.1", default-features = false, features = ["cr_lines", "simd"] }
 proptest = "1.12.0"
+# glow (OpenGL) backend instead of the default wgpu: half the size, faster startup, far less RAM
+# (measured in Phase 0, see docs/es/measurements.md).
+eframe = { version = "0.36.2", default-features = false, features = ["glow", "default_fonts", "accesskit"] }
 
 [workspace.lints.rust]
 # `deny` (not `forbid`) so a justified exception can opt out locally with a SAFETY comment.

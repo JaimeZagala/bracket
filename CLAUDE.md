@@ -15,7 +15,10 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ./scripts/check-doc-pairs.ps1               # parejas de idioma de la documentación
 cargo build --release -p bracket-app        # target/release/bracket.exe
+./scripts/measure.ps1 -Exe target/release/bracket.exe -Runs 12   # tamaño, arranque, RAM
 ```
+
+Las mediciones se anotan en `docs/es/measurements.md` y `docs/en/measurements.md` con fecha, versión y equipo.
 
 Antes de dar un paso por terminado: `./scripts/check.ps1` en verde. No se desactivan lints ni tests para que pase.
 
