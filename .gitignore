@@ -10,3 +10,6 @@
 /Editor de código ligero para Windows arquitectura, plan y prompt.docx
 /Editor de código ligero para Windows arquitectura, plan y prompt.md
 /Editor de código ligero para Windows arquitectura, plan y prompt.pdf
+
+# Experiments build their own targets
+/experiments/**/target/
