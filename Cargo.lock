@@ -491,9 +491,11 @@ dependencies = [
 name = "bracket-app"
 version = "0.0.0"
 dependencies = [
+ "bracket-core",
  "bracket-session",
  "bracket-ui",
  "bracket-update",
+ "windows-sys 0.61.2",
  "winreg",
 ]
 

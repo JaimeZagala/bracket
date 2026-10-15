@@ -3,6 +3,7 @@
 // Release builds are GUI applications without a console window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod file_replace;
 mod system_fonts;
 
 use std::error::Error;
@@ -13,6 +14,7 @@ use std::thread;
 use bracket_session::{Paths, config};
 use bracket_ui::fonts::{self, FontSetup};
 
+use crate::file_replace::WindowsReplacer;
 use crate::system_fonts::SystemFonts;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -40,6 +42,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         settings,
         config_path: paths.config_file(),
         fonts,
+        replacer: Arc::new(WindowsReplacer),
     };
     bracket_ui::run(launch, probe)?;
     Ok(())

@@ -113,11 +113,33 @@ pub fn load_text_as(path: &Path, encoding: TextEncoding) -> io::Result<LoadedTex
     Ok(encoding::decode_as(&fs::read(path)?, encoding).into())
 }
 
+/// Puts a completely written temporary file in place of the target file.
+///
+/// The core only knows how to rename ([`RenameReplacer`]). On Windows, `bracket-app` provides
+/// one based on `ReplaceFileW` that also keeps the target's attributes and permissions.
+pub trait FileReplacer: Send + Sync {
+    fn replace(&self, temp: &Path, target: &Path) -> io::Result<()>;
+}
+
+/// Replaces by renaming. The new file keeps the temporary file's attributes, not the target's.
+pub struct RenameReplacer;
+
+impl FileReplacer for RenameReplacer {
+    fn replace(&self, temp: &Path, target: &Path) -> io::Result<()> {
+        fs::rename(temp, target)
+    }
+}
+
 /// Writes UTF-8 `text` to `path` atomically: the content goes to a temporary file in the same
-/// folder, is flushed to disk, and then replaces the target with a rename. If anything fails,
-/// the original file is left untouched and the temporary file is removed.
-pub fn write_atomic(path: &Path, text: &Rope, has_bom: bool) -> io::Result<()> {
-    write_atomic_with(path, |writer| {
+/// folder, is flushed to disk, and then `replacer` puts it in place of the target. If anything
+/// fails, the original file is left untouched and the temporary file is removed.
+pub fn write_atomic(
+    path: &Path,
+    text: &Rope,
+    has_bom: bool,
+    replacer: &dyn FileReplacer,
+) -> io::Result<()> {
+    write_atomic_with(path, replacer, |writer| {
         if has_bom {
             writer.write_all(UTF8_BOM)?;
         }
@@ -129,12 +151,17 @@ pub fn write_atomic(path: &Path, text: &Rope, has_bom: bool) -> io::Result<()> {
 }
 
 /// Writes `bytes` to `path` atomically, like [`write_atomic`].
-pub fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    write_atomic_with(path, |writer| writer.write_all(bytes))
+pub fn write_bytes_atomic(
+    path: &Path,
+    bytes: &[u8],
+    replacer: &dyn FileReplacer,
+) -> io::Result<()> {
+    write_atomic_with(path, replacer, |writer| writer.write_all(bytes))
 }
 
 fn write_atomic_with(
     path: &Path,
+    replacer: &dyn FileReplacer,
     write: impl FnOnce(&mut BufWriter<File>) -> io::Result<()>,
 ) -> io::Result<()> {
     let file_name = path
@@ -150,7 +177,7 @@ fn write_atomic_with(
         std::process::id()
     ));
 
-    let result = write_and_replace(&temp, path, write);
+    let result = write_and_replace(&temp, path, replacer, write);
     if result.is_err() {
         // Best effort clean-up; the original error is what matters.
         let _ = fs::remove_file(&temp);
@@ -161,6 +188,7 @@ fn write_atomic_with(
 fn write_and_replace(
     temp: &Path,
     target: &Path,
+    replacer: &dyn FileReplacer,
     write: impl FnOnce(&mut BufWriter<File>) -> io::Result<()>,
 ) -> io::Result<()> {
     let file = File::create(temp)?;
@@ -169,7 +197,7 @@ fn write_and_replace(
     let file = writer.into_inner().map_err(|e| e.into_error())?;
     file.sync_all()?;
     drop(file);
-    fs::rename(temp, target)
+    replacer.replace(temp, target)
 }
 
 /// A buffer plus what is needed to save it back exactly as it was read.
@@ -307,17 +335,17 @@ pub struct SaveRequest {
 }
 
 impl SaveRequest {
-    pub fn write(&self) -> Result<(), SaveError> {
+    pub fn write(&self, replacer: &dyn FileReplacer) -> Result<(), SaveError> {
         if self.encoding.is_utf8() {
             // The common case streams the rope without building a single string.
-            return write_atomic(&self.path, &self.text, self.encoding.has_bom())
+            return write_atomic(&self.path, &self.text, self.encoding.has_bom(), replacer)
                 .map_err(SaveError::Io);
         }
         let bytes = self
             .encoding
             .encode(&self.text.to_string())
             .map_err(SaveError::Encode)?;
-        write_bytes_atomic(&self.path, &bytes).map_err(SaveError::Io)
+        write_bytes_atomic(&self.path, &bytes, replacer).map_err(SaveError::Io)
     }
 }
 
@@ -375,7 +403,7 @@ mod tests {
         assert_eq!(doc.encoding(), TextEncoding::UTF8_BOM);
         assert!(!doc.is_read_only());
         assert_eq!(doc.line_ending(), LineEnding::CrLf);
-        doc.save_request().unwrap().write().unwrap();
+        doc.save_request().unwrap().write(&RenameReplacer).unwrap();
 
         assert_eq!(fs::read(&path).unwrap(), bytes);
         let leftovers: Vec<_> = fs::read_dir(&dir).unwrap().collect();
@@ -401,7 +429,7 @@ mod tests {
             fs::write(&path, &bytes).unwrap();
             let doc = open(&path);
             assert!(!doc.is_read_only(), "{name} should be editable");
-            doc.save_request().unwrap().write().unwrap();
+            doc.save_request().unwrap().write(&RenameReplacer).unwrap();
             assert_eq!(fs::read(&path).unwrap(), bytes, "{name} changed on save");
         }
         fs::remove_dir_all(&dir).unwrap();
@@ -430,7 +458,11 @@ mod tests {
 
         let mut doc = open(&path);
         doc.buffer.insert("日");
-        let err = doc.save_request().unwrap().write().unwrap_err();
+        let err = doc
+            .save_request()
+            .unwrap()
+            .write(&RenameReplacer)
+            .unwrap_err();
         assert!(matches!(
             err,
             SaveError::Encode(EncodeError {
@@ -441,7 +473,7 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), bytes);
 
         doc.set_encoding(TextEncoding::UTF8);
-        doc.save_request().unwrap().write().unwrap();
+        doc.save_request().unwrap().write(&RenameReplacer).unwrap();
         assert!(fs::read_to_string(&path).unwrap().starts_with("日café"));
         fs::remove_dir_all(&dir).unwrap();
     }
@@ -492,7 +524,7 @@ mod tests {
         let path = dir.join("nuevo.txt");
         doc.set_path(path.clone());
         let request = doc.save_request().unwrap();
-        request.write().unwrap();
+        request.write(&RenameReplacer).unwrap();
         doc.mark_saved(request.version, request.encoding);
         assert_eq!(fs::read(&path).unwrap(), b"hola");
         assert!(!doc.is_dirty());
@@ -550,7 +582,7 @@ mod tests {
         // Renaming a file over an existing directory fails.
         let target = dir.join("target");
         fs::create_dir(&target).unwrap();
-        let err = write_atomic(&target, &Rope::from_str("new"), false);
+        let err = write_atomic(&target, &Rope::from_str("new"), false, &RenameReplacer);
         assert!(err.is_err());
         let entries: Vec<_> = fs::read_dir(&dir).unwrap().collect();
         assert_eq!(entries.len(), 1, "only the original entry remains");

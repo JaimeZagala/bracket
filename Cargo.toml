@@ -47,6 +47,9 @@ encoding_rs = "0.8.42"
 chardetng = "1.0.0"
 # Native file dialogs (IFileDialog on Windows); Linux portal features off.
 rfd = { version = "0.17.2", default-features = false }
+# Windows API bindings, only for what has no safe wrapper (ReplaceFileW). Same version as the
+# rest of the dependency tree.
+windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
 
 [workspace.lints.rust]
 # `deny` (not `forbid`) so a justified exception can opt out locally with a SAFETY comment.

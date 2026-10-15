@@ -25,7 +25,7 @@ use std::io;
 use std::path::Path;
 
 use bracket_core::LineEnding;
-use bracket_core::document::write_bytes_atomic;
+use bracket_core::document::{RenameReplacer, write_bytes_atomic};
 use bracket_core::encoding::TextEncoding;
 use toml_edit::{DocumentMut, Item, Table, Value};
 
@@ -287,7 +287,7 @@ pub fn save(config: &Config, path: &Path) -> Result<(), SaveError> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(SaveError::Io)?;
     }
-    write_bytes_atomic(path, doc.to_string().as_bytes()).map_err(SaveError::Io)
+    write_bytes_atomic(path, doc.to_string().as_bytes(), &RenameReplacer).map_err(SaveError::Io)
 }
 
 /// Sets `section.key` to `new`. A missing section becomes a regular `[section]` table at the end

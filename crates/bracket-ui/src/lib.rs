@@ -24,6 +24,8 @@ pub struct Launch {
     pub config_path: PathBuf,
     /// Font loading, started early so it overlaps with window creation.
     pub fonts: JoinHandle<fonts::FontSetup>,
+    /// How saved files replace the old ones (keeps attributes and permissions on Windows).
+    pub replacer: std::sync::Arc<dyn bracket_core::document::FileReplacer>,
 }
 
 /// Opens the main window and runs the event loop until it closes.

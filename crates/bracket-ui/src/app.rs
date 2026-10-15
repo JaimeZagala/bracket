@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 
-use bracket_core::document::{self, Document, LineEnding, SaveError};
+use bracket_core::document::{self, Document, FileReplacer, LineEnding, SaveError};
 use bracket_core::encoding::{self, TextEncoding};
 use bracket_core::movement::{self, Motion};
 use bracket_session::{Config, ConfigWarning, Language, LoadedConfig, config};
@@ -103,6 +103,7 @@ pub struct BracketApp {
     fallback_rx: Receiver<LoadedFallback>,
     /// Editor font actually in use; fallbacks are aligned to its baseline.
     editor_font: String,
+    replacer: Arc<dyn FileReplacer>,
     probe: Option<Probe>,
     frames_ready: u32,
 }
@@ -117,6 +118,7 @@ impl BracketApp {
             settings,
             config_path,
             fonts,
+            replacer,
         } = launch;
         let LoadedConfig { config, warnings } = settings;
 
@@ -161,6 +163,7 @@ impl BracketApp {
             fallback_tx,
             fallback_rx,
             editor_font,
+            replacer,
             pending: None,
             allow_close: false,
             title: String::new(),
@@ -265,8 +268,9 @@ impl BracketApp {
         };
         let (tx, rx) = mpsc::channel();
         let ctx = ctx.clone();
+        let replacer = Arc::clone(&self.replacer);
         thread::spawn(move || {
-            let result = request.write();
+            let result = request.write(replacer.as_ref());
             let _ = tx.send((request.version, request.encoding, result));
             ctx.request_repaint();
         });
@@ -313,7 +317,7 @@ impl BracketApp {
             self.doc.set_path(path);
         }
         match self.doc.save_request() {
-            Some(request) => match request.write() {
+            Some(request) => match request.write(self.replacer.as_ref()) {
                 Ok(()) => {
                     self.doc.mark_saved(request.version, request.encoding);
                     true
