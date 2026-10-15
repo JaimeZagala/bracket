@@ -13,9 +13,10 @@
 #
 # Usage:
 #   ./scripts/measure.ps1 -Exe target/release/bracket.exe [-Runs 10] [-Arguments 'file.txt']
-#       [-Maximized] [-Scroll [-ScrollRuns 5]]
+#       [-Maximized] [-Scroll [-ScrollRuns 5]] [-MaxStartupMs 150]
 #
 # -Maximized starts the window maximized (BRACKET_MEASURE_MAXIMIZED=1).
+# -MaxStartupMs N fails (exit code 1) when the warm median launch->first frame exceeds N ms.
 # -Scroll (needs a file in -Arguments) also runs BRACKET_MEASURE_SCROLL=<file>: after the first
 # content frame the app scrolls one page per frame for 300 frames and reports their wall time.
 # CPU per frame = (process CPU of a scroll run - median process CPU of a startup run) / frames.
@@ -27,7 +28,8 @@ param(
     [int]$IdleSeconds = 3,
     [switch]$Maximized,
     [switch]$Scroll,
-    [int]$ScrollRuns = 5
+    [int]$ScrollRuns = 5,
+    [double]$MaxStartupMs = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -84,6 +86,9 @@ Write-Host ("Size: {0:N0} bytes ({1:N2} MB)" -f $bytes, ($bytes / 1MB))
 $toMain = @()
 $toFrame = @()
 $startupCpu = @()
+$phaseApp = @()
+$phaseUi = @()
+$phaseFrame = @()
 for ($i = 1; $i -le $Runs; $i++) {
     $out = [System.IO.Path]::GetTempFileName()
     $launch = [PreciseClock]::UnixMicroseconds()
@@ -100,6 +105,11 @@ for ($i = 1; $i -le $Runs; $i++) {
     $f = ($values['frame_unix_us'] - $launch) / 1000
     $toMain += $m
     $toFrame += $f
+    if ($values.ContainsKey('app_unix_us') -and $values.ContainsKey('first_ui_unix_us')) {
+        $phaseApp += ($values['app_unix_us'] - $values['main_unix_us']) / 1000
+        $phaseUi += ($values['first_ui_unix_us'] - $values['app_unix_us']) / 1000
+        $phaseFrame += ($values['frame_unix_us'] - $values['first_ui_unix_us']) / 1000
+    }
     Write-Host ("  run {0,2}: launch->main {1,6:N1} ms | launch->first frame {2,6:N1} ms" -f $i, $m, $f)
 }
 # The first run is reported separately: after a fresh build or reboot it includes antivirus
@@ -108,6 +118,10 @@ $warmFrame = if ($Runs -gt 1) { $toFrame[1..($Runs - 1)] } else { $toFrame }
 $warmMain = if ($Runs -gt 1) { $toMain[1..($Runs - 1)] } else { $toMain }
 Write-Host ("Startup launch->first frame: first run {0:N1} ms | warm median {1:N1} ms, min {2:N1} ms" -f $toFrame[0], (Get-Median $warmFrame), ($warmFrame | Measure-Object -Minimum).Minimum)
 Write-Host ("Startup launch->main: warm median {0:N1} ms" -f (Get-Median $warmMain))
+if ($phaseApp.Count -gt 1) {
+    $w = 1..($phaseApp.Count - 1)
+    Write-Host ("Startup phases (warm medians): main->app created {0:N1} ms | app->first ui {1:N1} ms | first ui->frame presented {2:N1} ms" -f (Get-Median $phaseApp[$w]), (Get-Median $phaseUi[$w]), (Get-Median $phaseFrame[$w]))
+}
 
 # Idle memory.
 $p = Start-Target @{}
@@ -149,4 +163,14 @@ if ($Scroll) {
     }
     $medianWall = Get-Median $wallPerFrame
     Write-Host ("Scroll (one page per frame): median {0:N2} ms/frame ({1:N1} fps), CPU {2:N2} ms/frame" -f $medianWall, (1000 / $medianWall), (Get-Median $cpuPerFrame))
+}
+
+# Startup budget check.
+if ($MaxStartupMs -gt 0) {
+    $median = Get-Median $warmFrame
+    if ($median -gt $MaxStartupMs) {
+        Write-Host ("Startup budget exceeded: warm median {0:N1} ms > {1:N0} ms" -f $median, $MaxStartupMs) -ForegroundColor Red
+        exit 1
+    }
+    Write-Host ("Startup budget OK: warm median {0:N1} ms <= {1:N0} ms" -f $median, $MaxStartupMs) -ForegroundColor Green
 }

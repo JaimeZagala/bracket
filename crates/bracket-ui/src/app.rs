@@ -36,7 +36,10 @@ pub struct BracketApp {
 }
 
 impl BracketApp {
-    pub fn new(ctx: &egui::Context, path: Option<PathBuf>, probe: Option<Probe>) -> Self {
+    pub fn new(ctx: &egui::Context, path: Option<PathBuf>, mut probe: Option<Probe>) -> Self {
+        if let Some(Probe::Startup(startup)) = &mut probe {
+            startup.mark_app_created();
+        }
         let mut app = Self {
             texts: i18n::texts(Language::from_env()),
             doc: Document::new_empty(),
@@ -268,6 +271,9 @@ impl BracketApp {
     /// Drives the measurement probe, if any (see `measure.rs`).
     fn run_probe(&mut self, ctx: &egui::Context) {
         let Some(probe) = &mut self.probe else { return };
+        if let Probe::Startup(startup) = probe {
+            startup.mark_first_ui();
+        }
         ctx.request_repaint();
         // The second frame with the final content means the first one has been presented.
         // Count frames, not passes: egui may run extra layout passes within one frame.

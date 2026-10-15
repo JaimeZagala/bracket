@@ -33,6 +33,8 @@ impl Probe {
                 output: PathBuf::from(output),
                 main_wall,
                 main_instant,
+                app_created: None,
+                first_ui: None,
             }));
         }
         let output = std::env::var_os(SCROLL_VAR)?;
@@ -54,14 +56,32 @@ pub struct StartupProbe {
     output: PathBuf,
     main_wall: SystemTime,
     main_instant: Instant,
+    /// When eframe handed over control: window and graphics context exist.
+    app_created: Option<SystemTime>,
+    /// Start of the first `ui()` call.
+    first_ui: Option<SystemTime>,
 }
 
 impl StartupProbe {
+    pub(crate) fn mark_app_created(&mut self) {
+        self.app_created.get_or_insert_with(SystemTime::now);
+    }
+
+    pub(crate) fn mark_first_ui(&mut self) {
+        self.first_ui.get_or_insert_with(SystemTime::now);
+    }
+
     /// Writes the report and terminates the process.
     pub(crate) fn finish(&self) -> ! {
+        let optional = |name: &str, t: Option<SystemTime>| {
+            t.map(|t| format!("{name}={}\n", unix_micros(t)))
+                .unwrap_or_default()
+        };
         let report = format!(
-            "main_unix_us={}\nframe_unix_us={}\nmain_to_frame_ms={:.1}\n",
+            "main_unix_us={}\n{}{}frame_unix_us={}\nmain_to_frame_ms={:.1}\n",
             unix_micros(self.main_wall),
+            optional("app_unix_us", self.app_created),
+            optional("first_ui_unix_us", self.first_ui),
             unix_micros(SystemTime::now()),
             self.main_instant.elapsed().as_secs_f64() * 1000.0
         );
