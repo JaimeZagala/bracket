@@ -1,9 +1,11 @@
 //! The application shell: one document, file loading and saving on worker threads, window
 //! title, status bar and the unsaved-changes dialog.
 
+use std::collections::HashSet;
 use std::io;
 use std::path::PathBuf;
-use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 
 use bracket_core::document::{self, Document, LineEnding};
@@ -11,7 +13,9 @@ use bracket_core::movement::{self, Motion};
 use bracket_session::{Config, ConfigWarning, Language, LoadedConfig, config};
 use eframe::egui::{self, Id, ViewportCommand};
 
+use crate::Launch;
 use crate::editor_view::EditorView;
+use crate::fonts::{self, Fallback, FontFile, FontSource};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
 
@@ -38,22 +42,46 @@ pub struct BracketApp {
     pending: Option<PendingAction>,
     allow_close: bool,
     title: String,
+    /// Configured editor font that is not installed, and the font used instead.
+    missing_font: Option<(String, String)>,
+    font_source: Option<Arc<dyn FontSource>>,
+    fallbacks_requested: HashSet<Fallback>,
+    fallback_tx: Sender<FontFile>,
+    fallback_rx: Receiver<FontFile>,
     probe: Option<Probe>,
     frames_ready: u32,
 }
 
 impl BracketApp {
-    pub fn new(
-        ctx: &egui::Context,
-        path: Option<PathBuf>,
-        settings: LoadedConfig,
-        config_path: PathBuf,
-        mut probe: Option<Probe>,
-    ) -> Self {
+    pub fn new(ctx: &egui::Context, launch: Launch, mut probe: Option<Probe>) -> Self {
         if let Some(Probe::Startup(startup)) = &mut probe {
             startup.mark_app_created();
         }
+        let Launch {
+            file,
+            settings,
+            config_path,
+            fonts,
+        } = launch;
         let LoadedConfig { config, warnings } = settings;
+
+        // The font thread started at the beginning of main() and has normally finished by now.
+        let setup = fonts.join().ok();
+        let missing_font = setup.as_ref().and_then(|s| {
+            let family = s.startup.missing_family.clone()?;
+            let used = s.startup.monospace.as_ref().map(|f| f.family.clone())?;
+            Some((family, used))
+        });
+        let (font_source, startup) = match setup {
+            Some(s) => (Some(s.source), Some(s.startup)),
+            None => (None, None),
+        };
+        let defs = startup
+            .and_then(fonts::definitions)
+            .expect("no usable font found: Consolas and Segoe UI ship with Windows");
+        ctx.set_fonts(defs);
+        let (fallback_tx, fallback_rx) = mpsc::channel();
+
         let texts = i18n::texts(config.language);
         let mut doc = Document::new_empty(config.line_ending);
         doc.buffer.set_tab_width(config.tab_width);
@@ -68,6 +96,11 @@ impl BracketApp {
             config_warnings: warnings,
             config_path,
             config_saving: None,
+            missing_font,
+            font_source,
+            fallbacks_requested: HashSet::new(),
+            fallback_tx,
+            fallback_rx,
             pending: None,
             allow_close: false,
             title: String::new(),
@@ -75,10 +108,37 @@ impl BracketApp {
             frames_ready: 0,
         };
         ctx.memory_mut(|m| m.request_focus(app.view.id()));
-        if let Some(path) = path {
+        if let Some(path) = file {
             app.start_loading(ctx, path);
         }
         app
+    }
+
+    /// Loads a fallback font for `c` on a worker thread, once per kind of fallback.
+    fn request_fallback(&mut self, ctx: &egui::Context, c: char) {
+        let kind = Fallback::for_char(c);
+        // Whatever happens next, the view stops looking for this kind of character.
+        self.view.fallback_requested(kind);
+        let Some(source) = self.font_source.clone() else {
+            return;
+        };
+        if !self.fallbacks_requested.insert(kind) {
+            return;
+        }
+        let tx = self.fallback_tx.clone();
+        let ctx = ctx.clone();
+        thread::spawn(move || {
+            if let Some(file) = fonts::load_fallback(source.as_ref(), kind) {
+                let _ = tx.send(file);
+                ctx.request_repaint();
+            }
+        });
+    }
+
+    fn poll_fallbacks(&mut self, ctx: &egui::Context) {
+        while let Ok(file) = self.fallback_rx.try_recv() {
+            ctx.add_font(fonts::fallback_insert(file));
+        }
     }
 
     /// Loads a file on a worker thread; the UI keeps running and shows a loading message.
@@ -247,8 +307,11 @@ impl BracketApp {
                     ui.label(self.texts.read_only());
                 }
                 ui.separator();
-                let config_notice = warnings_summary(self.texts, &self.config_warnings);
-                match self.status.as_ref().or(config_notice.as_ref()) {
+                let notice = warnings_summary(self.texts, &self.config_warnings).or_else(|| {
+                    let (family, used) = self.missing_font.as_ref()?;
+                    Some(self.texts.font_missing(family, used))
+                });
+                match self.status.as_ref().or(notice.as_ref()) {
                     Some(message) => ui.label(message.as_str()),
                     None if self.doc.path().is_none() => ui.weak(self.texts.drop_hint()),
                     None => ui.label(""),
@@ -390,6 +453,7 @@ impl eframe::App for BracketApp {
         self.poll_loading(&ctx);
         self.poll_saving();
         self.poll_config_saving();
+        self.poll_fallbacks(&ctx);
         self.handle_window_events(&ctx);
 
         if let Some(language) = self.status_bar(ui) {
@@ -402,6 +466,9 @@ impl eframe::App for BracketApp {
                 let output = self.view.show(ui, &mut self.doc);
                 if output.save_requested {
                     self.start_saving(&ctx);
+                }
+                if let Some(c) = output.missing_glyph {
+                    self.request_fallback(&ctx, c);
                 }
             }
         });

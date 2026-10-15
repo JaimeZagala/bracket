@@ -29,3 +29,5 @@ config_unknown_key = "Unknown key in the configuration: {key}"
 config_save_failed = "Could not save the configuration: {error}"
 more_warnings_one = "(1 more warning)"
 more_warnings_many = "({count} more warnings)"
+
+font_missing = "The font “{family}” is not installed; using {used}"

@@ -134,6 +134,10 @@ impl Texts {
         self.fill("config_save_failed", &[("error", &error)])
     }
 
+    pub fn font_missing(&self, family: &str, used: &str) -> String {
+        self.fill("font_missing", &[("family", &family), ("used", &used)])
+    }
+
     /// Translated text for a configuration warning.
     pub fn config_warning(&self, warning: &ConfigWarning) -> String {
         match warning {
@@ -233,6 +237,7 @@ mod tests {
                 ("config_unknown_key", t.config_warning(&warning)),
                 ("more_warnings_one", t.more_warnings(1)),
                 ("more_warnings_many", t.more_warnings(2)),
+                ("font_missing", t.font_missing("A", "B")),
             ];
             for (key, text) in pairs {
                 assert!(

@@ -2,23 +2,31 @@
 
 mod app;
 mod editor_view;
+pub mod fonts;
 mod i18n;
 mod measure;
 
 use std::path::PathBuf;
+use std::thread::JoinHandle;
 
 use eframe::egui;
 
 pub use editor_view::{EditorView, ViewOutput};
 pub use measure::Probe;
 
-/// Opens the main window, optionally loading `path`, and runs the event loop until it closes.
-pub fn run(
-    path: Option<PathBuf>,
-    settings: bracket_session::LoadedConfig,
-    config_path: PathBuf,
-    probe: Option<Probe>,
-) -> eframe::Result {
+/// Everything `bracket-app` prepares before the window opens.
+pub struct Launch {
+    /// File to open, from the command line.
+    pub file: Option<PathBuf>,
+    pub settings: bracket_session::LoadedConfig,
+    /// Where language changes made from the interface are saved.
+    pub config_path: PathBuf,
+    /// Font loading, started early so it overlaps with window creation.
+    pub fonts: JoinHandle<fonts::FontSetup>,
+}
+
+/// Opens the main window and runs the event loop until it closes.
+pub fn run(launch: Launch, probe: Option<Probe>) -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Bracket")
@@ -30,14 +38,6 @@ pub fn run(
     eframe::run_native(
         "Bracket",
         options,
-        Box::new(move |cc| {
-            Ok(Box::new(app::BracketApp::new(
-                &cc.egui_ctx,
-                path,
-                settings,
-                config_path,
-                probe,
-            )))
-        }),
+        Box::new(move |cc| Ok(Box::new(app::BracketApp::new(&cc.egui_ctx, launch, probe)))),
     )
 }

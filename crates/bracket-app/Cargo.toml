@@ -16,6 +16,7 @@ path = "src/main.rs"
 bracket-session.workspace = true
 bracket-ui.workspace = true
 bracket-update.workspace = true
+winreg.workspace = true
 
 [lints]
 workspace = true

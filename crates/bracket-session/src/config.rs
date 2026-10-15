@@ -10,6 +10,7 @@
 //! language = "es"      # "es" or "en"
 //!
 //! [editor]
+//! font_family = "Consolas" # any installed font; falls back to Consolas
 //! font_size = 14.0     # 8 to 48
 //! tab_width = 4        # 1 to 16
 //!
@@ -54,10 +55,13 @@ impl Language {
 pub const FONT_SIZE_MIN: f32 = 8.0;
 pub const FONT_SIZE_MAX: f32 = 48.0;
 pub const TAB_WIDTH_MAX: usize = 16;
+pub const FONT_FAMILY_MAX_LEN: usize = 100;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Config {
     pub language: Language,
+    /// Editor font family, looked up among the installed fonts.
+    pub font_family: String,
     pub font_size: f32,
     pub tab_width: usize,
     /// Line ending used for new files.
@@ -68,6 +72,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             language: Language::Spanish,
+            font_family: "Consolas".to_owned(),
             font_size: 14.0,
             tab_width: 4,
             line_ending: LineEnding::CrLf,
@@ -142,6 +147,11 @@ pub fn parse(text: &str) -> LoadedConfig {
                     .as_str()
                     .and_then(Language::from_code)
                     .map(|v| config.language = v),
+                ("editor", "font_family") => item
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty() && v.len() <= FONT_FAMILY_MAX_LEN)
+                    .map(|v| config.font_family = v.to_owned()),
                 ("editor", "font_size") => number(item)
                     .filter(|v| (FONT_SIZE_MIN..=FONT_SIZE_MAX).contains(v))
                     .map(|v| config.font_size = v),
@@ -242,6 +252,12 @@ pub fn save(config: &Config, path: &Path) -> Result<(), SaveError> {
     set(
         &mut doc,
         "editor",
+        "font_family",
+        config.font_family.as_str().into(),
+    );
+    set(
+        &mut doc,
+        "editor",
         "font_size",
         f64::from(config.font_size).into(),
     );
@@ -309,14 +325,15 @@ mod tests {
     #[test]
     fn valid_values_are_read() {
         let loaded = parse(
-            "[interface]\nlanguage = \"en\"\n[editor]\nfont_size = 16\ntab_width = 2\n\
-             [files]\nline_ending = \"lf\"\n",
+            "[interface]\nlanguage = \"en\"\n[editor]\nfont_family = \" Fira Code \"\n\
+             font_size = 16\ntab_width = 2\n[files]\nline_ending = \"lf\"\n",
         );
         assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
         assert_eq!(
             loaded.config,
             Config {
                 language: Language::English,
+                font_family: "Fira Code".into(),
                 font_size: 16.0,
                 tab_width: 2,
                 line_ending: LineEnding::Lf,
@@ -385,6 +402,7 @@ mod tests {
         let path = dir.join("Bracket").join(CONFIG_FILE_FOR_TESTS);
         let config = Config {
             language: Language::English,
+            font_family: "Cascadia Mono".into(),
             font_size: 13.5,
             tab_width: 8,
             line_ending: LineEnding::Cr,

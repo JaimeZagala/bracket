@@ -4,10 +4,13 @@
 //! All editing logic lives in `bracket-core`; this module only maps input to commands and
 //! positions to pixels.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use bracket_core::movement::{self, Motion};
 use bracket_core::{Document, Selection, Selections};
+
+use crate::fonts::Fallback;
 use eframe::egui::output::IMEOutput;
 use eframe::egui::text::{CCursor, Galley};
 use eframe::egui::{
@@ -21,6 +24,8 @@ const DEFAULT_FONT_SIZE: f32 = 14.0;
 #[derive(Debug, Default)]
 pub struct ViewOutput {
     pub save_requested: bool,
+    /// A visible character that no loaded font can draw (the app may load a fallback font).
+    pub missing_glyph: Option<char>,
 }
 
 pub struct EditorView {
@@ -35,6 +40,8 @@ pub struct EditorView {
     /// Lines that fit in the viewport, from the last frame (Page Up/Down distance).
     page_lines: usize,
     font_size: f32,
+    /// Fallback kinds already requested by the app: their characters are not checked again.
+    fallbacks_requested: HashSet<Fallback>,
 }
 
 impl EditorView {
@@ -54,6 +61,7 @@ impl EditorView {
             scroll_to_caret: false,
             page_lines: 1,
             font_size: DEFAULT_FONT_SIZE,
+            fallbacks_requested: HashSet::new(),
         }
     }
 
@@ -66,6 +74,11 @@ impl EditorView {
         self.scroll_to_caret = true;
     }
 
+    /// Stops checking characters of `kind` for missing glyphs (its fallback was requested).
+    pub fn fallback_requested(&mut self, kind: Fallback) {
+        self.fallbacks_requested.insert(kind);
+    }
+
     /// Lines that fit in the viewport, as measured in the last frame.
     pub fn page_lines(&self) -> usize {
         self.page_lines
@@ -76,6 +89,7 @@ impl EditorView {
         *self = Self {
             id: self.id,
             font_size: self.font_size,
+            fallbacks_requested: std::mem::take(&mut self.fallbacks_requested),
             ..Self::new()
         };
     }
@@ -123,7 +137,8 @@ impl EditorView {
                 let first =
                     ((viewport.min.y / row_height).floor().max(0.0) as usize).min(line_count);
                 let last = ((viewport.max.y / row_height).ceil().max(0.0) as usize).min(line_count);
-                self.paint(ui, doc, &layout, first..last, response.has_focus());
+                output.missing_glyph =
+                    self.paint(ui, doc, &layout, first..last, response.has_focus());
 
                 let caret_rect = self.caret_rect(ui, doc, &layout);
                 if response.has_focus() {
@@ -326,7 +341,8 @@ impl EditorView {
         layout: &Layout<'_>,
         lines: std::ops::Range<usize>,
         has_focus: bool,
-    ) {
+    ) -> Option<char> {
+        let mut missing_glyph = None;
         let painter = ui.painter();
         let visuals = ui.visuals();
         let text_color = visuals.text_color();
@@ -354,6 +370,10 @@ impl EditorView {
                 && (line_start..=line_end).contains(&primary_head))
             .then_some((primary_head, self.preedit.as_str()));
             let display = DisplayLine::build(doc, line, preedit);
+            if missing_glyph.is_none() {
+                missing_glyph =
+                    first_missing_glyph(ui, &m.font, &display.text, &self.fallbacks_requested);
+            }
             let galley = ui
                 .fonts_mut(|f| f.layout_no_wrap(display.text.clone(), m.font.clone(), text_color));
             self.max_line_width = self.max_line_width.max(galley.size().x);
@@ -402,6 +422,7 @@ impl EditorView {
                 }
             }
         }
+        missing_glyph
     }
 
     /// Screen rectangle of the primary caret, used for IME placement and scrolling.
@@ -546,6 +567,34 @@ fn position_at_point(ui: &Ui, doc: &Document, layout: &Layout<'_>, point: Pos2) 
         ui.fonts_mut(|f| f.layout_no_wrap(display.text.clone(), m.font.clone(), Color32::WHITE));
     let x = point.x - layout.origin.x - m.gutter_width;
     movement::line_start(text, line) + display.offset_at(&galley, x)
+}
+
+/// The first character in `text` that no loaded font can draw. Invisible format characters
+/// (controls, zero-width marks, BOM) are ignored: no font draws them and none needs to.
+fn first_missing_glyph(
+    ui: &Ui,
+    font: &FontId,
+    text: &str,
+    requested: &HashSet<Fallback>,
+) -> Option<char> {
+    // Every code font covers ASCII, so the common case costs one pass over the bytes.
+    if text.is_ascii() {
+        return None;
+    }
+    ui.fonts_mut(|f| {
+        text.chars()
+            .filter(|c| !c.is_ascii() && !is_invisible(*c))
+            .filter(|c| !requested.contains(&Fallback::for_char(*c)))
+            .find(|c| !f.has_glyph(font, *c))
+    })
+}
+
+fn is_invisible(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c,
+            '\u{200B}'..='\u{200F}' | '\u{2028}'..='\u{202E}' | '\u{2060}'..='\u{2064}' | '\u{FEFF}'
+        )
 }
 
 /// Copies the selected text; several selections are joined with the document's line ending.

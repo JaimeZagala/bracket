@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use bracket_core::document::{Document, LineEnding, LoadedText};
 use bracket_core::{Motion, Selections};
 use bracket_ui::EditorView;
+use bracket_ui::fonts::{Fallback, FontFile, StartupFonts, definitions};
 use criterion::{Criterion, criterion_group, criterion_main};
 use eframe::egui::{self, Pos2, RawInput, Rect, vec2};
 
@@ -40,6 +41,26 @@ fn frame(ctx: &egui::Context, view: &mut EditorView, doc: &mut Document) -> usiz
     shapes
 }
 
+/// A context with Consolas, like the app (Bracket ships no fonts; Consolas comes with Windows).
+fn context() -> egui::Context {
+    let windir =
+        std::env::var_os("WINDIR").map_or_else(|| PathBuf::from(r"C:\Windows"), PathBuf::from);
+    let bytes =
+        std::fs::read(windir.join("Fonts").join("consola.ttf")).expect("Consolas is installed");
+    let fonts = StartupFonts {
+        monospace: Some(FontFile {
+            family: "Consolas".into(),
+            bytes,
+            index: 0,
+        }),
+        proportional: None,
+        missing_family: None,
+    };
+    let ctx = egui::Context::default();
+    ctx.set_fonts(definitions(fonts).expect("one font"));
+    ctx
+}
+
 fn new_document() -> Document {
     Document::from_loaded(
         PathBuf::from("bench.txt"),
@@ -55,8 +76,11 @@ fn new_document() -> Document {
 /// Steady frame: the same lines as the previous frame (galleys come from egui's cache).
 fn paint_viewport(c: &mut Criterion) {
     let mut doc = new_document();
-    let ctx = egui::Context::default();
+    let ctx = context();
     let mut view = EditorView::new();
+    // As the app does once it sees CJK text without a font: request the fallback and stop
+    // checking those characters (the fallback itself is not loaded here).
+    view.fallback_requested(Fallback::Cjk);
 
     // Middle of the file, so line lookups are not trivially at the start of the rope.
     let middle = doc.buffer.text().line_to_char(LINES / 2);
@@ -78,8 +102,11 @@ fn paint_viewport(c: &mut Criterion) {
 /// Scrolling: every frame shows a new page of lines, so each line is laid out from scratch.
 fn scroll_viewport(c: &mut Criterion) {
     let mut doc = new_document();
-    let ctx = egui::Context::default();
+    let ctx = context();
     let mut view = EditorView::new();
+    // As the app does once it sees CJK text without a font: request the fallback and stop
+    // checking those characters (the fallback itself is not loaded here).
+    view.fallback_requested(Fallback::Cjk);
     for _ in 0..3 {
         frame(&ctx, &mut view, &mut doc);
     }

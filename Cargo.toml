@@ -34,12 +34,14 @@ bracket-ui = { path = "crates/bracket-ui" }
 ropey = { version = "1.6.1", default-features = false, features = ["cr_lines", "simd"] }
 proptest = "1.12.0"
 # glow (OpenGL) backend instead of the default wgpu: half the size, faster startup, far less RAM
-# (measured in Phase 0, see docs/es/measurements.md).
-eframe = { version = "0.36.2", default-features = false, features = ["glow", "default_fonts", "accesskit"] }
+# (measured in Phase 0, see docs/es/measurements.md). No `default_fonts`: system fonts are used.
+eframe = { version = "0.36.2", default-features = false, features = ["glow", "accesskit"] }
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 # Configuration: keeps comments and order when saving; read key by key so one bad value does
 # not discard the whole file.
 toml_edit = "0.25.17"
+# Windows registry (HKCU/HKLM): installed fonts now, file associations in Phase 5.
+winreg = "0.56.0"
 
 [workspace.lints.rust]
 # `deny` (not `forbid`) so a justified exception can opt out locally with a SAFETY comment.
