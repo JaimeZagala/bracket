@@ -107,3 +107,13 @@ Conclusiones:
 - La mayor parte del arranque es la inicialización de OpenGL en Windows (driver incluido), fuera del alcance de la aplicación. Con la máquina tranquila el arranque cumple el presupuesto (123–133 ms < 150 ms) con un margen de unos 20 ms.
 - `./scripts/check.ps1 -Perf` compila en release y falla si la mediana en caliente supera 150 ms. No corre en la integración continua (los runners no tienen GPU) y conviene ejecutarlo con poca carga de fondo.
 - Todo lo que se añada en las fases siguientes debe quedar fuera del camino del primer frame (en hilos o diferido).
+
+## Fase 1 — evolución del tamaño del ejecutable (equipo A)
+
+| Paso | Tamaño | Cambio | Motivo |
+|---|---|---|---|
+| Fin de la Fase 0 | 5.802.496 B | — | |
+| Paso 2: configuración TOML | 5.971.456 B | +165 KB | `toml_edit` y el código de configuración |
+| Paso 3: traducciones y selector de idioma | 6.099.456 B | +128 KB | Catálogos y menú de idioma. El mecanismo de catálogos mide +7,5 KB aislado (ver [decisions/0002-i18n.md](decisions/0002-i18n.md)); el resto debe de ser el código de menús de egui, enlazado por primera vez (no se midió por separado) |
+
+El arranque en caliente se mantiene en 123–134 ms en estos pasos (dentro del ruido de ±8 ms).

@@ -43,7 +43,7 @@ Antes de dar un paso por terminado: `./scripts/check.ps1` en verde. No se desact
 - Código, comentarios, commits, ramas, logs, errores, tests y nombres de ficheros: inglés.
 - Documentación: español (referencia) e inglés, en el mismo commit. Raíz: `X.md` (es) + `X.en.md` (en). `docs/es/` y `docs/en/` con los mismos nombres. Primera línea de cada fichero: enlace a su pareja.
 - Excepciones: `LICENSE-MIT` y `LICENSE-APACHE` (solo inglés) y este `CLAUDE.md` (solo español).
-- Textos visibles de la interfaz: nunca sueltos en el código; van en catálogos de traducción (desde la Fase 1).
+- Textos visibles de la interfaz: nunca sueltos en el código. Van en `crates/bracket-ui/locales/es.toml` y `en.toml` (mismas claves y marcadores), con un método en `i18n.rs` y su línea en el test `every_method_finds_its_key`.
 - Conversación con el autor: español.
 
 ## Git y repositorio público

@@ -10,6 +10,10 @@ Bracket is under development (Phase 1). This guide describes what already works 
 - Ctrl+S saves. Saving is atomic and keeps the file's BOM and line endings.
 - For now only UTF-8 files can be edited; other files open read-only.
 
+## Language
+
+The interface is available in Spanish (default) and English. To switch, click the language name on the right of the status bar and pick another one: the change is immediate and remembered in the configuration.
+
 ## Configuration
 
 The configuration lives in `config.toml`:
@@ -31,7 +35,7 @@ tab_width = 4        # tab width, 1 to 16
 line_ending = "crlf" # line ending of new files: "crlf", "lf" or "cr"
 ```
 
-Changes take effect when Bracket restarts. If a value is invalid, its default is used and the status bar says so; the rest of the file is honoured. When Bracket saves the configuration, it keeps your comments, the order and any keys it does not know, and it never overwrites a file with syntax errors.
+The language can also be changed from the button on the right of the status bar: the change is immediate and saved in `config.toml`. Other changes made by hand take effect when Bracket restarts. If a value is invalid, its default is used and the status bar says so; the rest of the file is honoured. When Bracket saves the configuration, it writes all its keys with their current value, keeps your comments, the order and any keys it does not know, and it never overwrites a file with syntax errors.
 
 ## Portable mode
 

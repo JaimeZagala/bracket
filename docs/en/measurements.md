@@ -107,3 +107,13 @@ Conclusions:
 - Most of the startup is OpenGL initialization on Windows (driver included), outside the application's control. With a quiet machine startup meets the budget (123–133 ms < 150 ms) with about 20 ms to spare.
 - `./scripts/check.ps1 -Perf` builds in release and fails if the warm median exceeds 150 ms. It does not run in continuous integration (runners have no GPU) and should be run with little background load.
 - Everything added in later phases must stay off the first frame's path (on threads or deferred).
+
+## Phase 1 — executable size over time (machine A)
+
+| Step | Size | Change | Reason |
+|---|---|---|---|
+| End of Phase 0 | 5,802,496 B | — | |
+| Step 2: TOML configuration | 5,971,456 B | +165 KB | `toml_edit` and the configuration code |
+| Step 3: translations and language selector | 6,099,456 B | +128 KB | Catalogs and language menu. The catalog mechanism measures +7.5 KB in isolation (see [decisions/0002-i18n.md](decisions/0002-i18n.md)); the rest is probably egui's menu code, linked for the first time (not measured separately) |
+
+Warm startup stays at 123–134 ms in these steps (within the ±8 ms noise).

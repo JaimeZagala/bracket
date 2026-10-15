@@ -10,6 +10,10 @@ Bracket está en desarrollo (Fase 1). Esta guía describe lo que ya funciona y c
 - Ctrl+S guarda. El guardado es atómico y conserva el BOM y los saltos de línea del fichero.
 - Por ahora solo se editan ficheros UTF-8; los demás se abren en solo lectura.
 
+## Idioma
+
+La interfaz está en español (predeterminado) e inglés. Para cambiarla, pulsa el nombre del idioma a la derecha de la barra de estado y elige otro: el cambio es inmediato y se recuerda en la configuración.
+
 ## Configuración
 
 La configuración está en `config.toml`:
@@ -31,7 +35,7 @@ tab_width = 4        # ancho de tabulación, de 1 a 16
 line_ending = "crlf" # salto de línea de los ficheros nuevos: "crlf", "lf" o "cr"
 ```
 
-Los cambios se aplican al reiniciar Bracket. Si un valor no es válido, se usa su valor por defecto y la barra de estado lo avisa; el resto del fichero se respeta. Cuando Bracket guarda la configuración, mantiene tus comentarios, el orden y las claves que no conoce, y nunca sobrescribe un fichero con errores de sintaxis.
+El idioma también se puede cambiar desde el botón de la derecha de la barra de estado: el cambio es inmediato y se guarda en `config.toml`. El resto de cambios hechos a mano se aplican al reiniciar Bracket. Si un valor no es válido, se usa su valor por defecto y la barra de estado lo avisa; el resto del fichero se respeta. Cuando Bracket guarda la configuración, escribe todas sus claves con el valor actual, mantiene tus comentarios, el orden y las claves que no conoce, y nunca sobrescribe un fichero con errores de sintaxis.
 
 ## Modo portable
 

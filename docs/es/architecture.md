@@ -55,7 +55,7 @@ En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync
 
 - `EditorView` pinta solo las líneas visibles dentro de un `ScrollArea` de egui y traduce teclado, ratón, portapapeles e IME a órdenes del núcleo. La composición del IME se muestra en el cursor sin entrar en el buffer hasta que se confirma.
 - Límite conocido: egui usa coordenadas `f32`. Con 1M de líneas (unos 17 millones de píxeles) la precisión es de unos 2 px al final del documento; por encima de unos pocos millones de líneas hará falta un scroll propio basado en líneas.
-- Los textos visibles están en `i18n.rs` (español e inglés). La solución definitiva de traducción se decide en la Fase 1.
+- Los textos visibles están en `locales/es.toml` y `locales/en.toml` y se piden con métodos de `i18n.rs` (ver [decisions/0002-i18n.md](decisions/0002-i18n.md)).
 
 ## Deuda técnica conocida
 

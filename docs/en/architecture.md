@@ -55,7 +55,7 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 
 - `EditorView` paints only the visible lines inside an egui `ScrollArea` and turns keyboard, mouse, clipboard and IME input into core commands. The IME composition is shown at the caret and only enters the buffer when committed.
 - Known limit: egui uses `f32` coordinates. With 1M lines (about 17 million pixels) precision is about 2 px at the end of the document; beyond a few million lines a custom line-based scroll will be needed.
-- Visible texts live in `i18n.rs` (Spanish and English). The final translation approach is decided in Phase 1.
+- Visible texts live in `locales/es.toml` and `locales/en.toml` and are requested through methods in `i18n.rs` (see [decisions/0002-i18n.md](decisions/0002-i18n.md)).
 
 ## Known technical debt
 

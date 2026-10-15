@@ -18,3 +18,4 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - Configuración en `config.toml` (idioma de la interfaz, tamaño de letra, ancho de tabulación y salto de línea de los ficheros nuevos) con avisos en la barra de estado si algún valor no es válido.
 - Modo portable: con `portable.toml` junto al exe, todos los datos se guardan en esa carpeta.
 - Guía de usuario en `docs/es/user-guide.md`.
+- Selector de idioma en la barra de estado: cambia la interfaz al momento y lo guarda en la configuración. Los textos de la interfaz están en catálogos, uno por idioma (`es.toml` y `en.toml`).
