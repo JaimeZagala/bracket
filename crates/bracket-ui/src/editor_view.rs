@@ -98,9 +98,11 @@ impl EditorView {
         let font = FontId::monospace(self.font_size);
         let (row_height, char_width) =
             ui.fonts_mut(|f| (f.row_height(&font), f.glyph_width(&font, 'M')));
+        let text_offset = text_offset(ui, &font, row_height);
         let metrics = Metrics {
             font,
             row_height,
+            text_offset,
             char_width,
             gutter_width: gutter_width(doc.buffer.len_lines(), char_width),
         };
@@ -348,7 +350,10 @@ impl EditorView {
         for line in lines {
             let y = layout.origin.y + line as f32 * m.row_height;
             painter.text(
-                pos2(layout.origin.x + m.gutter_width - m.char_width, y),
+                pos2(
+                    layout.origin.x + m.gutter_width - m.char_width,
+                    y + m.text_offset,
+                ),
                 Align2::RIGHT_TOP,
                 (line + 1).to_string(),
                 m.font.clone(),
@@ -368,7 +373,7 @@ impl EditorView {
             let galley = ui
                 .fonts_mut(|f| f.layout_no_wrap(display.text.clone(), m.font.clone(), text_color));
             self.max_line_width = self.max_line_width.max(galley.size().x);
-            let text_origin = pos2(layout.origin.x + m.gutter_width, y);
+            let text_origin = pos2(layout.origin.x + m.gutter_width, y + m.text_offset);
             let x_of = |pos: usize| text_origin.x + display.x_of(&galley, pos - line_start);
 
             for sel in selections.iter().filter(|s| !s.is_caret()) {
@@ -442,6 +447,8 @@ impl Default for EditorView {
 struct Metrics {
     font: FontId,
     row_height: f32,
+    /// Vertical shift that centers the glyphs in the row (see [`text_offset`]).
+    text_offset: f32,
     char_width: f32,
     gutter_width: f32,
 }
@@ -542,6 +549,19 @@ impl DisplayLine {
             }
         }
     }
+}
+
+/// How far to move text down so its glyphs sit in the middle of the row. egui draws glyphs at
+/// the top of the row and leaves the font's line gap below them, which made selections and the
+/// caret, which span the whole row, look shifted down from the text. Pixel aligned.
+fn text_offset(ui: &Ui, font: &FontId, row_height: f32) -> f32 {
+    let bounds = ui.fonts_mut(|f| {
+        f.layout_no_wrap("Hgjy|".to_owned(), font.clone(), Color32::WHITE)
+            .mesh_bounds
+    });
+    let offset = (row_height - bounds.height()) / 2.0 - bounds.min.y;
+    let pixels_per_point = ui.pixels_per_point();
+    (offset * pixels_per_point).round() / pixels_per_point
 }
 
 /// Buffer position under a screen point.
@@ -691,5 +711,44 @@ mod tests {
 
         assert_eq!(d.buffer.len_chars(), 0, "the Delete key reached the editor");
         frame(&ctx, &mut view, &mut d, Vec::new());
+    }
+
+    /// Regression: selections and the caret span the whole row while egui draws glyphs at its
+    /// top, so selections looked shifted down; the text is now centered in the row.
+    #[test]
+    fn text_is_vertically_centered_in_the_row() {
+        let windir = std::env::var("WINDIR").unwrap_or_else(|_| r"C:\Windows".into());
+        let Ok(bytes) = std::fs::read(format!(r"{windir}\Fonts\consola.ttf")) else {
+            return;
+        };
+        let fonts = crate::fonts::StartupFonts {
+            monospace: Some(crate::fonts::FontFile {
+                family: "Consolas".into(),
+                bytes,
+                index: 0,
+            }),
+            proportional: None,
+            missing_family: None,
+        };
+        let ctx = egui::Context::default();
+        ctx.set_fonts(crate::fonts::definitions(fonts).unwrap());
+        for _ in 0..2 {
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                let font = FontId::monospace(14.0);
+                let row_height = ui.fonts_mut(|f| f.row_height(&font));
+                let offset = text_offset(ui, &font, row_height);
+                let bounds = ui.fonts_mut(|f| {
+                    f.layout_no_wrap("Hgjy|".into(), font.clone(), Color32::WHITE)
+                        .mesh_bounds
+                });
+                let text_center = offset + bounds.center().y;
+                assert!(
+                    (text_center - row_height / 2.0).abs() <= 0.5,
+                    "text center {text_center} vs row center {}",
+                    row_height / 2.0
+                );
+            });
+            output.textures_delta.clear();
+        }
     }
 }

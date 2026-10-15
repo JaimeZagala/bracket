@@ -11,7 +11,7 @@
 
 use std::sync::Arc;
 
-use eframe::egui::{FontData, FontDefinitions, FontFamily};
+use eframe::egui::{self, FontData, FontDefinitions, FontFamily};
 use eframe::epaint::text::{FontInsert, FontPriority, InsertFontFamily};
 
 /// A font file read from disk. `index` selects the face inside a `.ttc` collection.
@@ -140,23 +140,104 @@ impl Fallback {
             Self::Hangul => HANGUL_FALLBACKS,
         }
     }
+
+    /// A character typical of the fallback, used to measure its baseline.
+    fn sample(self) -> char {
+        match self {
+            Self::Symbols => '√',
+            Self::Cjk => '日',
+            Self::Hangul => '한',
+        }
+    }
 }
 
-/// Loads the first installed font of a fallback group. Meant to run on a worker thread.
-pub fn load_fallback(source: &dyn FontSource, fallback: Fallback) -> Option<FontFile> {
-    first_available(source, fallback.families())
+/// A fallback font ready to be added to egui, with its baseline already aligned.
+pub struct LoadedFallback {
+    name: String,
+    data: FontData,
+}
+
+impl LoadedFallback {
+    pub fn family(&self) -> &str {
+        &self.name
+    }
+}
+
+/// Loads the first installed font of a fallback group and aligns its baseline with the editor
+/// font `primary` at `font_size`. Meant to run on a worker thread.
+pub fn load_fallback(
+    source: &dyn FontSource,
+    fallback: Fallback,
+    primary: &str,
+    font_size: f32,
+) -> Option<LoadedFallback> {
+    let file = first_available(source, fallback.families())?;
+    let name = file.family.clone();
+    let mut data = font_data(file);
+    if let Some(primary) = source.load(primary) {
+        let (measured, shift) = baseline_shift(primary, data, fallback.sample(), font_size);
+        data = measured;
+        data.tweak.y_offset_factor = -shift / font_size;
+    }
+    Some(LoadedFallback { name, data })
+}
+
+/// How far below the editor font's baseline egui puts the baseline of `sample` drawn with
+/// `fallback`, in points. egui places each glyph by its own font's ascent, so fonts that split
+/// their height differently (CJK fonts, for example) sit lower than Latin text.
+///
+/// Measured by laying out "H" + `sample` in a throwaway egui context. The fallback's bytes are
+/// shared with that context and handed back afterwards, so nothing is copied.
+fn baseline_shift(
+    primary: FontFile,
+    fallback: FontData,
+    sample: char,
+    font_size: f32,
+) -> (FontData, f32) {
+    let fallback = Arc::new(fallback);
+    let mut defs = FontDefinitions::empty();
+    defs.font_data
+        .insert("primary".to_owned(), Arc::new(font_data(primary)));
+    defs.font_data
+        .insert("fallback".to_owned(), Arc::clone(&fallback));
+    defs.families.insert(
+        FontFamily::Monospace,
+        vec!["primary".to_owned(), "fallback".to_owned()],
+    );
+
+    let ctx = egui::Context::default();
+    ctx.set_fonts(defs);
+    let mut shift = 0.0;
+    // Fonts set before a pass take effect in that pass; two passes make sure of it.
+    for _ in 0..2 {
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let galley = ui.fonts_mut(|f| {
+                f.layout_no_wrap(
+                    format!("H{sample}"),
+                    egui::FontId::monospace(font_size),
+                    egui::Color32::WHITE,
+                )
+            });
+            if let [latin, other] = galley.rows[0].glyphs.as_slice() {
+                shift = other.pos.y - latin.pos.y;
+            }
+        });
+        output.textures_delta.clear();
+    }
+    drop(ctx);
+    let data = Arc::try_unwrap(fallback).unwrap_or_else(|shared| (*shared).clone());
+    (data, shift)
 }
 
 /// How to add a loaded fallback to egui: last in both families.
-pub fn fallback_insert(file: FontFile) -> FontInsert {
+pub fn fallback_insert(fallback: LoadedFallback) -> FontInsert {
     let lowest = |family| InsertFontFamily {
         family,
         priority: FontPriority::Lowest,
     };
-    let name = file.family.clone();
     FontInsert::new(
-        &name,
-        font_data(file),
+        &fallback.name,
+        fallback.data,
         vec![
             lowest(FontFamily::Monospace),
             lowest(FontFamily::Proportional),
@@ -253,14 +334,68 @@ mod tests {
     fn cjk_fallback_uses_the_first_installed_font() {
         let src = source(&["Malgun Gothic", "MS Gothic"]);
         assert_eq!(
-            load_fallback(&src, Fallback::Cjk).unwrap().family,
+            load_fallback(&src, Fallback::Cjk, "Consolas", 14.0)
+                .unwrap()
+                .family()
+                .to_owned(),
             "MS Gothic",
             "Malgun Gothic has no kana or full Han coverage"
         );
         assert_eq!(
-            load_fallback(&src, Fallback::Hangul).unwrap().family,
+            load_fallback(&src, Fallback::Hangul, "Consolas", 14.0)
+                .unwrap()
+                .family()
+                .to_owned(),
             "Malgun Gothic"
         );
-        assert!(load_fallback(&source(&[]), Fallback::Symbols).is_none());
+        assert!(load_fallback(&source(&[]), Fallback::Symbols, "Consolas", 14.0).is_none());
+    }
+
+    /// Reads fonts straight from `%WINDIR%\Fonts` by file name, for tests with real fonts.
+    struct WindowsFonts(&'static [(&'static str, &'static str)]);
+
+    impl FontSource for WindowsFonts {
+        fn load(&self, family: &str) -> Option<FontFile> {
+            let (_, file) = self.0.iter().find(|(name, _)| *name == family)?;
+            let windir = std::env::var("WINDIR").ok()?;
+            let bytes = std::fs::read(format!(r"{windir}\Fonts\{file}")).ok()?;
+            Some(FontFile {
+                family: family.to_owned(),
+                bytes,
+                index: 0,
+            })
+        }
+    }
+
+    /// Regression: CJK glyphs sat about 2 px below Latin text before the baseline correction.
+    #[test]
+    fn cjk_fallback_is_aligned_with_the_latin_baseline() {
+        let source = WindowsFonts(&[
+            ("Consolas", "consola.ttf"),
+            ("Microsoft YaHei", "msyh.ttc"),
+            ("MS Gothic", "msgothic.ttc"),
+        ]);
+        let Some(fallback) = load_fallback(&source, Fallback::Cjk, "Consolas", 14.0) else {
+            return; // No CJK font on this machine.
+        };
+        let LoadedFallback { data, .. } = fallback;
+        assert!(data.tweak.y_offset_factor < 0.0, "the CJK font is moved up");
+        let primary = source.load("Consolas").unwrap();
+        let (_, shift_after) = baseline_shift_with_tweak(primary, data, '日', 14.0);
+        assert!(shift_after.abs() <= 1.0, "still {shift_after} px off");
+    }
+
+    /// Like `baseline_shift`, but measures the glyph's visible top instead of the logical
+    /// baseline, so the font's y_offset tweak is taken into account.
+    fn baseline_shift_with_tweak(
+        primary: FontFile,
+        fallback: FontData,
+        sample: char,
+        font_size: f32,
+    ) -> (FontData, f32) {
+        let tweak = fallback.tweak.clone();
+        let (data, logical_shift) = baseline_shift(primary, fallback, sample, font_size);
+        let visual_shift = logical_shift + tweak.y_offset_factor * font_size + tweak.y_offset;
+        (data, visual_shift)
     }
 }

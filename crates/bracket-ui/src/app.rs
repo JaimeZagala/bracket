@@ -17,7 +17,7 @@ use eframe::egui::{self, Id, Key, KeyboardShortcut, Modifiers, ViewportCommand};
 use crate::Launch;
 use crate::dialogs;
 use crate::editor_view::EditorView;
-use crate::fonts::{self, Fallback, FontFile, FontSource};
+use crate::fonts::{self, Fallback, FontSource, LoadedFallback};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
 
@@ -99,8 +99,10 @@ pub struct BracketApp {
     missing_font: Option<(String, String)>,
     font_source: Option<Arc<dyn FontSource>>,
     fallbacks_requested: HashSet<Fallback>,
-    fallback_tx: Sender<FontFile>,
-    fallback_rx: Receiver<FontFile>,
+    fallback_tx: Sender<LoadedFallback>,
+    fallback_rx: Receiver<LoadedFallback>,
+    /// Editor font actually in use; fallbacks are aligned to its baseline.
+    editor_font: String,
     probe: Option<Probe>,
     frames_ready: u32,
 }
@@ -120,6 +122,10 @@ impl BracketApp {
 
         // The font thread started at the beginning of main() and has normally finished by now.
         let setup = fonts.join().ok();
+        let editor_font = setup
+            .as_ref()
+            .and_then(|s| s.startup.monospace.as_ref())
+            .map_or_else(|| config.font_family.clone(), |f| f.family.clone());
         let missing_font = setup.as_ref().and_then(|s| {
             let family = s.startup.missing_family.clone()?;
             let used = s.startup.monospace.as_ref().map(|f| f.family.clone())?;
@@ -154,6 +160,7 @@ impl BracketApp {
             fallbacks_requested: HashSet::new(),
             fallback_tx,
             fallback_rx,
+            editor_font,
             pending: None,
             allow_close: false,
             title: String::new(),
@@ -180,17 +187,19 @@ impl BracketApp {
         }
         let tx = self.fallback_tx.clone();
         let ctx = ctx.clone();
+        let (primary, font_size) = (self.editor_font.clone(), self.config.font_size);
         thread::spawn(move || {
-            if let Some(file) = fonts::load_fallback(source.as_ref(), kind) {
-                let _ = tx.send(file);
+            if let Some(fallback) = fonts::load_fallback(source.as_ref(), kind, &primary, font_size)
+            {
+                let _ = tx.send(fallback);
                 ctx.request_repaint();
             }
         });
     }
 
     fn poll_fallbacks(&mut self, ctx: &egui::Context) {
-        while let Ok(file) = self.fallback_rx.try_recv() {
-            ctx.add_font(fonts::fallback_insert(file));
+        while let Ok(fallback) = self.fallback_rx.try_recv() {
+            ctx.add_font(fonts::fallback_insert(fallback));
         }
     }
 
