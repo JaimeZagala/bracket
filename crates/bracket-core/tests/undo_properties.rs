@@ -1,7 +1,7 @@
 //! Property tests: any sequence of edits can be fully undone and redone, and selections
 //! always stay valid.
 
-use bracket_core::{Buffer, Selection, Selections};
+use bracket_core::{Buffer, Motion, Selection, Selections};
 use proptest::prelude::*;
 
 #[derive(Clone, Debug)]
@@ -12,6 +12,7 @@ enum Op {
     /// Selections as (anchor, head) fractions of the text length, in per-mille.
     Select(Vec<(u16, u16)>),
     Seal,
+    Move(Motion, bool),
 }
 
 fn text_strategy() -> impl Strategy<Value = String> {
@@ -25,6 +26,21 @@ fn text_strategy() -> impl Strategy<Value = String> {
     .prop_map(|parts| parts.concat())
 }
 
+fn motion_strategy() -> impl Strategy<Value = Motion> {
+    prop_oneof![
+        Just(Motion::Left),
+        Just(Motion::Right),
+        Just(Motion::WordLeft),
+        Just(Motion::WordRight),
+        Just(Motion::LineStart),
+        Just(Motion::LineEnd),
+        (1usize..4).prop_map(Motion::Up),
+        (1usize..4).prop_map(Motion::Down),
+        Just(Motion::DocumentStart),
+        Just(Motion::DocumentEnd),
+    ]
+}
+
 fn op_strategy() -> impl Strategy<Value = Op> {
     prop_oneof![
         4 => text_strategy().prop_map(Op::Insert),
@@ -32,6 +48,7 @@ fn op_strategy() -> impl Strategy<Value = Op> {
         2 => Just(Op::DeleteForward),
         2 => prop::collection::vec((0u16..=1000, 0u16..=1000), 1..5).prop_map(Op::Select),
         1 => Just(Op::Seal),
+        3 => (motion_strategy(), any::<bool>()).prop_map(|(m, extend)| Op::Move(m, extend)),
     ]
 }
 
@@ -50,6 +67,7 @@ fn apply(buffer: &mut Buffer, op: &Op) {
             buffer.set_selections(Selections::new(ranges, 0));
         }
         Op::Seal => buffer.seal_undo_step(),
+        Op::Move(motion, extend) => buffer.move_selections(*motion, *extend),
     }
 }
 

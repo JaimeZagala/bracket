@@ -9,5 +9,6 @@ pub mod selection;
 pub mod transaction;
 
 pub use buffer::Buffer;
+pub use movement::Motion;
 pub use selection::{Selection, Selections};
 pub use transaction::{Change, Transaction};

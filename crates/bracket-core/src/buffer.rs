@@ -6,9 +6,12 @@ use std::ops::Range;
 use ropey::Rope;
 
 use crate::history::{EditKind, History};
-use crate::movement::{is_inside_crlf, next_boundary, prev_boundary};
+use crate::movement::{Motion, apply_motion, is_inside_crlf, next_boundary, prev_boundary};
 use crate::selection::{Selection, Selections};
 use crate::transaction::{Change, Transaction};
+
+/// Tab width used until the configuration says otherwise.
+pub const DEFAULT_TAB_WIDTH: usize = 4;
 
 /// Text plus the current selections. Text is stored exactly as given: line endings
 /// and any other characters are never normalized.
@@ -17,6 +20,7 @@ pub struct Buffer {
     text: Rope,
     selections: Selections,
     history: History,
+    tab_width: usize,
 }
 
 impl Default for Buffer {
@@ -36,6 +40,7 @@ impl Buffer {
             text: Rope::from_str(text),
             selections: Selections::caret(0),
             history: History::default(),
+            tab_width: DEFAULT_TAB_WIDTH,
         }
     }
 
@@ -45,6 +50,7 @@ impl Buffer {
             text: Rope::from_reader(reader)?,
             selections: Selections::caret(0),
             history: History::default(),
+            tab_width: DEFAULT_TAB_WIDTH,
         })
     }
 
@@ -63,6 +69,44 @@ impl Buffer {
 
     pub fn selections(&self) -> &Selections {
         &self.selections
+    }
+
+    pub fn tab_width(&self) -> usize {
+        self.tab_width
+    }
+
+    /// Sets the tab width used for visual columns. Values below 1 are treated as 1.
+    pub fn set_tab_width(&mut self, tab_width: usize) {
+        self.tab_width = tab_width.max(1);
+    }
+
+    /// Moves every selection. With `extend` (Shift held) the anchors stay and the selections
+    /// grow; without it, each selection collapses to a caret at the new position, except that
+    /// Left/Right on a non-empty selection collapse it to its start/end.
+    pub fn move_selections(&mut self, motion: Motion, extend: bool) {
+        let text = &self.text;
+        let tab_width = self.tab_width;
+        self.selections = self.selections.map(|sel| {
+            if !extend && !sel.is_caret() {
+                match motion {
+                    Motion::Left => return Selection::caret(sel.start()),
+                    Motion::Right => return Selection::caret(sel.end()),
+                    _ => {}
+                }
+            }
+            let (head, goal_column) =
+                apply_motion(text, sel.head, sel.goal_column, motion, tab_width);
+            Selection {
+                anchor: if extend { sel.anchor } else { head },
+                head,
+                goal_column,
+            }
+        });
+    }
+
+    /// Selects the whole text as a single selection.
+    pub fn select_all(&mut self) {
+        self.selections = Selections::single(Selection::new(0, self.text.len_chars()));
     }
 
     /// Replaces the selections (cursor movement, mouse clicks). Positions beyond the end are
@@ -373,6 +417,38 @@ mod tests {
         b.insert("y");
         assert!(!b.can_redo());
         assert!(!b.redo());
+    }
+
+    #[test]
+    fn shift_motion_extends_and_plain_motion_collapses() {
+        let mut b = buffer_with("hello world", &[(0, 0)]);
+        b.move_selections(Motion::WordRight, true);
+        assert_eq!(b.selections().primary(), &Selection::new(0, 5));
+        b.move_selections(Motion::Left, false);
+        assert_eq!(b.selections().primary(), &Selection::caret(0));
+        b.move_selections(Motion::LineEnd, false);
+        assert_eq!(heads(&b), vec![11]);
+    }
+
+    #[test]
+    fn carets_that_meet_after_moving_merge() {
+        let mut b = buffer_with("ab\ncd", &[(1, 1), (4, 4)]);
+        b.move_selections(Motion::DocumentStart, false);
+        assert_eq!(b.selections().len(), 1);
+    }
+
+    #[test]
+    fn motion_skips_crlf_as_a_unit() {
+        let mut b = buffer_with("a\r\nb", &[(1, 1)]);
+        b.move_selections(Motion::Right, false);
+        assert_eq!(heads(&b), vec![3]);
+    }
+
+    #[test]
+    fn select_all_covers_the_text() {
+        let mut b = buffer_with("abc\ndef", &[(1, 1), (5, 5)]);
+        b.select_all();
+        assert_eq!(b.selections().as_slice(), &[Selection::new(0, 7)]);
     }
 
     #[test]
