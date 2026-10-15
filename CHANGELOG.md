@@ -14,3 +14,4 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - Documentación inicial en español e inglés y comprobación de parejas de idioma.
 - Doble licencia MIT o Apache-2.0.
 - Ventana principal de `bracket.exe` (egui/eframe con backend OpenGL) y script de medición de tamaño, arranque y memoria.
+- Prototipo del editor: abrir un fichero UTF-8 (argumento o arrastrar a la ventana), editar con selecciones múltiples, deshacer/rehacer, portapapeles, IME, tabulaciones y guardado atómico que conserva BOM y saltos de línea. Los ficheros que no son UTF-8 se abren en solo lectura.

@@ -12,7 +12,7 @@ Solo las dependencias directas; las transitivas se revisarán con una herramient
 
 | Crate | Versión | Licencia | Uso | Impacto medido |
 |---|---|---|---|---|
-| [ropey](https://crates.io/crates/ropey) | 1.6.1 | MIT | Buffer de texto (rope) en `bracket-core` | Se mide al enlazarlo en `bracket.exe` (Fase 0, paso 11) |
+| [ropey](https://crates.io/crates/ropey) | 1.6.1 | MIT | Buffer de texto (rope) en `bracket-core` | +0,3 MB junto con el núcleo y la vista del editor ([mediciones](docs/es/measurements.md)) |
 | [eframe](https://crates.io/crates/eframe) (incluye egui) | 0.36.2 | MIT OR Apache-2.0 | Interfaz gráfica (backend glow) en `bracket-ui` | Exe de 0,10 a 5,23 MB; arranque de 9 a 139 ms ([mediciones](docs/es/measurements.md)) |
 
 ## Solo para desarrollo y pruebas
