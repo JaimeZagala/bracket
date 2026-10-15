@@ -1,0 +1,25 @@
+[package]
+name = "bracket-iced"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Separate workspace: the main Bracket workspace must not include this experiment.
+[workspace]
+
+[features]
+default = ["renderer-wgpu"]
+renderer-wgpu = ["iced/wgpu"]
+renderer-tiny-skia = ["iced/tiny-skia"]
+
+[dependencies]
+iced = { version = "=0.14.0", default-features = false, features = ["canvas", "thread-pool"] }
+ropey = { version = "=1.6.1", default-features = false, features = ["cr_lines", "simd"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

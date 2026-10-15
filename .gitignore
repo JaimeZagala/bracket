@@ -13,3 +13,4 @@
 
 # Experiments build their own targets
 /experiments/**/target/
+/experiments/**/*.exe
