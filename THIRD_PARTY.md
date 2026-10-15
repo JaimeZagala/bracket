@@ -19,6 +19,7 @@ Solo las dependencias directas; las transitivas se revisarán con una herramient
 | [encoding_rs](https://crates.io/crates/encoding_rs) | 0.8.42 | (Apache-2.0 OR MIT) AND BSD-3-Clause | Decodificar y codificar texto (UTF-8, UTF-16 y codificaciones heredadas) en `bracket-core` | +430 KB junto con chardetng |
 | [chardetng](https://crates.io/crates/chardetng) | 1.0.0 | Apache-2.0 OR MIT | Adivinar la codificación de ficheros que no son UTF-8 | (incluido arriba) |
 | [rfd](https://crates.io/crates/rfd) | 0.17.2 | MIT | Diálogos nativos de Abrir y Guardar como (`IFileDialog` de Windows) en `bracket-ui` | +50 KB junto con el menú Archivo |
+| [windows-sys](https://crates.io/crates/windows-sys) | 0.61.2 | MIT OR Apache-2.0 | Llamada a `ReplaceFileW` en `bracket-app` (guardado que conserva atributos y permisos); la misma versión ya estaba en el árbol por winit y winreg | +12 KB |
 
 La parte BSD-3-Clause de encoding_rs (tablas de datos de WHATWG) exige reproducir su aviso de copyright en la distribución binaria: se incluirá en el fichero de licencias de terceros que acompañe al instalador y al zip (Fase 5).
 

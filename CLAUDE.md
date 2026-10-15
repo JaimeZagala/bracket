@@ -33,7 +33,7 @@ Antes de dar un paso por terminado: `./scripts/check.ps1` en verde. No se desact
 - Dependencias entre crates: solo `bracket-app` depende de `bracket-ui` y de `bracket-update`. `bracket-core` y `bracket-update` no dependen de ninguna crate del workspace. Las flechas siempre van hacia abajo.
 - El núcleo (todo menos `bracket-ui` y `bracket-app`) no usa egui ni APIs de Windows.
 - Hilo de interfaz: solo pinta y gestiona eventos. Trabajo pesado en hilos con cancelación.
-- Sin `unsafe` salvo necesidad demostrada, con comentario `SAFETY` (lint `unsafe_code = "deny"` en el workspace).
+- Sin `unsafe` salvo necesidad demostrada, con comentario `SAFETY` (lint `unsafe_code = "deny"` en el workspace). Única excepción hoy: `ReplaceFileW` en `crates/bracket-app/src/file_replace.rs`.
 - Sin telemetría. Única conexión de red: comprobación de actualizaciones (Fase 5).
 - Sin pérdida de datos: guardado atómico, se conservan codificación, BOM y saltos de línea. XML/XSIG se guardan byte a byte.
 - Dependencia nueva: justificar (mantenimiento, licencia, impacto medido en tamaño y arranque), comprobar versión y API reales con `cargo info` y docs.rs, y anotarla en `THIRD_PARTY.md` y `THIRD_PARTY.en.md`.
