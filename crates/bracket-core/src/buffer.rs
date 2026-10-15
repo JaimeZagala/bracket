@@ -1,10 +1,14 @@
 //! The text buffer: a rope with a set of selections.
 
 use std::io;
+use std::ops::Range;
 
 use ropey::Rope;
 
-use crate::selection::Selections;
+use crate::history::{EditKind, History};
+use crate::movement::{is_inside_crlf, next_boundary, prev_boundary};
+use crate::selection::{Selection, Selections};
+use crate::transaction::{Change, Transaction};
 
 /// Text plus the current selections. Text is stored exactly as given: line endings
 /// and any other characters are never normalized.
@@ -12,6 +16,7 @@ use crate::selection::Selections;
 pub struct Buffer {
     text: Rope,
     selections: Selections,
+    history: History,
 }
 
 impl Default for Buffer {
@@ -30,6 +35,7 @@ impl Buffer {
         Self {
             text: Rope::from_str(text),
             selections: Selections::caret(0),
+            history: History::default(),
         }
     }
 
@@ -38,6 +44,7 @@ impl Buffer {
         Ok(Self {
             text: Rope::from_reader(reader)?,
             selections: Selections::caret(0),
+            history: History::default(),
         })
     }
 
@@ -58,16 +65,322 @@ impl Buffer {
         &self.selections
     }
 
-    /// Replaces the selections (cursor movement, mouse clicks). Positions beyond the end are clamped.
+    /// Replaces the selections (cursor movement, mouse clicks). Positions beyond the end are
+    /// clamped, and positions between the `\r` and `\n` of a CRLF move before the `\r`.
     pub fn set_selections(&mut self, selections: Selections) {
-        self.selections = selections.clamped(self.text.len_chars());
+        let text = &self.text;
+        let snap = |pos: usize| {
+            if is_inside_crlf(text, pos) {
+                pos - 1
+            } else {
+                pos
+            }
+        };
+        self.selections = selections.clamped(text.len_chars()).map(|s| Selection {
+            anchor: snap(s.anchor),
+            head: snap(s.head),
+            goal_column: s.goal_column,
+        });
+    }
+
+    /// Replaces every selection with `text`. Each caret ends up after its insertion.
+    ///
+    /// Typing single characters one after another forms one undo step; anything else
+    /// (several characters, a line break, replacing a selection) is a step of its own.
+    pub fn insert(&mut self, text: &str) {
+        let mut chars = text.chars();
+        let single_char =
+            matches!((chars.next(), chars.next()), (Some(c), None) if c != '\n' && c != '\r');
+        let kind = if single_char && self.selections.iter().all(Selection::is_caret) {
+            EditKind::Typing
+        } else {
+            EditKind::Other
+        };
+        self.edit(kind, |_, sel| (sel.start()..sel.end(), text.to_owned()));
+    }
+
+    /// Backspace: deletes each non-empty selection, or the character before each caret.
+    pub fn delete_backward(&mut self) {
+        let kind = self.deletion_kind(EditKind::DeleteBackward);
+        self.edit(kind, |text, sel| {
+            let range = if sel.is_caret() {
+                prev_boundary(text, sel.head)..sel.head
+            } else {
+                sel.start()..sel.end()
+            };
+            (range, String::new())
+        });
+    }
+
+    /// Delete: deletes each non-empty selection, or the character after each caret.
+    pub fn delete_forward(&mut self) {
+        let kind = self.deletion_kind(EditKind::DeleteForward);
+        self.edit(kind, |text, sel| {
+            let range = if sel.is_caret() {
+                sel.head..next_boundary(text, sel.head)
+            } else {
+                sel.start()..sel.end()
+            };
+            (range, String::new())
+        });
+    }
+
+    /// Undoes the last step. Returns false if there was nothing to undo.
+    pub fn undo(&mut self) -> bool {
+        let Some(transaction) = self.history.pop_undo() else {
+            return false;
+        };
+        transaction.revert(&mut self.text);
+        self.selections = transaction.before;
+        true
+    }
+
+    /// Redoes the last undone step. Returns false if there was nothing to redo.
+    pub fn redo(&mut self) -> bool {
+        let Some(transaction) = self.history.pop_redo() else {
+            return false;
+        };
+        transaction.apply(&mut self.text);
+        self.selections = transaction.after;
+        true
+    }
+
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
+
+    /// Makes the next edit start a new undo step (for example after a pause in typing).
+    pub fn seal_undo_step(&mut self) {
+        self.history.seal();
+    }
+
+    /// Deleting a selection is a step of its own; deleting char by char groups.
+    fn deletion_kind(&self, char_kind: EditKind) -> EditKind {
+        if self.selections.iter().all(Selection::is_caret) {
+            char_kind
+        } else {
+            EditKind::Other
+        }
+    }
+
+    /// Core editing routine shared by every edit command.
+    ///
+    /// `plan` is called once per selection, in order, against the text as it was before the edit,
+    /// and returns the range to replace and its replacement. Ranges that reach into the previous
+    /// one are trimmed so they never overlap. All replacements form one transaction, recorded in
+    /// the history as a single step, and each selection becomes a caret after its replacement.
+    fn edit(
+        &mut self,
+        kind: EditKind,
+        mut plan: impl FnMut(&Rope, &Selection) -> (Range<usize>, String),
+    ) {
+        let before = self.selections.clone();
+        let plans: Vec<(Range<usize>, String)> =
+            before.iter().map(|sel| plan(&self.text, sel)).collect();
+
+        let mut changes = Vec::new();
+        let mut carets = Vec::with_capacity(plans.len());
+        // Chars inserted and removed so far: they shift every later position.
+        let mut added = 0;
+        let mut removed_total = 0;
+        let mut prev_end = 0;
+
+        for (range, inserted) in plans {
+            let start = range.start.max(prev_end);
+            let end = range.end.max(start);
+            prev_end = end;
+
+            let at = start + added - removed_total;
+            let removed_len = end - start;
+            let inserted_len = inserted.chars().count();
+            if removed_len > 0 || inserted_len > 0 {
+                let change = Change {
+                    start: at,
+                    removed: self.text.slice(at..at + removed_len).to_string(),
+                    inserted,
+                };
+                change.apply(&mut self.text);
+                changes.push(change);
+            }
+            added += inserted_len;
+            removed_total += removed_len;
+            carets.push(Selection::caret(at + inserted_len));
+        }
+
+        self.selections = Selections::new(carets, before.primary_index());
+        if !changes.is_empty() {
+            let transaction = Transaction {
+                changes,
+                before,
+                after: self.selections.clone(),
+            };
+            self.history.push(transaction, kind);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::selection::Selection;
+
+    fn buffer_with(text: &str, selections: &[(usize, usize)]) -> Buffer {
+        let mut buffer = Buffer::from_text(text);
+        let ranges = selections
+            .iter()
+            .map(|&(a, h)| Selection::new(a, h))
+            .collect();
+        buffer.set_selections(Selections::new(ranges, 0));
+        buffer
+    }
+
+    fn heads(buffer: &Buffer) -> Vec<usize> {
+        buffer.selections().iter().map(|s| s.head).collect()
+    }
+
+    #[test]
+    fn insert_at_every_caret() {
+        let mut b = buffer_with("abc", &[(0, 0), (3, 3)]);
+        b.insert("XY");
+        assert_eq!(b.text().to_string(), "XYabcXY");
+        assert_eq!(heads(&b), vec![2, 7]);
+    }
+
+    #[test]
+    fn insert_replaces_selections() {
+        let mut b = buffer_with("one two three", &[(0, 3), (8, 13)]);
+        b.insert("1");
+        assert_eq!(b.text().to_string(), "1 two 1");
+        assert_eq!(heads(&b), vec![1, 7]);
+    }
+
+    #[test]
+    fn insert_handles_multibyte_text() {
+        let mut b = buffer_with("año", &[(1, 2)]);
+        b.insert("ñ€");
+        assert_eq!(b.text().to_string(), "añ€o");
+        assert_eq!(heads(&b), vec![3]);
+    }
+
+    #[test]
+    fn delete_backward_at_every_caret() {
+        let mut b = buffer_with("abcdef", &[(2, 2), (5, 5)]);
+        b.delete_backward();
+        assert_eq!(b.text().to_string(), "acdf");
+        assert_eq!(heads(&b), vec![1, 3]);
+    }
+
+    #[test]
+    fn delete_backward_removes_crlf_as_a_unit() {
+        let mut b = buffer_with("a\r\nb", &[(3, 3)]);
+        b.delete_backward();
+        assert_eq!(b.text().to_string(), "ab");
+        assert_eq!(heads(&b), vec![1]);
+    }
+
+    #[test]
+    fn delete_backward_with_touching_ranges_merges_carets() {
+        let mut b = buffer_with("abc", &[(1, 1), (2, 2)]);
+        b.delete_backward();
+        assert_eq!(b.text().to_string(), "c");
+        assert_eq!(heads(&b), vec![0]);
+    }
+
+    #[test]
+    fn delete_forward_at_end_does_nothing() {
+        let mut b = buffer_with("ab", &[(2, 2)]);
+        b.delete_forward();
+        assert_eq!(b.text().to_string(), "ab");
+    }
+
+    #[test]
+    fn delete_forward_removes_selection_and_crlf() {
+        let mut b = buffer_with("x\r\nyz", &[(1, 1), (3, 4)]);
+        b.delete_forward();
+        assert_eq!(b.text().to_string(), "xz");
+        assert_eq!(heads(&b), vec![1]);
+    }
+
+    #[test]
+    fn set_selections_snaps_out_of_crlf() {
+        let b = buffer_with("a\r\nb", &[(2, 2)]);
+        assert_eq!(heads(&b), vec![1]);
+    }
+
+    #[test]
+    fn typing_groups_into_one_undo_step() {
+        let mut b = buffer_with("", &[(0, 0)]);
+        for c in ["h", "o", "l", "a"] {
+            b.insert(c);
+        }
+        assert!(b.undo());
+        assert_eq!(b.text().to_string(), "");
+        assert!(!b.undo());
+    }
+
+    #[test]
+    fn moving_the_caret_or_sealing_starts_a_new_step() {
+        let mut b = buffer_with("", &[(0, 0)]);
+        b.insert("a");
+        b.insert("b");
+        b.set_selections(Selections::caret(0));
+        b.insert("c");
+        b.seal_undo_step();
+        b.insert("d");
+        assert_eq!(b.text().to_string(), "cdab");
+        b.undo();
+        assert_eq!(b.text().to_string(), "cab");
+        b.undo();
+        assert_eq!(b.text().to_string(), "ab");
+        b.undo();
+        assert_eq!(b.text().to_string(), "");
+    }
+
+    #[test]
+    fn multi_caret_edit_is_one_step_and_restores_selections() {
+        let mut b = buffer_with("a\nb\nc", &[(1, 1), (3, 3), (5, 5)]);
+        b.insert(";");
+        assert_eq!(b.text().to_string(), "a;\nb;\nc;");
+        b.undo();
+        assert_eq!(b.text().to_string(), "a\nb\nc");
+        assert_eq!(heads(&b), vec![1, 3, 5]);
+        b.redo();
+        assert_eq!(b.text().to_string(), "a;\nb;\nc;");
+        assert_eq!(heads(&b), vec![2, 5, 8]);
+    }
+
+    #[test]
+    fn line_break_and_paste_are_separate_steps() {
+        let mut b = buffer_with("", &[(0, 0)]);
+        b.insert("a");
+        b.insert("\n");
+        b.insert("pasted text");
+        b.undo();
+        assert_eq!(b.text().to_string(), "a\n");
+        b.undo();
+        assert_eq!(b.text().to_string(), "a");
+    }
+
+    #[test]
+    fn new_edit_after_undo_clears_redo() {
+        let mut b = buffer_with("", &[(0, 0)]);
+        b.insert("x");
+        b.undo();
+        assert!(b.can_redo());
+        b.insert("y");
+        assert!(!b.can_redo());
+        assert!(!b.redo());
+    }
+
+    #[test]
+    fn edit_that_changes_nothing_is_not_recorded() {
+        let mut b = buffer_with("ab", &[(0, 0)]);
+        b.delete_backward();
+        assert!(!b.can_undo());
+    }
 
     #[test]
     fn text_is_kept_byte_for_byte() {
