@@ -115,5 +115,20 @@ Conclusiones:
 | Fin de la Fase 0 | 5.802.496 B | — | |
 | Paso 2: configuración TOML | 5.971.456 B | +165 KB | `toml_edit` y el código de configuración |
 | Paso 3: traducciones y selector de idioma | 6.099.456 B | +128 KB | Catálogos y menú de idioma. El mecanismo de catálogos mide +7,5 KB aislado (ver [decisions/0002-i18n.md](decisions/0002-i18n.md)); el resto debe de ser el código de menús de egui, enlazado por primera vez (no se midió por separado) |
+| Paso 4: fuentes del sistema | 4.736.000 B | −1.363 KB | Sin las fuentes integradas de egui (`default_fonts`); entra `winreg` |
 
 El arranque en caliente se mantiene en 123–134 ms en estos pasos (dentro del ruido de ±8 ms).
+
+### Paso 4 — memoria según el texto abierto
+
+| Texto | Memoria privada |
+|---|---|
+| Solo ASCII | 30,7 MB |
+| Japonés (carga Microsoft YaHei, 19,7 MB) | 72,7 MB |
+| Japonés, coreano y símbolos (YaHei + Malgun Gothic + Segoe UI Symbol) | 103,3 MB |
+
+egui ocupa unas dos veces el tamaño de cada fuente cargada. Las fuentes de respaldo solo se cargan cuando ese texto aparece en pantalla.
+
+Arranque, comparado de forma intercalada con el exe del paso 3 (`scripts/compare-startup.ps1`, 20 rondas, carga de fondo entre el 3 y el 29 %): paso 3 145,2 ms, paso 4 139,7 ms. Sin regresión; las mediciones sueltas de este día oscilaron entre 130 y 156 ms según la carga del equipo, por eso las regresiones se comprueban con ejecuciones intercaladas.
+
+Benchmarks de pintado tras el cambio de fuente (Consolas en lugar de Hack): frame estable 83 µs, frame con scroll 420 µs. Una primera versión de la detección de glifos ausentes subió el frame con scroll a 2 ms al preguntar en cada frame por caracteres sin fuente; ahora solo se revisan caracteres no ASCII y se deja de revisar un tipo cuando ya se pidió su respaldo.

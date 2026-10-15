@@ -28,6 +28,7 @@ El fichero es opcional: si no existe se usan los valores por defecto, y Bracket 
 language = "es"      # idioma de la interfaz: "es" (español) o "en" (inglés)
 
 [editor]
+font_family = "Consolas" # fuente del editor: cualquier fuente instalada
 font_size = 14.0     # tamaño de letra, de 8 a 48
 tab_width = 4        # ancho de tabulación, de 1 a 16
 
@@ -36,6 +37,12 @@ line_ending = "crlf" # salto de línea de los ficheros nuevos: "crlf", "lf" o "c
 ```
 
 El idioma también se puede cambiar desde el botón de la derecha de la barra de estado: el cambio es inmediato y se guarda en `config.toml`. El resto de cambios hechos a mano se aplican al reiniciar Bracket. Si un valor no es válido, se usa su valor por defecto y la barra de estado lo avisa; el resto del fichero se respeta. Cuando Bracket guarda la configuración, escribe todas sus claves con el valor actual, mantiene tus comentarios, el orden y las claves que no conoce, y nunca sobrescribe un fichero con errores de sintaxis.
+
+## Fuentes
+
+Bracket no incluye fuentes: usa las instaladas en Windows. El editor usa la fuente de `font_family` (Consolas por defecto; también vale cualquier fuente instalada, incluidas las instaladas solo para tu usuario). Si no está instalada, se usa Consolas, Cascadia Mono o Courier New y la barra de estado lo avisa. La interfaz usa Segoe UI.
+
+Si el texto contiene caracteres que la fuente no tiene, Bracket carga automáticamente una fuente del sistema que los tenga: Segoe UI Symbol para símbolos, Microsoft YaHei (o Yu Gothic, MS Gothic) para chino y japonés, y Malgun Gothic para coreano. Estas fuentes solo se cargan cuando aparece ese texto en pantalla, porque ocupan bastante memoria (unos 40 MB en el caso de Microsoft YaHei).
 
 ## Modo portable
 

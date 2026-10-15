@@ -28,6 +28,7 @@ The file is optional: if it does not exist the defaults are used, and Bracket do
 language = "es"      # interface language: "es" (Spanish) or "en" (English)
 
 [editor]
+font_family = "Consolas" # editor font: any installed font
 font_size = 14.0     # font size, 8 to 48
 tab_width = 4        # tab width, 1 to 16
 
@@ -36,6 +37,12 @@ line_ending = "crlf" # line ending of new files: "crlf", "lf" or "cr"
 ```
 
 The language can also be changed from the button on the right of the status bar: the change is immediate and saved in `config.toml`. Other changes made by hand take effect when Bracket restarts. If a value is invalid, its default is used and the status bar says so; the rest of the file is honoured. When Bracket saves the configuration, it writes all its keys with their current value, keeps your comments, the order and any keys it does not know, and it never overwrites a file with syntax errors.
+
+## Fonts
+
+Bracket ships no fonts: it uses the ones installed on Windows. The editor uses the `font_family` font (Consolas by default; any installed font works, including fonts installed only for your user). If it is not installed, Consolas, Cascadia Mono or Courier New is used and the status bar says so. The interface uses Segoe UI.
+
+If the text contains characters the font lacks, Bracket automatically loads a system font that has them: Segoe UI Symbol for symbols, Microsoft YaHei (or Yu Gothic, MS Gothic) for Chinese and Japanese, and Malgun Gothic for Korean. These fonts are only loaded when such text appears on screen, because they take a fair amount of memory (about 40 MB for Microsoft YaHei).
 
 ## Portable mode
 

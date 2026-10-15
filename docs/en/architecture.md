@@ -51,6 +51,12 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 - **Undo:** typing characters in a row or deleting char by char forms one step; paste, Enter, deleting a selection and multi-caret edits are steps of their own. Moving the caret ends the group.
 - **Document:** buffer + path + BOM + line ending + saved version. Atomic save: temporary file in the same folder, `sync_all` and rename over the target. Phase 0 supports UTF-8 only; a file that is not UTF-8 opens read-only and cannot be saved.
 
+## Fonts (Phase 1)
+
+- `bracket-app` (`system_fonts.rs`) finds installed fonts by family name in the Windows registry (HKCU, then HKLM) and implements the `FontSource` trait.
+- `bracket-ui` (`fonts.rs`) decides which families to use: the configured monospace one (or Consolas, Cascadia Mono, Courier New) and Segoe UI for the interface. They are read on a thread that starts at the beginning of `main` and finishes while eframe sets up OpenGL.
+- The view reports visible characters without a glyph (it only checks non-ASCII ones, and stops checking a kind once its fallback was requested) and the app loads Segoe UI Symbol, a CJK font or Malgun Gothic on a thread.
+
 ## Interface prototype (`bracket-ui`, Phase 0)
 
 - `EditorView` paints only the visible lines inside an egui `ScrollArea` and turns keyboard, mouse, clipboard and IME input into core commands. The IME composition is shown at the caret and only enters the buffer when committed.
@@ -61,7 +67,8 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 
 Still to be solved; each item states the planned phase.
 
-- **Fonts (Phase 1):** egui only ships Hack, Ubuntu and emoji fonts; CJK characters (Chinese, Japanese, Korean) show as boxes. System fonts must be loaded from `C:\Windows\Fonts` (a monospace one such as Consolas or Cascadia Mono and a CJK fallback), measuring their cost in startup and memory.
+- **Fallback font memory:** egui takes about twice the size of each loaded font; with Japanese or Chinese text on screen, Microsoft YaHei adds about 42 MB. Alternative if it matters: a smaller CJK font with less coverage (MS Gothic, 9 MB).
+- **No system fonts:** if no font at all were found (Consolas and Segoe UI ship with Windows), the application would exit without any message.
 - **Startup (all phases):** 123–133 ms without load; about 60 ms are OpenGL initialization on Windows and no eframe setting reduces it (see [measurements.md](measurements.md)). About 20 ms of margin remain: new work must stay off the first frame's path, and `check.ps1 -Perf` watches for regressions.
 - **Encodings (Phase 1):** UTF-8 only; anything else opens read-only.
 - **Saving (Phase 1):** the rename does not keep the original file's attributes, ACLs or hard links (use `ReplaceFileW` from the Windows layer); saving from the unsaved-changes dialog blocks the interface.

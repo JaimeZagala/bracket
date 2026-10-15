@@ -18,6 +18,7 @@ cargo test --workspace
 cargo build --release -p bracket-app        # target/release/bracket.exe
 ./scripts/measure.ps1 -Exe target/release/bracket.exe -Runs 12   # tamaño, arranque, RAM
 cargo bench --workspace                     # benchmarks (criterion)
+./scripts/compare-startup.ps1 -A <exe anterior> -B target/release/bracket.exe   # regresiones de arranque
 cargo run --release -p bracket-core --example generate_large_file   # target/large-1m.txt
 ```
 

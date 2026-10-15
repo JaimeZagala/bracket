@@ -13,8 +13,9 @@ Direct dependencies only; transitive ones will be reviewed with a license tool b
 | Crate | Version | License | Use | Measured impact |
 |---|---|---|---|---|
 | [ropey](https://crates.io/crates/ropey) | 1.6.1 | MIT | Text buffer (rope) in `bracket-core` | +0.3 MB together with the core and the editor view ([measurements](docs/en/measurements.md)) |
-| [eframe](https://crates.io/crates/eframe) (includes egui) | 0.36.2 | MIT OR Apache-2.0 | Graphical interface (glow backend) in `bracket-ui` | Exe from 0.10 to 5.23 MB; startup from 9 to 139 ms ([measurements](docs/en/measurements.md)) |
+| [eframe](https://crates.io/crates/eframe) (includes egui) | 0.36.2 | MIT OR Apache-2.0 | Graphical interface (glow backend, no bundled fonts) in `bracket-ui` | Exe from 0.10 to 5.23 MB; startup from 9 to 139 ms ([measurements](docs/en/measurements.md)); without `default_fonts` the exe is 1.36 MB smaller |
 | [toml_edit](https://crates.io/crates/toml_edit) | 0.25.17 | MIT OR Apache-2.0 | Reading and saving `config.toml` in `bracket-session`, keeping comments | +165 KB together with the configuration code; no measurable startup effect |
+| [winreg](https://crates.io/crates/winreg) | 0.56.0 | MIT | Reading installed fonts from the Windows registry in `bracket-app` (and, in Phase 5, file associations) | Included in the step 4 change (−1.36 MB overall after removing the bundled fonts) |
 
 ## Development and testing only
 

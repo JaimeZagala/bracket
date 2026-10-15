@@ -115,5 +115,20 @@ Conclusions:
 | End of Phase 0 | 5,802,496 B | — | |
 | Step 2: TOML configuration | 5,971,456 B | +165 KB | `toml_edit` and the configuration code |
 | Step 3: translations and language selector | 6,099,456 B | +128 KB | Catalogs and language menu. The catalog mechanism measures +7.5 KB in isolation (see [decisions/0002-i18n.md](decisions/0002-i18n.md)); the rest is probably egui's menu code, linked for the first time (not measured separately) |
+| Step 4: system fonts | 4,736,000 B | −1,363 KB | No bundled egui fonts (`default_fonts`); `winreg` added |
 
 Warm startup stays at 123–134 ms in these steps (within the ±8 ms noise).
+
+### Step 4 — memory by the text that is open
+
+| Text | Private memory |
+|---|---|
+| ASCII only | 30.7 MB |
+| Japanese (loads Microsoft YaHei, 19.7 MB) | 72.7 MB |
+| Japanese, Korean and symbols (YaHei + Malgun Gothic + Segoe UI Symbol) | 103.3 MB |
+
+egui takes about twice the size of each loaded font. Fallback fonts are only loaded when such text appears on screen.
+
+Startup, compared with interleaved runs against the step 3 exe (`scripts/compare-startup.ps1`, 20 rounds, background load between 3 and 29 %): step 3 145.2 ms, step 4 139.7 ms. No regression; single measurements that day ranged from 130 to 156 ms depending on machine load, which is why regressions are checked with interleaved runs.
+
+Painting benchmarks after the font change (Consolas instead of Hack): steady frame 83 µs, scrolling frame 420 µs. A first version of missing-glyph detection raised the scrolling frame to 2 ms by asking about unsupported characters on every frame; now only non-ASCII characters are checked and a kind is no longer checked once its fallback was requested.

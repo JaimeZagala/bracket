@@ -19,3 +19,4 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - Modo portable: con `portable.toml` junto al exe, todos los datos se guardan en esa carpeta.
 - Guía de usuario en `docs/es/user-guide.md`.
 - Selector de idioma en la barra de estado: cambia la interfaz al momento y lo guarda en la configuración. Los textos de la interfaz están en catálogos, uno por idioma (`es.toml` y `en.toml`).
+- Fuentes del sistema: la fuente del editor es configurable (`font_family`, Consolas por defecto) y se cargan bajo demanda fuentes de respaldo para símbolos, chino, japonés y coreano. El ejecutable ya no incluye fuentes (1,36 MB menos).
