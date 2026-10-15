@@ -49,7 +49,8 @@ En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync
 - **Selecciones:** conjunto no vacío, ordenado y sin solapes, con una selección principal. Cada selección tiene ancla, cabeza y columna objetivo para moverse en vertical.
 - **Edición:** toda edición se planifica por selección contra el texto anterior y se aplica como una sola transacción (lista de cambios con el texto borrado, invertible).
 - **Deshacer:** escribir caracteres seguidos o borrar carácter a carácter forma un solo paso; pegar, Intro, borrar una selección y las ediciones multicursor son pasos propios. Mover el cursor corta el grupo.
-- **Documento:** buffer + ruta + BOM + salto de línea + versión guardada. Guardado atómico: fichero temporal en la misma carpeta, `sync_all` y renombrado sobre el destino. En la Fase 0 solo UTF-8; un fichero que no es UTF-8 se abre en solo lectura y no se puede guardar.
+- **Documento:** buffer + ruta + codificación + salto de línea + versión guardada. Guardado atómico: fichero temporal en la misma carpeta, `sync_all` y renombrado sobre el destino.
+- **Codificaciones (`encoding.rs`):** detección por BOM, UTF-16 sin BOM (patrón de bytes cero), UTF-8 válido y, si no, `chardetng`. Un fichero solo es editable si codificar de nuevo su texto reproduce exactamente sus bytes; si no, solo lectura. Al guardar, un carácter que no existe en la codificación hace fallar el guardado (encoding_rs lo sustituiría por `&#NNNN;`). UTF-16 se codifica a mano porque encoding_rs solo escribe UTF-8 para él. El UTF-8 válido se decodifica sin copiar los bytes.
 
 ## Fuentes (Fase 1)
 
@@ -70,7 +71,7 @@ Pendiente de resolver; cada punto indica la fase prevista.
 - **Memoria de las fuentes de respaldo:** egui ocupa unas dos veces el tamaño de cada fuente cargada; con texto japonés o chino en pantalla, Microsoft YaHei añade unos 42 MB. Alternativa si molesta: una fuente CJK más pequeña con menos cobertura (MS Gothic, 9 MB).
 - **Sin fuentes del sistema:** si no se encontrara ninguna fuente (Consolas y Segoe UI vienen con Windows), la aplicación termina sin mostrar ningún mensaje.
 - **Arranque (todas las fases):** 123–133 ms sin carga; unos 60 ms son la inicialización de OpenGL en Windows y ninguna opción de eframe lo reduce (ver [measurements.md](measurements.md)). Quedan unos 20 ms de margen: lo nuevo debe ir fuera del camino del primer frame, y `check.ps1 -Perf` vigila las regresiones.
-- **Codificaciones (Fase 1):** solo UTF-8; el resto se abre en solo lectura.
+- **Licencias en la distribución (Fase 5):** el aviso BSD-3-Clause de encoding_rs (y los de las demás dependencias) debe acompañar al instalador y al zip.
 - **Guardado (Fase 1):** el renombrado no conserva atributos, ACL ni hard links del fichero original (usar `ReplaceFileW` desde la capa de Windows); el guardado desde el diálogo de cambios sin guardar bloquea la interfaz.
 - **Estado modificado (Fase 1):** deshacer hasta el estado guardado sigue marcando el documento como modificado.
 - **Unidades de texto (Fase 4):** los clústeres de grafemas no se tratan como unidad y los caracteres anchos (CJK) cuentan como una columna.

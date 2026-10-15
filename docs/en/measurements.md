@@ -116,6 +116,9 @@ Conclusions:
 | Step 2: TOML configuration | 5,971,456 B | +165 KB | `toml_edit` and the configuration code |
 | Step 3: translations and language selector | 6,099,456 B | +128 KB | Catalogs and language menu. The catalog mechanism measures +7.5 KB in isolation (see [decisions/0002-i18n.md](decisions/0002-i18n.md)); the rest is probably egui's menu code, linked for the first time (not measured separately) |
 | Step 4: system fonts | 4,736,000 B | −1,363 KB | No bundled egui fonts (`default_fonts`); `winreg` added |
+| Step 5: encodings | 5,165,568 B | +430 KB | `encoding_rs` (tables for every WHATWG encoding) and `chardetng` |
+
+Step 5, interleaved startup against step 4 (15 rounds): 144.9 ms versus 148.6 ms, within the noise. That day absolute medians were around 145–149 ms with a busy machine: the margin against 150 ms is minimal.
 
 Warm startup stays at 123–134 ms in these steps (within the ±8 ms noise).
 

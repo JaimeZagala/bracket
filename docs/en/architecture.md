@@ -49,7 +49,8 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 - **Selections:** a non-empty, sorted, non-overlapping set with a primary selection. Each selection has an anchor, a head and a goal column for vertical movement.
 - **Editing:** every edit is planned per selection against the previous text and applied as a single transaction (a list of changes that store the removed text, so they can be inverted).
 - **Undo:** typing characters in a row or deleting char by char forms one step; paste, Enter, deleting a selection and multi-caret edits are steps of their own. Moving the caret ends the group.
-- **Document:** buffer + path + BOM + line ending + saved version. Atomic save: temporary file in the same folder, `sync_all` and rename over the target. Phase 0 supports UTF-8 only; a file that is not UTF-8 opens read-only and cannot be saved.
+- **Document:** buffer + path + encoding + line ending + saved version. Atomic save: temporary file in the same folder, `sync_all` and rename over the target.
+- **Encodings (`encoding.rs`):** detection by BOM, UTF-16 without BOM (zero-byte pattern), valid UTF-8 and otherwise `chardetng`. A file is only editable if encoding its text again reproduces exactly its bytes; otherwise it is read-only. When saving, a character that does not exist in the encoding makes the save fail (encoding_rs would replace it with `&#NNNN;`). UTF-16 is encoded by hand because encoding_rs only writes UTF-8 for it. Valid UTF-8 is decoded without copying the bytes.
 
 ## Fonts (Phase 1)
 
@@ -70,7 +71,7 @@ Still to be solved; each item states the planned phase.
 - **Fallback font memory:** egui takes about twice the size of each loaded font; with Japanese or Chinese text on screen, Microsoft YaHei adds about 42 MB. Alternative if it matters: a smaller CJK font with less coverage (MS Gothic, 9 MB).
 - **No system fonts:** if no font at all were found (Consolas and Segoe UI ship with Windows), the application would exit without any message.
 - **Startup (all phases):** 123–133 ms without load; about 60 ms are OpenGL initialization on Windows and no eframe setting reduces it (see [measurements.md](measurements.md)). About 20 ms of margin remain: new work must stay off the first frame's path, and `check.ps1 -Perf` watches for regressions.
-- **Encodings (Phase 1):** UTF-8 only; anything else opens read-only.
+- **Licenses in the distribution (Phase 5):** the BSD-3-Clause notice of encoding_rs (and those of the other dependencies) must ship with the installer and the zip.
 - **Saving (Phase 1):** the rename does not keep the original file's attributes, ACLs or hard links (use `ReplaceFileW` from the Windows layer); saving from the unsaved-changes dialog blocks the interface.
 - **Modified state (Phase 1):** undoing back to the saved state still marks the document as modified.
 - **Text units (Phase 4):** grapheme clusters are not treated as a unit and wide (CJK) characters count as one column.

@@ -8,7 +8,15 @@ Bracket is under development (Phase 1). This guide describes what already works 
 
 - Open a file by passing it as an argument (`bracket.exe file.txt`) or by dropping it on the window.
 - Ctrl+S saves. Saving is atomic and keeps the file's BOM and line endings.
-- For now only UTF-8 files can be edited; other files open read-only.
+- Bracket detects the encoding when opening (UTF-8, UTF-16 and legacy encodings such as windows-1252) and saves in the same one, byte for byte. If a file cannot be written back exactly the same, it opens read-only and the status bar says so.
+
+## Encoding and line endings
+
+The status bar shows the encoding (for example `UTF-8`, `UTF-8 BOM`, `UTF-16 LE BOM` or `windows-1252`) and the line ending (`CRLF`, `LF` or `CR`). Click them to:
+
+- **Reopen with encoding:** read the file from disk again with the chosen encoding (in case detection was wrong). Save or discard your changes first.
+- **Save with encoding:** the next save uses that encoding. If the text has characters that do not exist in it, nothing is saved and the status bar says which one.
+- **Convert to CRLF / LF / CR:** change every line break in the document in a single undoable step, and use that line ending for new lines.
 
 ## Language
 
@@ -34,6 +42,7 @@ tab_width = 4        # tab width, 1 to 16
 
 [files]
 line_ending = "crlf" # line ending of new files: "crlf", "lf" or "cr"
+encoding = "utf-8"   # encoding of new files: "utf-8", "utf-8-bom" or another one (e.g. "windows-1252")
 ```
 
 The language can also be changed from the button on the right of the status bar: the change is immediate and saved in `config.toml`. Other changes made by hand take effect when Bracket restarts. If a value is invalid, its default is used and the status bar says so; the rest of the file is honoured. When Bracket saves the configuration, it writes all its keys with their current value, keeps your comments, the order and any keys it does not know, and it never overwrites a file with syntax errors.

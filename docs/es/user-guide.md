@@ -8,7 +8,15 @@ Bracket está en desarrollo (Fase 1). Esta guía describe lo que ya funciona y c
 
 - Abre un fichero pasándolo como argumento (`bracket.exe fichero.txt`) o arrastrándolo a la ventana.
 - Ctrl+S guarda. El guardado es atómico y conserva el BOM y los saltos de línea del fichero.
-- Por ahora solo se editan ficheros UTF-8; los demás se abren en solo lectura.
+- Bracket detecta la codificación al abrir (UTF-8, UTF-16 y codificaciones heredadas como windows-1252) y guarda en la misma, byte a byte. Si un fichero no se puede volver a escribir exactamente igual, se abre en solo lectura y la barra de estado lo indica.
+
+## Codificación y saltos de línea
+
+La barra de estado muestra la codificación (por ejemplo `UTF-8`, `UTF-8 BOM`, `UTF-16 LE BOM` o `windows-1252`) y el salto de línea (`CRLF`, `LF` o `CR`). Pulsando sobre ellos:
+
+- **Reabrir con codificación:** vuelve a leer el fichero del disco con la codificación elegida (por si la detección se equivocó). Antes hay que guardar o descartar los cambios.
+- **Guardar con codificación:** el próximo guardado usará esa codificación. Si el texto tiene caracteres que no existen en ella, no se guarda nada y la barra de estado dice cuál.
+- **Convertir a CRLF / LF / CR:** cambia todos los saltos de línea del documento en un solo paso que se puede deshacer, y usa ese salto para las líneas nuevas.
 
 ## Idioma
 
@@ -34,6 +42,7 @@ tab_width = 4        # ancho de tabulación, de 1 a 16
 
 [files]
 line_ending = "crlf" # salto de línea de los ficheros nuevos: "crlf", "lf" o "cr"
+encoding = "utf-8"   # codificación de los ficheros nuevos: "utf-8", "utf-8-bom" u otra (p. ej. "windows-1252")
 ```
 
 El idioma también se puede cambiar desde el botón de la derecha de la barra de estado: el cambio es inmediato y se guarda en `config.toml`. El resto de cambios hechos a mano se aplican al reiniciar Bracket. Si un valor no es válido, se usa su valor por defecto y la barra de estado lo avisa; el resto del fichero se respeta. Cuando Bracket guarda la configuración, escribe todas sus claves con el valor actual, mantiene tus comentarios, el orden y las claves que no conoce, y nunca sobrescribe un fichero con errores de sintaxis.
