@@ -18,6 +18,8 @@ pub const SESSION_FILE: &str = "session.toml";
 pub const BACKUP_DIR: &str = "backups";
 /// Where eframe keeps the window position and size, inside the data folder.
 pub const WINDOW_FILE: &str = "window.ron";
+/// Folder where a second Bracket leaves the files for the running one.
+pub const REQUESTS_DIR: &str = "requests";
 /// Folder created inside `%APPDATA%` in installed mode.
 pub const APP_DIR_NAME: &str = "Bracket";
 
@@ -60,6 +62,10 @@ impl Paths {
 
     pub fn window_file(&self) -> PathBuf {
         self.data_dir.join(WINDOW_FILE)
+    }
+
+    pub fn requests_dir(&self) -> PathBuf {
+        self.data_dir.join(REQUESTS_DIR)
     }
 
     pub fn session_files(&self) -> SessionFiles {
