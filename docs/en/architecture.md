@@ -83,6 +83,7 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 - The main instance watches `requests/` with the same `FileWatcher` as the open files, reads any pending requests at startup and discards those older than 30 s.
 - Everything that does not paint (thread polling, inbox, changes on disk, session, close requests) runs in `App::logic`, which eframe calls before each `ui` and also while the window is minimized or hidden. That way requests are handled while minimized and the session is saved when closing from the taskbar.
 - eframe stores a tiny window at (0, 0) if it saves while minimized (on exit or in the autosave). `App::save` puts back the last value stored with the window not minimized; the autosave runs every 5 s (eframe only writes when something changed).
+- Opening maximized showed a black frame: eframe paints the first one while the window is hidden and Windows drops it when maximizing the window as it appears. eframe's `window_builder` hook creates the window not maximized but with the maximized size eframe stored, and the app maximizes it on the second frame, already on screen.
 - With the measurement probes there is no single instance: every run is on its own.
 
 ## Changes on disk (Phase 1)

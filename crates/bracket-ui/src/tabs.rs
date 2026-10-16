@@ -3,6 +3,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
+use std::time::{Duration, Instant};
 
 use bracket_core::Document;
 use bracket_core::document::{DiskStamp, SaveError};
@@ -41,7 +42,11 @@ pub struct Loading {
     pub new_tab: bool,
     /// Line and column (1-based) to put the caret on once loaded (`file:line:column`).
     pub goto: Option<(usize, usize)>,
+    pub started: Instant,
 }
+
+/// Loads shorter than this show an empty editor rather than flashing a loading message.
+pub const LOADING_MESSAGE_DELAY: Duration = Duration::from_millis(200);
 
 pub struct Tab {
     /// Unique for the whole run; egui ids of the tab's widgets derive from it.

@@ -31,6 +31,14 @@ use crate::session::{self, SessionKeeper};
 use crate::tabs::{self, Loaded, Loading, Tab, TabAction};
 use crate::{Launch, RestoredSession};
 
+/// How the window starts.
+pub struct WindowStart {
+    /// The window position and size eframe stored last time (see `BracketApp::save`).
+    pub stored: Option<String>,
+    /// Maximize the window after its first frame.
+    pub maximize: bool,
+}
+
 /// eframe's storage key for the window position and size.
 pub const WINDOW_KEY: &str = "window";
 
@@ -154,15 +162,18 @@ pub struct BracketApp {
     /// What eframe last stored for the window while it was not minimized.
     stored_window: Option<String>,
     minimized: bool,
+    /// The window opened with the maximized size but not maximized (see `lib.rs`): maximize
+    /// it once it is on screen.
+    maximize_pending: bool,
+    frames_shown: u32,
 }
 
 impl BracketApp {
-    /// `stored_window` is the window position and size eframe stored last time (see `save`).
     pub fn new(
         ctx: &egui::Context,
         launch: Launch,
         mut probe: Option<Probe>,
-        stored_window: Option<String>,
+        window: WindowStart,
     ) -> Self {
         if let Some(Probe::Startup(startup)) = &mut probe {
             startup.mark_app_created();
@@ -236,8 +247,10 @@ impl BracketApp {
             watched_signature: None,
             probe,
             frames_ready: 0,
-            stored_window,
+            stored_window: window.stored,
             minimized: false,
+            maximize_pending: window.maximize,
+            frames_shown: 0,
         };
         if let Some(restored) = session {
             app.restore_session(ctx, restored);
@@ -301,6 +314,21 @@ impl BracketApp {
         if let Some(error) = keeper.tick(ctx, &self.tabs, self.active) {
             self.status = Some(self.texts.session_save_failed(&error));
         }
+    }
+
+    /// The first frame is painted while the window is still hidden; the window is maximized in
+    /// the next one, when it is already on screen.
+    fn maximize_once_shown(&mut self, ctx: &egui::Context) {
+        if !self.maximize_pending || ctx.current_pass_index() != 0 {
+            return;
+        }
+        self.frames_shown += 1;
+        if self.frames_shown < 2 {
+            ctx.request_repaint();
+            return;
+        }
+        self.maximize_pending = false;
+        ctx.send_viewport_cmd(ViewportCommand::Maximized(true));
     }
 
     /// Opens a file from the command line or another Bracket, at its line and column if given.
@@ -587,6 +615,7 @@ impl BracketApp {
             rx,
             new_tab,
             goto: None,
+            started: Instant::now(),
         });
     }
 
@@ -617,6 +646,7 @@ impl BracketApp {
             rx,
             new_tab: true,
             goto: None,
+            started: Instant::now(),
         });
     }
 
@@ -1232,8 +1262,13 @@ impl eframe::App for BracketApp {
         let mut notice_action = None;
         egui::CentralPanel::default().show(ui, |ui| {
             let tab = &mut self.tabs[self.active];
-            if tab.loading.is_some() {
-                ui.centered_and_justified(|ui| ui.label(self.texts.loading()));
+            if let Some(loading) = &tab.loading {
+                let waited = loading.started.elapsed();
+                if waited >= tabs::LOADING_MESSAGE_DELAY {
+                    ui.centered_and_justified(|ui| ui.label(self.texts.loading()));
+                } else {
+                    ctx.request_repaint_after(tabs::LOADING_MESSAGE_DELAY - waited);
+                }
             } else {
                 if let Some(notice) = &tab.disk.notice {
                     let name = tab.title(self.texts);
@@ -1251,6 +1286,7 @@ impl eframe::App for BracketApp {
         }
         self.unsaved_dialog(&ctx, frame);
         self.update_title(&ctx);
+        self.maximize_once_shown(&ctx);
 
         self.run_probe(&ctx);
     }

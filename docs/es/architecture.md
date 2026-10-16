@@ -83,6 +83,7 @@ En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync
 - La instancia principal vigila `requests/` con el mismo `FileWatcher` que los ficheros abiertos, lee al arrancar las peticiones que hubiera y descarta las de más de 30 s.
 - Todo lo que no pinta (sondeos de hilos, buzón, cambios en disco, sesión, petición de cierre) va en `App::logic`, que eframe llama antes de cada `ui` y también con la ventana minimizada u oculta. Así se atienden las peticiones con la ventana minimizada y se guarda la sesión al cerrarla desde la barra de tareas.
 - eframe guarda una ventana diminuta en (0, 0) si guarda estando minimizada (al salir o en el autoguardado). `App::save` repone el último valor guardado con la ventana sin minimizar; el autoguardado es cada 5 s (eframe solo escribe si algo cambió).
+- Abrir maximizada mostraba un fotograma negro: eframe pinta el primero con la ventana oculta y Windows lo descarta al maximizarla mientras aparece. El gancho `window_builder` de eframe crea la ventana sin maximizar pero con el tamaño maximizado que eframe guardó, y la app la maximiza en el segundo fotograma, ya en pantalla.
 - Con las sondas de medición no hay instancia única: cada ejecución es independiente.
 
 ## Cambios en disco (Fase 1)

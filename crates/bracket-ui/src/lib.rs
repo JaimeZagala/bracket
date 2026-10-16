@@ -11,6 +11,8 @@ mod session;
 mod tabs;
 
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 
 use eframe::egui;
@@ -71,6 +73,8 @@ pub fn run(launch: Launch, probe: Option<Probe>) -> eframe::Result {
         .window_file
         .clone()
         .unwrap_or_else(|| std::env::temp_dir().join("bracket-measure-window.ron"));
+    let maximize_later = Arc::new(AtomicBool::new(false));
+    let hook_flag = Arc::clone(&maximize_later);
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Bracket")
@@ -83,18 +87,34 @@ pub fn run(launch: Launch, probe: Option<Probe>) -> eframe::Result {
         centered: !saved_window,
         persist_window: launch.window_file.is_some(),
         persistence_path: Some(window_file),
+        // Opening maximized shows a black window for a moment: eframe paints the first frame
+        // while the window is hidden, and Windows drops it when the window is maximized as it
+        // appears. So the window opens not maximized, with the maximized size eframe stored,
+        // and the app maximizes it once it is on screen.
+        window_builder: Some(Box::new(move |builder| {
+            if builder.maximized == Some(true) {
+                hook_flag.store(true, Ordering::Relaxed);
+                builder.with_maximized(false)
+            } else {
+                builder
+            }
+        })),
         ..Default::default()
     };
     eframe::run_native(
         "Bracket",
         options,
         Box::new(move |cc| {
-            let stored_window = cc.storage.and_then(|s| s.get_string(app::WINDOW_KEY));
+            // The window exists by now, so the hook has run.
+            let window = app::WindowStart {
+                stored: cc.storage.and_then(|s| s.get_string(app::WINDOW_KEY)),
+                maximize: maximize_later.load(Ordering::Relaxed),
+            };
             Ok(Box::new(app::BracketApp::new(
                 &cc.egui_ctx,
                 launch,
                 probe,
-                stored_window,
+                window,
             )))
         }),
     )

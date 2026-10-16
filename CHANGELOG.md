@@ -30,3 +30,4 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - Instancia única: si Bracket ya está abierto, `bracket.exe fichero` abre el fichero en esa ventana y la trae al frente (también si estaba minimizada). Cada carpeta de datos (instalación o copia portable) tiene su propia instancia.
 - Línea de comandos: `fichero:línea` y `fichero:línea:columna` abren el fichero con el cursor en esa posición; `--help` y `--version` (la ayuda, en el idioma de la interfaz) se muestran en la consola desde la que se lanzó Bracket, o en un mensaje si no hay consola.
 - Corregido: al cerrar la ventana minimizada se guardaba una ventana diminuta en (0, 0) y la sesión no se guardaba.
+- Corregido: al abrir Bracket con la ventana maximizada se veía la ventana en negro un momento antes de la interfaz. Además, «Cargando…» solo aparece si la carga dura más de 200 ms, para que no destelle con ficheros normales.

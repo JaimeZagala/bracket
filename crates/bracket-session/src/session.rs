@@ -109,7 +109,14 @@ pub fn load_previous(files: &SessionFiles) -> (Session, Option<String>) {
         Ok(session) => (session, None),
         Err(err) => {
             let _ = fs::rename(&files.file, files.file.with_file_name(DAMAGED_FILE));
-            (Session::default(), Some(err.to_string()))
+            // The first line is enough for the status bar (TOML errors span several).
+            let error = err
+                .to_string()
+                .lines()
+                .next()
+                .unwrap_or_default()
+                .to_owned();
+            (Session::default(), Some(error))
         }
     }
 }
@@ -347,7 +354,11 @@ mod tests {
         fs::write(&files.file, "tab = [").unwrap();
         let (session, error) = load_previous(&files);
         assert_eq!(session, Session::default());
-        assert!(error.is_some());
+        let error = error.unwrap();
+        assert!(
+            !error.is_empty() && !error.contains('\n'),
+            "one line: {error}"
+        );
         assert!(!files.file.exists());
         let aside = files.file.with_file_name(DAMAGED_FILE);
         assert_eq!(fs::read_to_string(&aside).unwrap(), "tab = [");
