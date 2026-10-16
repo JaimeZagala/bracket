@@ -1,0 +1,114 @@
+%YAML 1.2
+---
+# Razor (.razor, .cshtml) for Bracket. Written for this project and licensed like it
+# (MIT OR Apache-2.0). Sublime Text syntax format, version 1 (what syntect supports).
+#
+# HTML with Razor constructs on top, like the ASP grammar does: comments, directives, code
+# blocks (`@{ }`, `@code { }`), control statements and explicit and implicit expressions. Code
+# inside them is highlighted with the C# grammar; markup inside code blocks is not recognised.
+name: Razor
+scope: text.html.razor
+file_extensions: [razor, cshtml]
+
+variables:
+  ident: '[A-Za-z_][A-Za-z0-9_]*'
+
+contexts:
+  main:
+    - match: ''
+      push: scope:text.html.basic
+      with_prototype:
+        - include: razor
+
+  razor:
+    - match: '@\*'
+      scope: punctuation.definition.comment.begin.razor
+      push:
+        - meta_scope: comment.block.razor
+        - match: '\*@'
+          scope: punctuation.definition.comment.end.razor
+          pop: true
+    - match: '@@'
+      scope: constant.character.escape.razor
+    - match: '(@)(code|functions)\s*(\{)'
+      captures:
+        1: keyword.control.razor
+        2: keyword.control.razor
+        3: punctuation.section.block.begin.razor
+      push: statements
+    - match: '(@)(\{)'
+      captures:
+        1: keyword.control.razor
+        2: punctuation.section.block.begin.razor
+      push: statements
+    - match: '(@)(page|using|inject|model|inherits|layout|namespace|attribute|implements|typeparam|preservewhitespace|rendermode|addTagHelper|removeTagHelper|tagHelperPrefix|section)\b'
+      captures:
+        1: keyword.control.razor
+        2: keyword.control.razor
+      push: directive
+    - match: '(@)(if|foreach|for|while|switch|lock|using|try|do)\b'
+      captures:
+        1: keyword.control.razor
+        2: keyword.control.razor
+      push: statement-condition
+    - match: '(@)(\()'
+      captures:
+        1: keyword.control.razor
+        2: punctuation.section.group.begin.razor
+      push: expression
+    # An implicit expression: `@Model.Items[0].Name`, `@DateTime.Now`, `@await Load()`. An `@`
+    # right after a word character is text (an e-mail address).
+    - match: '(?<![A-Za-z0-9_])(@)((?:await\s+)?{{ident}}(?:\.{{ident}}|\([^()]*\)|\[[^\[\]]*\])*)'
+      captures:
+        1: keyword.control.razor
+        2: variable.other.razor
+
+  # The rest of a directive's line: a type, a name or a string.
+  directive:
+    - meta_scope: meta.directive.razor
+    - match: '$'
+      pop: true
+    - match: '"'
+      scope: punctuation.definition.string.begin.razor
+      push:
+        - meta_scope: string.quoted.double.razor
+        - match: '"'
+          scope: punctuation.definition.string.end.razor
+          pop: true
+        - match: '$'
+          pop: true
+    - match: '{{ident}}(?:\.{{ident}})*'
+      scope: support.type.razor
+
+  # `@if (condition)`: the condition is C#; the block after it is shown as markup.
+  statement-condition:
+    - match: '\('
+      scope: punctuation.section.group.begin.razor
+      set: expression
+    - match: '(?=\S)'
+      pop: true
+
+  expression:
+    - meta_content_scope: source.cs.embedded.razor
+    - match: '\)'
+      scope: punctuation.section.group.end.razor
+      pop: true
+    - match: '\('
+      push: nested-expression
+    - include: scope:source.cs#line_of_code_in
+
+  nested-expression:
+    - match: '\)'
+      pop: true
+    - match: '\('
+      push: nested-expression
+    - include: scope:source.cs#line_of_code_in
+
+  # `@{ }` and `@code { }`. The C# grammar has no named context for a class body, so members
+  # are read as statements, which colours them the same way.
+  statements:
+    - meta_content_scope: source.cs.embedded.razor
+    - match: '\}'
+      scope: punctuation.section.block.end.razor
+      pop: true
+    - include: scope:source.cs#code_block_in

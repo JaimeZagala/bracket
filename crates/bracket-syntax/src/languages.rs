@@ -24,10 +24,19 @@ pub struct Language {
     /// File extensions without the dot, lowercase.
     pub extensions: Vec<String>,
     pub badge: Badge,
+    /// Scope of the grammar that highlights it, e.g. `source.cs`.
+    pub scope: String,
 }
 
 impl Language {
-    fn builtin(id: &str, name: &str, extensions: &[&str], badge: &str, color: [u8; 3]) -> Self {
+    fn builtin(
+        id: &str,
+        name: &str,
+        scope: &str,
+        extensions: &[&str],
+        badge: &str,
+        color: [u8; 3],
+    ) -> Self {
         Self {
             id: id.to_owned(),
             name: name.to_owned(),
@@ -36,6 +45,7 @@ impl Language {
                 text: badge.to_owned(),
                 color,
             },
+            scope: scope.to_owned(),
         }
     }
 }
@@ -50,20 +60,50 @@ impl LanguageRegistry {
     pub fn builtin() -> Self {
         Self {
             languages: vec![
-                Language::builtin("csharp", "C#", &["cs", "csx"], "C#", [0x68, 0x21, 0x7A]),
+                Language::builtin(
+                    "csharp",
+                    "C#",
+                    "source.cs",
+                    &["cs", "csx"],
+                    "C#",
+                    [0x68, 0x21, 0x7A],
+                ),
                 Language::builtin(
                     "razor",
                     "Razor",
+                    "text.html.razor",
                     &["razor", "cshtml"],
                     "@",
                     [0x51, 0x2B, 0xD4],
                 ),
-                Language::builtin("css", "CSS", &["css"], "#", [0x26, 0x4D, 0xE4]),
-                Language::builtin("tsql", "T-SQL", &["sql"], "SQL", [0xCC, 0x29, 0x27]),
-                Language::builtin("json", "JSON", &["json", "jsonc"], "{}", [0xB0, 0x8A, 0x10]),
+                Language::builtin(
+                    "css",
+                    "CSS",
+                    "source.css",
+                    &["css"],
+                    "#",
+                    [0x26, 0x4D, 0xE4],
+                ),
+                Language::builtin(
+                    "tsql",
+                    "T-SQL",
+                    "source.tsql",
+                    &["sql"],
+                    "SQL",
+                    [0xCC, 0x29, 0x27],
+                ),
+                Language::builtin(
+                    "json",
+                    "JSON",
+                    "source.json",
+                    &["json", "jsonc"],
+                    "{}",
+                    [0xB0, 0x8A, 0x10],
+                ),
                 Language::builtin(
                     "xml",
                     "XML",
+                    "text.xml",
                     &[
                         "xml", "xsig", "xsd", "xsl", "xslt", "config", "csproj", "vbproj", "props",
                         "targets", "resx", "nuspec", "xaml",
@@ -133,6 +173,18 @@ mod tests {
                     .extensions
                     .iter()
                     .all(|e| *e == e.to_ascii_lowercase())
+            );
+        }
+    }
+
+    #[test]
+    fn every_builtin_language_has_its_grammar() {
+        for language in LanguageRegistry::builtin().languages() {
+            assert!(
+                crate::highlight::Engine::new(&language.scope).is_some(),
+                "{} has no grammar for {}",
+                language.id,
+                language.scope
             );
         }
     }

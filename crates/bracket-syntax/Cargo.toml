@@ -8,5 +8,22 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[dependencies]
+bracket-core.workspace = true
+# At run time only the parser, the pure Rust regex engine and loading the compiled grammars.
+syntect = { workspace = true, features = ["parsing", "regex-fancy", "dump-load", "default-themes"] }
+
+[build-dependencies]
+# At build time: syntect's bundled grammars and loading `.sublime-syntax` files, to compile the
+# grammars Bracket uses into one file embedded in the executable.
+syntect = { workspace = true, features = ["parsing", "regex-fancy", "default-syntaxes", "yaml-load", "dump-create"] }
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "highlight"
+harness = false
+
 [lints]
 workspace = true

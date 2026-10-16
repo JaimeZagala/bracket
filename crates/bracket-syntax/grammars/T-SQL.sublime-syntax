@@ -1,0 +1,98 @@
+%YAML 1.2
+---
+# T-SQL (SQL Server) for Bracket. Written for this project and licensed like it
+# (MIT OR Apache-2.0). Sublime Text syntax format, version 1 (what syntect supports).
+name: T-SQL
+scope: source.tsql
+file_extensions: [sql]
+
+variables:
+  ident: '[A-Za-z_][A-Za-z0-9_$#@]*'
+
+contexts:
+  main:
+    - include: comments
+    - include: strings
+    - match: '(?i)^\s*(GO)\b(?:\s+(\d+))?\s*$'
+      captures:
+        1: keyword.control.batch.tsql
+        2: constant.numeric.tsql
+    - match: '\['
+      scope: punctuation.definition.identifier.begin.tsql
+      push: bracketed-identifier
+    - match: '"'
+      scope: punctuation.definition.identifier.begin.tsql
+      push: quoted-identifier
+    - match: '@@{{ident}}'
+      scope: support.variable.system.tsql
+    - match: '@{{ident}}'
+      scope: variable.parameter.tsql
+    - match: '##?{{ident}}'
+      scope: variable.other.temporary-table.tsql
+    - match: '(?i)\b(?:BEGIN|END|IF|ELSE|WHILE|BREAK|CONTINUE|RETURN|GOTO|WAITFOR|TRY|CATCH|THROW|RAISERROR|CASE|WHEN|THEN|EXEC|EXECUTE|TRANSACTION|TRAN|COMMIT|ROLLBACK|SAVE)\b'
+      scope: keyword.control.tsql
+    - match: '(?i)\b(?:SELECT|FROM|WHERE|GROUP|BY|HAVING|ORDER|ASC|DESC|TOP|DISTINCT|INTO|INSERT|UPDATE|DELETE|MERGE|USING|MATCHED|OUTPUT|VALUES|SET|DECLARE|CREATE|ALTER|DROP|TRUNCATE|TABLE|VIEW|PROCEDURE|PROC|FUNCTION|TRIGGER|INDEX|SCHEMA|DATABASE|SEQUENCE|TYPE|SYNONYM|CONSTRAINT|PRIMARY|FOREIGN|KEY|REFERENCES|UNIQUE|CHECK|DEFAULT|IDENTITY|CLUSTERED|NONCLUSTERED|ON|AS|JOIN|INNER|LEFT|RIGHT|FULL|OUTER|CROSS|APPLY|UNION|ALL|EXCEPT|INTERSECT|WITH|NOLOCK|OVER|PARTITION|ROWS|RANGE|PRECEDING|FOLLOWING|CURRENT|ROW|OFFSET|FETCH|NEXT|ONLY|PIVOT|UNPIVOT|FOR|AFTER|INSTEAD|OF|RETURNS|GRANT|REVOKE|DENY|TO|USE|PRINT|CURSOR|OPEN|CLOSE|DEALLOCATE|NOCOUNT|XACT_ABORT|ANSI_NULLS|QUOTED_IDENTIFIER|COLLATE|READONLY|OUT|OUTPUT)\b'
+      scope: keyword.other.tsql
+    - match: '(?i)\b(?:AND|OR|NOT|IN|IS|LIKE|BETWEEN|EXISTS|ANY|SOME)\b'
+      scope: keyword.operator.logical.tsql
+    - match: '(?i)\bNULL\b'
+      scope: constant.language.null.tsql
+    - match: '(?i)\b(?:bigint|int|smallint|tinyint|bit|decimal|numeric|money|smallmoney|float|real|date|datetime|datetime2|datetimeoffset|smalldatetime|time|char|varchar|nchar|nvarchar|text|ntext|binary|varbinary|image|uniqueidentifier|xml|sql_variant|rowversion|timestamp|hierarchyid|geography|geometry|sysname|max)\b'
+      scope: storage.type.tsql
+    - match: '(?i)\b(?:COUNT|SUM|AVG|MIN|MAX|ISNULL|COALESCE|NULLIF|CAST|CONVERT|TRY_CAST|TRY_CONVERT|GETDATE|GETUTCDATE|SYSDATETIME|DATEADD|DATEDIFF|DATEPART|DATENAME|EOMONTH|FORMAT|LEN|DATALENGTH|LEFT|RIGHT|SUBSTRING|CHARINDEX|PATINDEX|REPLACE|STUFF|LTRIM|RTRIM|TRIM|UPPER|LOWER|CONCAT|CONCAT_WS|STRING_AGG|STRING_SPLIT|ROW_NUMBER|RANK|DENSE_RANK|NTILE|LAG|LEAD|FIRST_VALUE|LAST_VALUE|NEWID|SCOPE_IDENTITY|OBJECT_ID|IIF|CHOOSE|ABS|ROUND|FLOOR|CEILING|POWER|SQRT|JSON_VALUE|JSON_QUERY|OPENJSON|ISJSON)(?=\s*\()'
+      scope: support.function.tsql
+    - match: '\b0x[0-9A-Fa-f]*\b'
+      scope: constant.numeric.hex.tsql
+    - match: '\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b'
+      scope: constant.numeric.tsql
+    - match: '[-+*/%=<>!&|^~]'
+      scope: keyword.operator.tsql
+    - match: '[;,.()]'
+      scope: punctuation.tsql
+
+  comments:
+    - match: '--'
+      scope: punctuation.definition.comment.tsql
+      push:
+        - meta_scope: comment.line.double-dash.tsql
+        - match: '$\n?'
+          pop: true
+    - match: '/\*'
+      scope: punctuation.definition.comment.begin.tsql
+      push: block-comment
+
+  # T-SQL block comments nest.
+  block-comment:
+    - meta_scope: comment.block.tsql
+    - match: '/\*'
+      push: block-comment
+    - match: '\*/'
+      scope: punctuation.definition.comment.end.tsql
+      pop: true
+
+  strings:
+    - match: "[Nn]?'"
+      scope: punctuation.definition.string.begin.tsql
+      push:
+        - meta_scope: string.quoted.single.tsql
+        - match: "''"
+          scope: constant.character.escape.tsql
+        - match: "'"
+          scope: punctuation.definition.string.end.tsql
+          pop: true
+
+  bracketed-identifier:
+    - meta_scope: variable.other.quoted.tsql
+    - match: '\]\]'
+      scope: constant.character.escape.tsql
+    - match: '\]'
+      scope: punctuation.definition.identifier.end.tsql
+      pop: true
+
+  quoted-identifier:
+    - meta_scope: variable.other.quoted.tsql
+    - match: '""'
+      scope: constant.character.escape.tsql
+    - match: '"'
+      scope: punctuation.definition.identifier.end.tsql
+      pop: true
