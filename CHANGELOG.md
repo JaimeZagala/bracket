@@ -32,3 +32,4 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - Corregido: al cerrar la ventana minimizada se guardaba una ventana diminuta en (0, 0) y la sesión no se guardaba.
 - Corregido: al abrir Bracket con la ventana maximizada se veía la ventana en negro un momento antes de la interfaz. Además, «Cargando…» solo aparece si la carga dura más de 200 ms, para que no destelle con ficheros normales.
 - Al restaurar la sesión solo se lee la pestaña activa (y las que tienen cambios sin guardar); las demás se leen al activarlas. Con dos ficheros grandes en pestañas inactivas, el arranque pasa de 226 MB a 47 MB de memoria.
+- Resaltado de sintaxis para C#, Razor, CSS, T-SQL, JSON y XML (syntect, en un hilo por documento). Al escribir no parpadean las demás líneas y, si la edición no cambia la estructura del código, solo se recalcula lo necesario. Los ficheros de más de 16 MB y las líneas de más de 20.000 caracteres se muestran sin colores.

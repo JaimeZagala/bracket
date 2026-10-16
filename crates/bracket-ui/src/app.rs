@@ -19,6 +19,7 @@ use bracket_session::{
     requests,
 };
 use bracket_syntax::LanguageRegistry;
+use bracket_syntax::highlight::MAX_HIGHLIGHT_BYTES;
 use eframe::egui::{self, Id, Key, KeyboardShortcut, Modifiers, ViewportCommand};
 
 use crate::dialogs;
@@ -28,7 +29,7 @@ use crate::fonts::{self, Fallback, FontSource, LoadedFallback};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
 use crate::session::{self, SessionKeeper};
-use crate::tabs::{self, Loaded, Loading, Tab, TabAction};
+use crate::tabs::{self, Loaded, Loading, Tab, TabAction, TabHighlight};
 use crate::{Launch, RestoredSession};
 
 /// How the window starts.
@@ -675,6 +676,7 @@ impl BracketApp {
             match loading.rx.try_recv() {
                 Ok(Ok(Loaded { doc, stamp })) => {
                     tab.doc = doc;
+                    tab.highlight = None;
                     tab.disk = DiskWatch::synced(stamp);
                     tab.view.reset();
                     if let Some(line) = top_line {
@@ -703,6 +705,11 @@ impl BracketApp {
                         failed.push(tab.id);
                     }
                 }
+            }
+        }
+        for tab in &mut self.tabs {
+            if tab.loading.is_none() && tab.unloaded.is_none() && tab.highlight.is_none() {
+                start_highlight(tab, &self.languages, ctx);
             }
         }
         // A tab opened for a file that could not be read has nothing to show.
@@ -780,6 +787,8 @@ impl BracketApp {
             let tab = &mut self.tabs[index];
             tab.doc.set_path(path);
             tab.refresh_language(&self.languages);
+            // The language may have changed: highlighting starts again on the next frame.
+            tab.highlight = None;
         }
         let tab = &mut self.tabs[index];
         match tab.doc.save_request() {
@@ -853,6 +862,8 @@ impl BracketApp {
             let tab = &mut self.tabs[index];
             tab.doc.set_path(path);
             tab.refresh_language(&self.languages);
+            // The language may have changed: highlighting starts again on the next frame.
+            tab.highlight = None;
             self.start_saving(ctx, index);
         }
     }
@@ -1285,7 +1296,18 @@ impl eframe::App for BracketApp {
                     let name = tab.title(self.texts);
                     notice_action = disk::notice_bar(ui, notice, &name, self.texts);
                 }
-                missing_glyph = tab.view.show(ui, &mut tab.doc).missing_glyph;
+                let Tab {
+                    view,
+                    doc,
+                    highlight,
+                    ..
+                } = tab;
+                let highlights = highlight.as_mut().and_then(TabHighlight::current);
+                let output = view.show(ui, doc, highlights);
+                if let Some(highlight) = highlight {
+                    highlight.follow(doc, output.visible_lines);
+                }
+                missing_glyph = output.missing_glyph;
             }
         });
         if let Some(action) = notice_action {
@@ -1301,6 +1323,20 @@ impl eframe::App for BracketApp {
 
         self.run_probe(&ctx);
     }
+}
+
+/// Starts highlighting a tab if its language has a grammar and the text is not too big.
+fn start_highlight(tab: &mut Tab, languages: &LanguageRegistry, ctx: &egui::Context) {
+    let Some(language) = tab.language.as_deref().and_then(|id| languages.get(id)) else {
+        return;
+    };
+    if tab.doc.buffer.text().len_bytes() > MAX_HIGHLIGHT_BYTES {
+        return;
+    }
+    let ctx = ctx.clone();
+    tab.highlight = Some(TabHighlight::start(language.scope.clone(), move || {
+        ctx.request_repaint()
+    }));
 }
 
 /// The folder where other Bracket processes leave files for this one, and its watcher.

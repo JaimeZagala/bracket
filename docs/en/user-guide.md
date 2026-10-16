@@ -44,6 +44,14 @@ When Bracket closes it saves the session: the open tabs, which one was active, t
 - If the session could not be written when exiting, Bracket asks what to do with the unsaved changes, as before.
 - The window comes back to the position and size it had, and maximized if it was (kept in `window.ron`, next to `session.toml`). If its monitor is no longer connected, it opens on a visible one. The first time it opens centered.
 
+## Syntax highlighting
+
+C#, Razor (`.razor`, `.cshtml`), CSS, T-SQL (`.sql`), JSON and XML files (also `.xsig`, `.config`, `.csproj`...) are shown in colour, matching their tab's badge. Highlighting is computed in the background: when a long file opens, what is in view is coloured first.
+
+- Files over 16 MB and lines over 20,000 characters (minified JSON, for example) are shown without colours, so the editor stays fast.
+- In Razor, directives (`@page`, `@using`...), `@* *@` comments, expressions (`@Model.Name`, `@(a + b)`) and the C# in `@{ }` and `@code { }` are coloured. HTML inside code blocks is not recognised yet.
+- The colour theme is fixed (light) for now; themes come in a later step.
+
 ## Changes on disk
 
 Bracket watches open files. If another program changes them while they are open:

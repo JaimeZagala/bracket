@@ -33,7 +33,7 @@ fn frame(ctx: &egui::Context, view: &mut EditorView, doc: &mut Document) -> usiz
     };
     let output = ctx.run_ui(input, |ui| {
         egui::CentralPanel::default().show(ui, |ui| {
-            view.show(ui, doc);
+            view.show(ui, doc, None);
         });
     });
     let shapes = output.shapes.len();

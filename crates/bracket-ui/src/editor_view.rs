@@ -11,8 +11,9 @@ use bracket_core::movement::{self, Motion};
 use bracket_core::{Document, Selection, Selections};
 
 use crate::fonts::Fallback;
+use bracket_syntax::{Highlights, Span};
 use eframe::egui::output::IMEOutput;
-use eframe::egui::text::{CCursor, Galley};
+use eframe::egui::text::{CCursor, Galley, LayoutJob, TextFormat};
 use eframe::egui::{
     self, Align2, Color32, Event, EventFilter, FontId, IMEPurpose, Id, ImeEvent, Key, Modifiers,
     Pos2, Rect, ScrollArea, Sense, Ui, Vec2, pos2, vec2,
@@ -25,6 +26,8 @@ const DEFAULT_FONT_SIZE: f32 = 14.0;
 pub struct ViewOutput {
     /// A visible character that no loaded font can draw (the app may load a fallback font).
     pub missing_glyph: Option<char>,
+    /// Lines painted in this frame.
+    pub visible_lines: std::ops::Range<usize>,
 }
 
 pub struct EditorView {
@@ -118,7 +121,13 @@ impl EditorView {
         };
     }
 
-    pub fn show(&mut self, ui: &mut Ui, doc: &mut Document) -> ViewOutput {
+    /// Paints the document and handles input. `highlights` colours the lines it covers.
+    pub fn show(
+        &mut self,
+        ui: &mut Ui,
+        doc: &mut Document,
+        highlights: Option<&Highlights>,
+    ) -> ViewOutput {
         let mut output = ViewOutput::default();
         let font = FontId::monospace(self.font_size);
         let (row_height, char_width) =
@@ -167,7 +176,15 @@ impl EditorView {
             let first = ((viewport.min.y / row_height).floor().max(0.0) as usize).min(line_count);
             let last = ((viewport.max.y / row_height).ceil().max(0.0) as usize).min(line_count);
             self.top_line = first;
-            output.missing_glyph = self.paint(ui, doc, &layout, first..last, response.has_focus());
+            output.visible_lines = first..last;
+            output.missing_glyph = self.paint(
+                ui,
+                doc,
+                &layout,
+                first..last,
+                response.has_focus(),
+                highlights,
+            );
 
             let caret_rect = self.caret_rect(ui, doc, &layout);
             if response.has_focus() {
@@ -362,6 +379,7 @@ impl EditorView {
         layout: &Layout<'_>,
         lines: std::ops::Range<usize>,
         has_focus: bool,
+        highlights: Option<&Highlights>,
     ) -> Option<char> {
         let mut missing_glyph = None;
         let painter = ui.painter();
@@ -374,6 +392,7 @@ impl EditorView {
         let text = doc.buffer.text();
         let selections = doc.buffer.selections();
         let primary_head = selections.primary().head;
+        let version = doc.buffer.version();
 
         for line in lines {
             let y = layout.origin.y + line as f32 * m.row_height;
@@ -398,8 +417,17 @@ impl EditorView {
                 missing_glyph =
                     first_missing_glyph(ui, &m.font, &display.text, &self.fallbacks_requested);
             }
-            let galley = ui
-                .fonts_mut(|f| f.layout_no_wrap(display.text.clone(), m.font.clone(), text_color));
+            let spans = highlights
+                .and_then(|h| h.spans(line, text, version))
+                .filter(|spans| !spans.is_empty());
+            let galley = match spans {
+                Some(spans) => ui.fonts_mut(|f| {
+                    f.layout_job(coloured_line(&display, spans, &m.font, text_color))
+                }),
+                None => ui.fonts_mut(|f| {
+                    f.layout_no_wrap(display.text.clone(), m.font.clone(), text_color)
+                }),
+            };
             self.max_line_width = self.max_line_width.max(galley.size().x);
             let text_origin = pos2(layout.origin.x + m.gutter_width, y + m.text_offset);
             let x_of = |pos: usize| text_origin.x + display.x_of(&galley, pos - line_start);
@@ -579,6 +607,48 @@ impl DisplayLine {
     }
 }
 
+/// The displayed line as a layout job with the highlighting colours. Spans are in buffer
+/// chars; the line's map turns them into displayed chars (tabs are expanded, the IME
+/// composition is spliced in).
+fn coloured_line(
+    display: &DisplayLine,
+    spans: &[Span],
+    font: &FontId,
+    default: Color32,
+) -> LayoutJob {
+    let text = &display.text;
+    let bytes: Vec<usize> = text
+        .char_indices()
+        .map(|(byte, _)| byte)
+        .chain(std::iter::once(text.len()))
+        .collect();
+    let last = display.map.len() - 1;
+    let to_byte = |offset: usize| bytes[display.map[offset.min(last)].min(bytes.len() - 1)];
+    let format = |color| TextFormat {
+        font_id: font.clone(),
+        color,
+        ..Default::default()
+    };
+    let mut job = LayoutJob::default();
+    let mut at = 0;
+    for span in spans {
+        let (start, end) = (to_byte(span.start), to_byte(span.end));
+        if start < at || start >= end {
+            continue;
+        }
+        if at < start {
+            job.append(&text[at..start], 0.0, format(default));
+        }
+        let [r, g, b] = span.color;
+        job.append(&text[start..end], 0.0, format(Color32::from_rgb(r, g, b)));
+        at = end;
+    }
+    if at < text.len() {
+        job.append(&text[at..], 0.0, format(default));
+    }
+    job
+}
+
 /// How far to move text down so its glyphs sit in the middle of the row. egui draws glyphs at
 /// the top of the row and leaves the font's line gap below them, which made selections and the
 /// caret, which span the whole row, look shifted down from the text. Pixel aligned.
@@ -709,7 +779,7 @@ mod tests {
         };
         let mut output = ctx.run_ui(input, |ui| {
             egui::CentralPanel::default().show(ui, |ui| {
-                view.show(ui, doc);
+                view.show(ui, doc, None);
             });
         });
         // There is no renderer to upload font textures to; egui asserts they are handled.

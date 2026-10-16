@@ -44,6 +44,14 @@ Al cerrar Bracket se guarda la sesión: las pestañas abiertas, cuál estaba act
 - Si la sesión no se pudiera escribir al salir, Bracket pregunta qué hacer con los cambios sin guardar, como antes.
 - La ventana vuelve a la posición y el tamaño que tenía, y maximizada si lo estaba (se guarda en `window.ron`, junto a `session.toml`). Si su monitor ya no está conectado, se abre en uno visible. La primera vez se abre centrada.
 
+## Resaltado de sintaxis
+
+Los ficheros de C#, Razor (`.razor`, `.cshtml`), CSS, T-SQL (`.sql`), JSON y XML (también `.xsig`, `.config`, `.csproj`...) se muestran con colores, según la insignia de su pestaña. El resaltado se calcula en segundo plano: al abrir un fichero largo primero se colorea lo que está a la vista.
+
+- Los ficheros de más de 16 MB y las líneas de más de 20.000 caracteres (por ejemplo, JSON minificado) se muestran sin colores, para que el editor siga siendo rápido.
+- En Razor se colorean las directivas (`@page`, `@using`...), los comentarios `@* *@`, las expresiones (`@Model.Nombre`, `@(a + b)`) y el C# de `@{ }` y `@code { }`. El HTML dentro de los bloques de código todavía no se reconoce.
+- Por ahora el tema de colores es fijo (claro); los temas llegan en un paso posterior.
+
 ## Cambios en disco
 
 Bracket vigila los ficheros abiertos. Si otro programa los cambia mientras están abiertos:

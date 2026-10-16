@@ -125,6 +125,7 @@ Conclusiones:
 | Paso 10: recarga por cambios en disco | 5.992.960 B | +120 KB | `notify` (y `walkdir`; `windows-sys` 0.60 ya estaba en el árbol) y el seguimiento de ficheros. Arranque intercalado frente al paso 9 (15 rondas): 119,6 frente a 133,6 ms |
 | Paso 11: instancia única y línea de comandos | 6.055.424 B | +61 KB | Argumentos, ayuda en catálogos, mensaje de `rfd`, bloqueo y buzón. Arranque intercalado frente al paso 10 (15 rondas): 133,1 frente a 131,0 ms (ruido). Entregar ficheros a la instancia abierta: la segunda termina en 110–230 ms |
 | Paso 11: carga diferida de la sesión | — | — | Sesión con una pestaña pequeña activa y dos inactivas de 100 y 52 MB, memoria privada a los 3 s: 226 MB antes, 47 MB con carga diferida (221 MB al activar la de 100 MB) |
+| Paso 12: resaltado con syntect | 8.043.520 B | +1.988 KB | Paquete de gramáticas (344 KB comprimidos) y código: motor de regex en Rust puro (`fancy-regex`, `regex-automata` con tablas Unicode), analizador de syntect, descompresión y deserialización. Arranque intercalado frente al paso 11 (15 rondas): 122,1 frente a 125,1 ms (las gramáticas se cargan en el hilo del resaltador) |
 
 Paso 5, arranque intercalado frente al paso 4 (15 rondas): 144,9 ms frente a 148,6 ms, dentro del ruido. Ese día las medianas absolutas rondaron 145–149 ms con el equipo cargado: el margen frente a los 150 ms es mínimo.
 
@@ -143,3 +144,13 @@ egui ocupa unas dos veces el tamaño de cada fuente cargada. Las fuentes de resp
 Arranque, comparado de forma intercalada con el exe del paso 3 (`scripts/compare-startup.ps1`, 20 rondas, carga de fondo entre el 3 y el 29 %): paso 3 145,2 ms, paso 4 139,7 ms. Sin regresión; las mediciones sueltas de este día oscilaron entre 130 y 156 ms según la carga del equipo, por eso las regresiones se comprueban con ejecuciones intercaladas.
 
 Benchmarks de pintado tras el cambio de fuente (Consolas en lugar de Hack): frame estable 83 µs, frame con scroll 420 µs. Una primera versión de la detección de glifos ausentes subió el frame con scroll a 2 ms al preguntar en cada frame por caracteres sin fuente; ahora solo se revisan caracteres no ASCII y se deja de revisar un tipo cuando ya se pidió su respaldo.
+
+### Paso 12: benchmarks de resaltado (`cargo bench -p bracket-syntax`)
+
+| Benchmark | Tiempo (mediana) |
+|---|---|
+| Primera pasada sobre 10.000 líneas de C# | 1,12 s (≈110 µs por línea) |
+| Página en la línea 5.000 tras escribir en un comentario de la línea 12 (se reutilizan los puntos de control) | 27 ms (547 ms sin reutilizarlos) |
+| Página en la línea 5.000 ya resaltada (desde el punto de control más cercano) | 6,8 ms |
+
+El coste por línea es el del motor de regex en Rust puro; como se resalta primero lo visible, la primera pantalla de un fichero se colorea en unos 15 ms.

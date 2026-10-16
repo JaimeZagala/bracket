@@ -1,6 +1,7 @@
 //! Open documents as tabs: the tab model and the tab bar, with a language badge on each tab.
 
 use std::io;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
@@ -9,7 +10,7 @@ use bracket_core::Document;
 use bracket_core::document::{DiskStamp, SaveError};
 use bracket_core::encoding::TextEncoding;
 use bracket_session::SessionTab;
-use bracket_syntax::{Badge, LanguageRegistry};
+use bracket_syntax::{Badge, HighlightWorker, Highlights, LanguageRegistry};
 use eframe::egui::{
     self, Color32, FontId, Rect, Sense, Stroke, StrokeKind, TextStyle, Ui, WidgetInfo, WidgetType,
     pos2, vec2,
@@ -63,6 +64,8 @@ pub struct Tab {
     pub saving: Option<Receiver<SaveOutcome>>,
     /// The link with the file on disk: its stamp, pending checks and notice.
     pub disk: DiskWatch,
+    /// Syntax highlighting, for documents in a language with a grammar and not too big.
+    pub highlight: Option<TabHighlight>,
     /// A tab of the previous session that has not been read yet: it is read when it is first
     /// activated. Only tabs without unsaved changes wait like this.
     pub unloaded: Option<SessionTab>,
@@ -81,6 +84,7 @@ impl Tab {
             saving: None,
             disk: DiskWatch::default(),
             unloaded: None,
+            highlight: None,
         }
     }
 
@@ -118,6 +122,50 @@ impl Tab {
             .path()
             .and_then(|path| registry.for_path(path))
             .map(|language| language.id.clone());
+    }
+}
+
+/// A tab's highlighting worker and what it last sent.
+pub struct TabHighlight {
+    worker: HighlightWorker,
+    latest: Option<Highlights>,
+    /// Version and lines of the last request.
+    requested: Option<(u64, Range<usize>)>,
+}
+
+impl TabHighlight {
+    pub fn start(scope: String, notify: impl Fn() + Send + 'static) -> Self {
+        Self {
+            worker: HighlightWorker::start(scope, notify),
+            latest: None,
+            requested: None,
+        }
+    }
+
+    /// The newest highlighting received.
+    pub fn current(&mut self) -> Option<&Highlights> {
+        if let Some(new) = self.worker.latest() {
+            self.latest = Some(new);
+        }
+        self.latest.as_ref()
+    }
+
+    /// Asks for the visible lines (with a page above and below, so scrolling a little needs no
+    /// new request) when they or the text changed.
+    pub fn follow(&mut self, doc: &Document, visible: Range<usize>) {
+        let version = doc.buffer.version();
+        if let Some((requested_version, lines)) = &self.requested
+            && *requested_version == version
+            && lines.start <= visible.start
+            && visible.end <= lines.end
+        {
+            return;
+        }
+        let margin = visible.len().max(1);
+        let lines = visible.start.saturating_sub(margin)..visible.end + margin;
+        self.worker
+            .request(version, doc.buffer.text().clone(), lines.clone());
+        self.requested = Some((version, lines));
     }
 }
 

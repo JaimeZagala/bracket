@@ -9,7 +9,7 @@ Status: Phase 0. This document describes the agreed structure; each section stat
 | Crate | Responsibility | Depends on (workspace) | Status |
 |---|---|---|---|
 | `bracket-core` | Buffer (ropey), multiple selections, transactional undo/redo, cursor movement, encoding, line endings, document model. No UI and no Windows APIs. | — | Phase 0: buffer, selections, transactions, history, movement and UTF-8 document |
-| `bracket-syntax` | Loading of built-in and external languages, incremental line-based highlighting with cache, themes. | `bracket-core` (planned) | Phase 1: language registry (the six built-in languages, extensions and badge) |
+| `bracket-syntax` | Loading of built-in and external languages, incremental line-based highlighting with cache, themes. | `bracket-core` | Phase 1: language registry (the six built-in languages, extensions, badge and grammar) and highlighting with syntect |
 | `bracket-index` | Project walking, symbol extraction (tree-sitter and regex), incremental index, fuzzy search, references by name. | `bracket-core` (planned) | Empty |
 | `bracket-search` | Cancellable regex find and replace in a file and across a folder, with streamed results. | `bracket-core` (planned) | Empty |
 | `bracket-session` | TOML configuration, portable mode, recoverable session, recent files, file watching, command registry. | `bracket-core` | Phase 1: paths (portable mode or `%APPDATA%`), TOML configuration, recoverable session and file watching |
@@ -86,6 +86,14 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 - eframe stores a tiny window at (0, 0) if it saves while minimized (on exit or in the autosave). `App::save` puts back the last value stored with the window not minimized; the autosave runs every 5 s (eframe only writes when something changed).
 - Opening maximized showed a black frame: eframe paints the first one while the window is hidden and Windows drops it when maximizing the window as it appears. eframe's `window_builder` hook creates the window not maximized but with the maximized size eframe stored, and the app maximizes it on the second frame, already on screen.
 - With the measurement probes there is no single instance: every run is on its own.
+
+## Highlighting (Phase 1)
+
+- Grammars: syntect's (from sublimehq/Packages) for C#, CSS, JSON and XML, and two of our own in `crates/bracket-syntax/grammars/` for Razor and T-SQL (`.sublime-syntax` version 1, what syntect understands; Sublime Text 4 grammars with `extends` do not work). Razor puts the Razor constructs on top of HTML with `with_prototype`, like the "HTML (ASP)" grammar, and embeds the C# grammar's `code_block_in` context.
+- `build.rs` compiles the grammars into one bundle embedded in the exe (344 KB compressed) and checks that no reference is left unresolved. syntect's whole bundle is kept (75 languages): its grammars refer to each other by position and cannot be taken out one by one. The bundle is loaded the first time it is needed, on the highlighter thread (≈1 ms; syntect compiles each regex when it is first used).
+- Engine (`highlight.rs`, no egui): it keeps the parser state every 128 lines. After an edit, the checkpoints above the first changed line remain right. If the number of lines did not change, the ones below are kept: when parsing reaches one with the same state (and below the last changed line), everything below is right again.
+- Each highlighted tab has its own thread (`HighlightWorker`). The UI asks for the visible lines plus a page above and below. The thread only serves the newest request, gives up a long one if another arrives (keeping the work done) and returns colour spans per line. Until the new result arrives, lines whose text did not change use the previous one.
+- The view builds one egui `LayoutJob` per line with those colours (egui caches the galleys).
 
 ## Changes on disk (Phase 1)
 

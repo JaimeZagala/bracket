@@ -32,3 +32,4 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Fixed: closing the window while minimized stored a tiny window at (0, 0) and did not save the session.
 - Fixed: opening Bracket with the window maximized showed a black window for a moment before the interface. Also, "Loading…" only appears if loading takes over 200 ms, so it does not flash for ordinary files.
 - Restoring the session only reads the active tab (and those with unsaved changes); the others are read when activated. With two big files in inactive tabs, startup memory goes from 226 MB to 47 MB.
+- Syntax highlighting for C#, Razor, CSS, T-SQL, JSON and XML (syntect, on one thread per document). Typing does not make the other lines flicker and, when an edit does not change the code's structure, only what is needed is computed again. Files over 16 MB and lines over 20,000 characters are shown without colours.

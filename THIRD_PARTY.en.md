@@ -22,6 +22,7 @@ Direct dependencies only; transitive ones will be reviewed with a license tool b
 | [rfd](https://crates.io/crates/rfd) | 0.17.2 | MIT | Native Open and Save As dialogs (Windows `IFileDialog`) in `bracket-ui` | +50 KB together with the File menu |
 | [windows-sys](https://crates.io/crates/windows-sys) | 0.61.2 | MIT OR Apache-2.0 | Calls to `ReplaceFileW` (saving that keeps attributes and permissions) and `AttachConsole`/`GetStdHandle` (`--help` output) in `bracket-app`; the same version was already in the tree through winit and winreg | +12 KB |
 | [notify](https://crates.io/crates/notify) | 8.2.0 | CC0-1.0 | Change notifications for open files (`ReadDirectoryChangesW`) in `bracket-session`; no default features (they only pick macOS backends). 9.0 is still a release candidate | +120 KB together with file following; no measurable startup effect |
+| [syntect](https://crates.io/crates/syntect) | 5.3.0 | MIT | Highlighting with Sublime Text grammars in `bracket-syntax`, with the pure Rust regex engine (`regex-fancy`, no C). At run time it only loads the compiled grammars; `build.rs` compiles them | +1.99 MB together with the grammar bundle (344 KB); no measurable startup effect (loaded on a thread at first use) |
 
 The BSD-3-Clause part of encoding_rs (WHATWG data tables) requires its copyright notice to be reproduced in binary distributions: it will be included in the third-party license file shipped with the installer and the zip (Phase 5).
 
@@ -36,7 +37,8 @@ Not included in the executable.
 
 ## Grammars and themes
 
-No grammars or themes are included yet.
-
 | Resource | Origin | License |
 |---|---|---|
+| C#, CSS, JSON, XML, HTML, JavaScript grammars and the rest of syntect's bundle | [sublimehq/Packages](https://github.com/sublimehq/Packages), through the bundle included in syntect 5.3.0 | Sublime HQ's own license: allows copying, using, modifying and distributing, without warranty and without requiring attribution (files with their own license follow it) |
+| Razor and T-SQL grammars (`crates/bracket-syntax/grammars/`) | Bracket's own | MIT OR Apache-2.0 |
+| InspiredGitHub colour theme | Included in syntect 5.3.0 ([InspiredGitHub.tmtheme](https://github.com/sethlopezme/InspiredGitHub.tmtheme)) | MIT |

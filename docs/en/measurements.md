@@ -125,6 +125,7 @@ Conclusions:
 | Step 10: reload on disk changes | 5,992,960 B | +120 KB | `notify` (and `walkdir`; `windows-sys` 0.60 was already in the tree) and file following. Interleaved startup against step 9 (15 rounds): 119.6 versus 133.6 ms |
 | Step 11: single instance and command line | 6,055,424 B | +61 KB | Arguments, help in the catalogs, `rfd` message, lock and inbox. Interleaved startup against step 10 (15 rounds): 133.1 versus 131.0 ms (noise). Handing files to the open instance: the second one exits in 110–230 ms |
 | Step 11: lazy session loading | — | — | Session with one small active tab and two inactive ones of 100 and 52 MB, private memory after 3 s: 226 MB before, 47 MB with lazy loading (221 MB after activating the 100 MB one) |
+| Step 12: highlighting with syntect | 8,043,520 B | +1,988 KB | Grammar bundle (344 KB compressed) and code: pure Rust regex engine (`fancy-regex`, `regex-automata` with Unicode tables), syntect parser, decompression and deserialisation. Interleaved startup against step 11 (15 rounds): 122.1 versus 125.1 ms (the grammars load on the highlighter thread) |
 
 Step 5, interleaved startup against step 4 (15 rounds): 144.9 ms versus 148.6 ms, within the noise. That day absolute medians were around 145–149 ms with a busy machine: the margin against 150 ms is minimal.
 
@@ -143,3 +144,13 @@ egui takes about twice the size of each loaded font. Fallback fonts are only loa
 Startup, compared with interleaved runs against the step 3 exe (`scripts/compare-startup.ps1`, 20 rounds, background load between 3 and 29 %): step 3 145.2 ms, step 4 139.7 ms. No regression; single measurements that day ranged from 130 to 156 ms depending on machine load, which is why regressions are checked with interleaved runs.
 
 Painting benchmarks after the font change (Consolas instead of Hack): steady frame 83 µs, scrolling frame 420 µs. A first version of missing-glyph detection raised the scrolling frame to 2 ms by asking about unsupported characters on every frame; now only non-ASCII characters are checked and a kind is no longer checked once its fallback was requested.
+
+### Step 12: highlighting benchmarks (`cargo bench -p bracket-syntax`)
+
+| Benchmark | Time (median) |
+|---|---|
+| First pass over 10,000 lines of C# | 1.12 s (≈110 µs per line) |
+| Page at line 5,000 after typing in a comment on line 12 (checkpoints reused) | 27 ms (547 ms without reusing them) |
+| Page at line 5,000 already highlighted (from the nearest checkpoint) | 6.8 ms |
+
+The cost per line is that of the pure Rust regex engine; since what is visible is highlighted first, a file's first screen is coloured in about 15 ms.

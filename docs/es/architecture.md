@@ -9,7 +9,7 @@ Estado: Fase 0. Este documento describe la estructura acordada; cada sección in
 | Crate | Responsabilidad | Depende de (workspace) | Estado |
 |---|---|---|---|
 | `bracket-core` | Buffer (ropey), selecciones múltiples, deshacer/rehacer por transacciones, movimiento de cursor, codificación, saltos de línea, modelo de documento. Sin UI ni APIs de Windows. | — | Fase 0: buffer, selecciones, transacciones, historial, movimiento y documento UTF-8 |
-| `bracket-syntax` | Carga de lenguajes integrados y externos, resaltado incremental por líneas con caché, temas. | `bracket-core` (previsto) | Fase 1: registro de lenguajes (los seis integrados, extensiones e insignia) |
+| `bracket-syntax` | Carga de lenguajes integrados y externos, resaltado incremental por líneas con caché, temas. | `bracket-core` | Fase 1: registro de lenguajes (los seis integrados, extensiones, insignia y gramática) y resaltado con syntect |
 | `bracket-index` | Recorrido de proyecto, extracción de símbolos (tree-sitter y regex), índice incremental, búsqueda difusa, referencias por nombre. | `bracket-core` (previsto) | Vacía |
 | `bracket-search` | Buscar y reemplazar con regex en fichero y carpeta, cancelable, con resultados en streaming. | `bracket-core` (previsto) | Vacía |
 | `bracket-session` | Configuración TOML, modo portable, sesión recuperable, recientes, vigilancia de ficheros, registro de comandos. | `bracket-core` | Fase 1: rutas (modo portable o `%APPDATA%`), configuración TOML, sesión recuperable y vigilancia de ficheros |
@@ -86,6 +86,14 @@ En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync
 - eframe guarda una ventana diminuta en (0, 0) si guarda estando minimizada (al salir o en el autoguardado). `App::save` repone el último valor guardado con la ventana sin minimizar; el autoguardado es cada 5 s (eframe solo escribe si algo cambió).
 - Abrir maximizada mostraba un fotograma negro: eframe pinta el primero con la ventana oculta y Windows lo descarta al maximizarla mientras aparece. El gancho `window_builder` de eframe crea la ventana sin maximizar pero con el tamaño maximizado que eframe guardó, y la app la maximiza en el segundo fotograma, ya en pantalla.
 - Con las sondas de medición no hay instancia única: cada ejecución es independiente.
+
+## Resaltado (Fase 1)
+
+- Gramáticas: las de syntect (de sublimehq/Packages) para C#, CSS, JSON y XML, y dos propias en `crates/bracket-syntax/grammars/` para Razor y T-SQL (formato `.sublime-syntax` versión 1, la que entiende syntect; las de Sublime Text 4 con `extends` no sirven). Razor monta las construcciones de Razor sobre HTML con `with_prototype`, como la gramática «HTML (ASP)», e incrusta el contexto `code_block_in` de la gramática de C#.
+- `build.rs` compila las gramáticas en un único paquete que se incrusta en el exe (344 KB comprimidos) y comprueba que ninguna referencia queda sin resolver. Se conserva el paquete completo de syntect (75 lenguajes): sus gramáticas se refieren unas a otras por posición y no se pueden sacar sueltas. El paquete se carga la primera vez que hace falta, en el hilo del resaltador (≈1 ms; syntect compila cada regex al usarla).
+- Motor (`highlight.rs`, sin egui): guarda el estado del analizador cada 128 líneas. Tras una edición, los puntos de control por encima de la primera línea cambiada siguen valiendo. Si el número de líneas no cambió, los de debajo se conservan: cuando el análisis llega a uno con el mismo estado (y por debajo de la última línea cambiada), todo lo de debajo vuelve a valer.
+- Cada pestaña resaltada tiene su hilo (`HighlightWorker`). La interfaz pide las líneas visibles más una página por arriba y otra por abajo. El hilo atiende solo la petición más reciente, abandona una larga si llega otra (conservando el trabajo hecho) y devuelve tramos de color por línea. Mientras llega el resultado nuevo, las líneas cuyo texto no cambió usan el anterior.
+- La vista construye un `LayoutJob` de egui por línea con esos colores (egui guarda en caché las galeradas).
 
 ## Cambios en disco (Fase 1)
 

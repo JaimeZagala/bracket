@@ -22,6 +22,7 @@ Solo las dependencias directas; las transitivas se revisarán con una herramient
 | [rfd](https://crates.io/crates/rfd) | 0.17.2 | MIT | Diálogos nativos de Abrir y Guardar como (`IFileDialog` de Windows) en `bracket-ui` | +50 KB junto con el menú Archivo |
 | [windows-sys](https://crates.io/crates/windows-sys) | 0.61.2 | MIT OR Apache-2.0 | Llamadas a `ReplaceFileW` (guardado que conserva atributos y permisos) y a `AttachConsole`/`GetStdHandle` (salida de `--help`) en `bracket-app`; la misma versión ya estaba en el árbol por winit y winreg | +12 KB |
 | [notify](https://crates.io/crates/notify) | 8.2.0 | CC0-1.0 | Avisos de cambios en los ficheros abiertos (`ReadDirectoryChangesW`) en `bracket-session`; sin features por defecto (solo eligen backends de macOS). La 9.0 aún es candidata | +120 KB junto con el seguimiento de ficheros; sin efecto medible en el arranque |
+| [syntect](https://crates.io/crates/syntect) | 5.3.0 | MIT | Resaltado con gramáticas de Sublime Text en `bracket-syntax`, con el motor de regex en Rust puro (`regex-fancy`, sin C). En tiempo de ejecución solo carga las gramáticas compiladas; el `build.rs` las compila | +1,99 MB junto con el paquete de gramáticas (344 KB); sin efecto medible en el arranque (se carga en un hilo al primer uso) |
 
 La parte BSD-3-Clause de encoding_rs (tablas de datos de WHATWG) exige reproducir su aviso de copyright en la distribución binaria: se incluirá en el fichero de licencias de terceros que acompañe al instalador y al zip (Fase 5).
 
@@ -36,7 +37,8 @@ No se incluyen en el ejecutable.
 
 ## Gramáticas y temas
 
-Todavía no hay gramáticas ni temas incluidos.
-
 | Recurso | Origen | Licencia |
 |---|---|---|
+| Gramáticas de C#, CSS, JSON, XML, HTML, JavaScript y el resto del paquete de syntect | [sublimehq/Packages](https://github.com/sublimehq/Packages), a través del paquete incluido en syntect 5.3.0 | Licencia propia de Sublime HQ: permite copiar, usar, modificar y distribuir, sin garantía y sin exigir atribución (los ficheros con licencia propia se rigen por ella) |
+| Gramáticas de Razor y T-SQL (`crates/bracket-syntax/grammars/`) | Propias de Bracket | MIT OR Apache-2.0 |
+| Tema de colores InspiredGitHub | Incluido en syntect 5.3.0 ([InspiredGitHub.tmtheme](https://github.com/sethlopezme/InspiredGitHub.tmtheme)) | MIT |
