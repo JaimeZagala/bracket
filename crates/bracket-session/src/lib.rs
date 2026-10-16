@@ -6,4 +6,4 @@ pub mod session;
 
 pub use config::{Config, ConfigWarning, Language, LoadedConfig};
 pub use paths::{Mode, Paths};
-pub use session::{Session, SessionFiles, SessionTab, Unsaved, WindowState};
+pub use session::{Session, SessionFiles, SessionTab, Unsaved};

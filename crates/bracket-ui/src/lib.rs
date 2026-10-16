@@ -31,8 +31,9 @@ pub struct Launch {
     /// The previous session and where to keep this one. `None` while measuring, so that
     /// measurements neither depend on the user's session nor change it.
     pub session: Option<RestoredSession>,
-    /// Window size (and whether it was maximized) from the previous session, or the default.
-    pub window: bracket_session::WindowState,
+    /// Where eframe keeps the window position and size. `None` while measuring, so every
+    /// measurement starts with the default window.
+    pub window_file: Option<PathBuf>,
 }
 
 /// The session left by the previous run.
@@ -43,23 +44,26 @@ pub struct RestoredSession {
     pub error: Option<String>,
 }
 
-/// Window size when there is no session.
-pub const DEFAULT_WINDOW: bracket_session::WindowState = bracket_session::WindowState {
-    width: 1000.0,
-    height: 700.0,
-    maximized: false,
-};
-
 /// Opens the main window and runs the event loop until it closes.
 pub fn run(launch: Launch, probe: Option<Probe>) -> eframe::Result {
+    let saved_window = launch.window_file.as_ref().is_some_and(|f| f.is_file());
+    // eframe always needs a file; while measuring it points to one that is never written.
+    let window_file = launch
+        .window_file
+        .clone()
+        .unwrap_or_else(|| std::env::temp_dir().join("bracket-measure-window.ron"));
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Bracket")
-            .with_inner_size([launch.window.width, launch.window.height])
-            .with_maximized(launch.window.maximized || measure::maximized_requested())
+            .with_inner_size([1000.0, 700.0])
+            .with_maximized(measure::maximized_requested())
             .with_drag_and_drop(true),
-        // Centered on the monitor, the window never opens partly off screen.
-        centered: true,
+        // eframe restores the saved position and size, moving the window onto a connected
+        // monitor if needed. It applies `centered` after that, so it is only used the first
+        // time: then the window opens centered and never partly off screen.
+        centered: !saved_window,
+        persist_window: launch.window_file.is_some(),
+        persistence_path: Some(window_file),
         ..Default::default()
     };
     eframe::run_native(

@@ -16,6 +16,8 @@ pub const CONFIG_FILE: &str = "config.toml";
 pub const SESSION_FILE: &str = "session.toml";
 /// Folder for the text of documents with unsaved changes, inside the data folder.
 pub const BACKUP_DIR: &str = "backups";
+/// Where eframe keeps the window position and size, inside the data folder.
+pub const WINDOW_FILE: &str = "window.ron";
 /// Folder created inside `%APPDATA%` in installed mode.
 pub const APP_DIR_NAME: &str = "Bracket";
 
@@ -54,6 +56,10 @@ impl Paths {
 
     pub fn config_file(&self) -> PathBuf {
         self.data_dir.join(CONFIG_FILE)
+    }
+
+    pub fn window_file(&self) -> PathBuf {
+        self.data_dir.join(WINDOW_FILE)
     }
 
     pub fn session_files(&self) -> SessionFiles {

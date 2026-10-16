@@ -68,10 +68,11 @@ En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync
 
 ## Sesión (Fase 1)
 
-- `bracket-session` (`session.rs`) define el formato: `session.toml` con las pestañas (ruta, codificación forzada, selección principal, primera línea visible) y el tamaño de la ventana, y un fichero UTF-8 por documento modificado en `backups/`. Guardar escribe primero las copias y después `session.toml`, ambos de forma atómica, así que la lista nunca apunta a una copia a medias.
+- `bracket-session` (`session.rs`) define el formato: `session.toml` con las pestañas (ruta, codificación forzada, selección principal, primera línea visible) y un fichero UTF-8 por documento modificado en `backups/`. Guardar escribe primero las copias y después `session.toml`, ambos de forma atómica, así que la lista nunca apunta a una copia a medias.
 - Solo se borran copias que la sesión actual ya no usa y que son "propias": las restauradas al arrancar o las escritas en esta ejecución. Los nombres llevan la hora de arranque y el PID, así que una ejecución nunca sobrescribe las copias de otra. Una sesión dañada se aparta como `session.damaged.toml` y sus copias no se tocan.
 - `bracket-ui` (`session.rs`) restaura cada pestaña en un hilo: lee el fichero y aplica encima el texto guardado como un único paso deshacible (`Document::restore_unsaved`), así que deshacer vuelve al texto del disco. `SessionKeeper` guarda en un hilo 2 s después del último cambio (detectado con un hash del estado) y reescribe una copia solo si su texto cambió. Al cerrar la ventana guarda en el hilo de interfaz; si falla, vuelve a preguntar por los cambios sin guardar.
-- `bracket-app` lee la sesión antes de crear la ventana (30 µs con 10 pestañas) para darle su tamaño. La posición no se guarda: la ventana se abre centrada y nunca queda en un monitor desconectado. Recordar la posición con la persistencia de eframe costaría 551 KB (serde y ron).
+- `bracket-app` lee la sesión al arrancar (30 µs con 10 pestañas).
+- La ventana (posición, tamaño, maximizada) la guarda eframe con su feature `persistence` en `window.ron`, en la carpeta de datos (también en modo portable). eframe la devuelve a un monitor conectado si el suyo ya no está y tiene en cuenta el escalado de cada pantalla. Solo se guarda la ventana, no el estado de los widgets de egui. eframe aplica `centered` después de la posición guardada, así que solo se activa cuando aún no existe `window.ron`. Coste: 547 KB (serde y ron).
 - Con las sondas de medición activas no se lee ni se escribe la sesión, para que las medidas no dependan de la sesión del usuario ni la cambien.
 
 ## Fuentes (Fase 1)

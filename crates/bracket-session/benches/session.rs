@@ -4,7 +4,6 @@ use std::path::PathBuf;
 
 use bracket_core::LineEnding;
 use bracket_core::encoding::TextEncoding;
-use bracket_session::WindowState;
 use bracket_session::session::{self, Session, SessionTab, Unsaved};
 use criterion::{Criterion, criterion_group, criterion_main};
 
@@ -25,15 +24,7 @@ fn ten_tabs() -> String {
             ..SessionTab::default()
         })
         .collect();
-    session::to_toml(&Session {
-        tabs,
-        active: 3,
-        window: Some(WindowState {
-            width: 1200.0,
-            height: 800.0,
-            maximized: false,
-        }),
-    })
+    session::to_toml(&Session { tabs, active: 3 })
 }
 
 fn parse(c: &mut Criterion) {

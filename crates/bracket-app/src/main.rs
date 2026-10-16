@@ -47,10 +47,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             error,
         }
     });
-    let window = session
-        .as_ref()
-        .and_then(|s| s.previous.window)
-        .unwrap_or(bracket_ui::DEFAULT_WINDOW);
+    let window_file = probe.is_none().then(|| paths.window_file());
 
     let launch = bracket_ui::Launch {
         files,
@@ -59,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         fonts,
         replacer: Arc::new(WindowsReplacer),
         session,
-        window,
+        window_file,
     };
     bracket_ui::run(launch, probe)?;
     Ok(())

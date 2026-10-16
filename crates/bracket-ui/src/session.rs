@@ -17,7 +17,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use bracket_core::document::{self, Document, LineEnding};
 use bracket_core::{Selection, Selections};
 use bracket_session::session::{self, Snapshot};
-use bracket_session::{Session, SessionFiles, SessionTab, Unsaved, WindowState};
+use bracket_session::{Session, SessionFiles, SessionTab, Unsaved};
 use eframe::egui;
 
 use crate::tabs::Tab;
@@ -111,18 +111,12 @@ impl SessionKeeper {
 
     /// Call every frame. Writes the session on a worker thread once it has been stable for a
     /// moment. Returns the error of a failed save, if one has just finished.
-    pub fn tick(
-        &mut self,
-        ctx: &egui::Context,
-        tabs: &[Tab],
-        active: usize,
-        window: Option<WindowState>,
-    ) -> Option<String> {
+    pub fn tick(&mut self, ctx: &egui::Context, tabs: &[Tab], active: usize) -> Option<String> {
         let error = self.poll();
         if self.saving.is_some() {
             return error;
         }
-        let signature = signature(tabs, active, window);
+        let signature = signature(tabs, active);
         if self.last_saved == Some(signature) {
             self.changed_at = None;
             return error;
@@ -134,7 +128,7 @@ impl SessionKeeper {
             ctx.request_repaint_after(wait);
             return error;
         }
-        let (snapshot, backups) = self.snapshot(tabs, active, window);
+        let (snapshot, backups) = self.snapshot(tabs, active);
         let (tx, rx) = mpsc::channel();
         let files = self.files.clone();
         let ctx = ctx.clone();
@@ -155,18 +149,13 @@ impl SessionKeeper {
 
     /// Writes the session now, on this thread (when the window closes). Waits for a save that
     /// is still running first, so two saves never write the same files at once.
-    pub fn save_now(
-        &mut self,
-        tabs: &[Tab],
-        active: usize,
-        window: Option<WindowState>,
-    ) -> io::Result<()> {
+    pub fn save_now(&mut self, tabs: &[Tab], active: usize) -> io::Result<()> {
         if let Some(rx) = self.saving.take()
             && let Ok(saved) = rx.recv()
         {
             self.finish(saved);
         }
-        let (snapshot, backups) = self.snapshot(tabs, active, window);
+        let (snapshot, backups) = self.snapshot(tabs, active);
         let result = session::save(&self.files, &snapshot);
         let failed = result.as_ref().err().map(io::Error::to_string);
         self.finish(Saved {
@@ -216,16 +205,8 @@ impl SessionKeeper {
     }
 
     /// The session as it is now, plus the backup texts that changed since they were written.
-    fn snapshot(
-        &self,
-        tabs: &[Tab],
-        active: usize,
-        window: Option<WindowState>,
-    ) -> (Snapshot, HashMap<u64, u64>) {
-        let mut session = Session {
-            window,
-            ..Session::default()
-        };
+    fn snapshot(&self, tabs: &[Tab], active: usize) -> (Snapshot, HashMap<u64, u64>) {
+        let mut session = Session::default();
         let mut texts = Vec::new();
         let mut backups = HashMap::new();
         let mut owned = self.owned.clone();
@@ -284,17 +265,9 @@ impl SessionKeeper {
 }
 
 /// A hash of everything the session stores, to notice when it changes.
-fn signature(tabs: &[Tab], active: usize, window: Option<WindowState>) -> u64 {
+fn signature(tabs: &[Tab], active: usize) -> u64 {
     let mut hasher = DefaultHasher::new();
     active.hash(&mut hasher);
-    if let Some(window) = window {
-        (
-            window.width.to_bits(),
-            window.height.to_bits(),
-            window.maximized,
-        )
-            .hash(&mut hasher);
-    }
     for tab in tabs {
         tab.id.hash(&mut hasher);
         tab.path().hash(&mut hasher);
@@ -368,7 +341,7 @@ mod tests {
         ];
 
         let mut keeper = SessionKeeper::new(files.clone(), &Session::default());
-        keeper.save_now(&tabs, 1, None).unwrap();
+        keeper.save_now(&tabs, 1).unwrap();
 
         let (session, error) = session::load_previous(&files);
         assert_eq!(error, None);
@@ -401,17 +374,17 @@ mod tests {
         let mut tabs = vec![tab(7, untitled)];
         let mut keeper = SessionKeeper::new(files.clone(), &Session::default());
 
-        let (snapshot, _) = keeper.snapshot(&tabs, 0, None);
+        let (snapshot, _) = keeper.snapshot(&tabs, 0);
         assert_eq!(snapshot.backups.len(), 1);
-        keeper.save_now(&tabs, 0, None).unwrap();
-        let (snapshot, _) = keeper.snapshot(&tabs, 0, None);
+        keeper.save_now(&tabs, 0).unwrap();
+        let (snapshot, _) = keeper.snapshot(&tabs, 0);
         assert!(
             snapshot.backups.is_empty(),
             "unchanged text is not written again"
         );
 
         tabs[0].doc.buffer.insert(" two");
-        let (snapshot, _) = keeper.snapshot(&tabs, 0, None);
+        let (snapshot, _) = keeper.snapshot(&tabs, 0);
         assert_eq!(snapshot.backups.len(), 1);
 
         // Saved to a file: the backup is no longer needed.
@@ -420,7 +393,7 @@ mod tests {
         let request = tabs[0].doc.save_request().unwrap();
         request.write(&document::RenameReplacer).unwrap();
         tabs[0].doc.mark_saved(request.version, request.encoding);
-        keeper.save_now(&tabs, 0, None).unwrap();
+        keeper.save_now(&tabs, 0).unwrap();
         let left = fs::read_dir(&files.backup_dir).unwrap().count();
         assert_eq!(left, 0);
         fs::remove_dir_all(files.file.parent().unwrap()).unwrap();

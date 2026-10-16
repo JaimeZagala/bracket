@@ -29,7 +29,7 @@ When Bracket closes it saves the session: the open tabs, which one was active, t
 - If a file no longer exists and had no changes, its tab is not opened. If it had unsaved changes, it opens with them and saving creates it again.
 - It is stored in `session.toml`, and the unsaved text in the `backups` folder, next to `config.toml` (in `%APPDATA%\Bracket`, or next to the exe in portable mode). If `session.toml` were damaged, Bracket sets it aside as `session.damaged.toml`, starts without a session and deletes nothing in `backups`.
 - If the session could not be written when exiting, Bracket asks what to do with the unsaved changes, as before.
-- The window opens centered, with the size it had, and maximized if it was.
+- The window comes back to the position and size it had, and maximized if it was (kept in `window.ron`, next to `session.toml`). If its monitor is no longer connected, it opens on a visible one. The first time it opens centered.
 
 ## Encoding and line endings
 

@@ -10,9 +10,7 @@ use std::thread;
 use bracket_core::document::{self, Document, FileReplacer, LineEnding, SaveError};
 use bracket_core::encoding::{self, TextEncoding};
 use bracket_core::movement::{self, Motion};
-use bracket_session::{
-    Config, ConfigWarning, Language, LoadedConfig, SessionTab, WindowState, config,
-};
+use bracket_session::{Config, ConfigWarning, Language, LoadedConfig, SessionTab, config};
 use bracket_syntax::LanguageRegistry;
 use eframe::egui::{self, Id, Key, KeyboardShortcut, Modifiers, ViewportCommand};
 
@@ -133,8 +131,6 @@ pub struct BracketApp {
     replacer: Arc<dyn FileReplacer>,
     /// `None` while measuring: the session is neither restored nor saved.
     session: Option<SessionKeeper>,
-    /// Window size when not maximized, and whether it is maximized, for the session.
-    window: WindowState,
     probe: Option<Probe>,
     frames_ready: u32,
 }
@@ -151,7 +147,7 @@ impl BracketApp {
             fonts,
             replacer,
             session,
-            window,
+            window_file: _,
         } = launch;
         let LoadedConfig { config, warnings } = settings;
 
@@ -199,7 +195,6 @@ impl BracketApp {
             allow_close: false,
             title: String::new(),
             session: None,
-            window,
             probe,
             frames_ready: 0,
         };
@@ -245,7 +240,7 @@ impl BracketApp {
         let Some(keeper) = &mut self.session else {
             return false;
         };
-        match keeper.save_now(&self.tabs, self.active, Some(self.window)) {
+        match keeper.save_now(&self.tabs, self.active) {
             Ok(()) => true,
             Err(err) => {
                 self.status = Some(self.texts.session_save_failed(&err.to_string()));
@@ -256,25 +251,10 @@ impl BracketApp {
 
     /// Keeps the session up to date while the app runs.
     fn keep_session(&mut self, ctx: &egui::Context) {
-        let (maximized, minimized, size) = ctx.input(|i| {
-            let viewport = i.viewport();
-            (
-                viewport.maximized.unwrap_or(false),
-                viewport.minimized.unwrap_or(false),
-                viewport.inner_rect.map(|r| r.size()),
-            )
-        });
-        if !minimized {
-            self.window.maximized = maximized;
-            if let Some(size) = size.filter(|_| !maximized) {
-                self.window.width = size.x;
-                self.window.height = size.y;
-            }
-        }
         let Some(keeper) = &mut self.session else {
             return;
         };
-        if let Some(error) = keeper.tick(ctx, &self.tabs, self.active, Some(self.window)) {
+        if let Some(error) = keeper.tick(ctx, &self.tabs, self.active) {
             self.status = Some(self.texts.session_save_failed(&error));
         }
     }
@@ -996,6 +976,11 @@ impl BracketApp {
 }
 
 impl eframe::App for BracketApp {
+    /// eframe keeps only the window position and size (see `lib.rs`), not egui's widget state.
+    fn persist_egui_memory(&self) -> bool {
+        false
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.poll_loading(&ctx);

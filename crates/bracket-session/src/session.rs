@@ -9,11 +9,6 @@
 //! format_version = 1
 //! active = 1
 //!
-//! [window]            # size of the window when not maximized, in points
-//! width = 1000.0
-//! height = 700.0
-//! maximized = false
-//!
 //! [[tab]]
 //! path = 'C:\src\Program.cs'
 //! anchor = 120
@@ -43,28 +38,12 @@ pub const FORMAT_VERSION: i64 = 1;
 /// A session that cannot be read is moved to this file (next to it), so it is not overwritten.
 pub const DAMAGED_FILE: &str = "session.damaged.toml";
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Session {
     pub tabs: Vec<SessionTab>,
     /// Index of the active tab.
     pub active: usize,
-    pub window: Option<WindowState>,
 }
-
-/// The main window. Its position is not kept: it opens centered, so it is never left on a
-/// monitor that is no longer connected.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct WindowState {
-    /// Size when not maximized, in points.
-    pub width: f32,
-    pub height: f32,
-    pub maximized: bool,
-}
-
-/// Smallest window size accepted from the session.
-const WINDOW_MIN: f32 = 200.0;
-/// Largest window size accepted from the session (eframe also fits it to the monitor).
-const WINDOW_MAX: f32 = 20_000.0;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SessionTab {
@@ -164,29 +143,7 @@ pub fn parse(text: &str) -> io::Result<Session> {
         }
     }
     session.active = active_index.unwrap_or(0);
-    session.window = doc
-        .get("window")
-        .and_then(Item::as_table)
-        .and_then(parse_window);
     Ok(session)
-}
-
-fn parse_window(table: &Table) -> Option<WindowState> {
-    let size = |key: &str| {
-        let item = table.get(key)?;
-        let value = item
-            .as_float()
-            .or_else(|| item.as_integer().map(|v| v as f64))? as f32;
-        (WINDOW_MIN..=WINDOW_MAX).contains(&value).then_some(value)
-    };
-    Some(WindowState {
-        width: size("width")?,
-        height: size("height")?,
-        maximized: table
-            .get("maximized")
-            .and_then(Item::as_bool)
-            .unwrap_or(false),
-    })
 }
 
 fn parse_tab(table: &Table) -> Option<SessionTab> {
@@ -251,13 +208,6 @@ pub fn to_toml(session: &Session) -> String {
     let mut doc = DocumentMut::new();
     doc.insert("format_version", value(FORMAT_VERSION));
     doc.insert("active", value(session.active as i64));
-    if let Some(window) = session.window {
-        let mut table = Table::new();
-        table.insert("width", value(f64::from(window.width.round())));
-        table.insert("height", value(f64::from(window.height.round())));
-        table.insert("maximized", value(window.maximized));
-        doc.insert("window", Item::Table(table));
-    }
     let mut tabs = ArrayOfTables::new();
     for tab in &session.tabs {
         let mut table = Table::new();
@@ -368,11 +318,6 @@ mod tests {
                 },
             ],
             active: 1,
-            window: Some(WindowState {
-                width: 1200.0,
-                height: 800.0,
-                maximized: true,
-            }),
         }
     }
 
@@ -436,26 +381,6 @@ path = 'C:\c.txt'
             ]
         );
         assert_eq!(session.active, 1);
-    }
-
-    #[test]
-    fn window_sizes_out_of_range_are_ignored() {
-        let text = "format_version = 1
-[window]
-width = 50
-height = 700
-";
-        assert_eq!(parse(text).unwrap().window, None);
-        let text = "format_version = 1
-[window]
-width = 900
-height = 600
-";
-        let window = parse(text).unwrap().window.unwrap();
-        assert_eq!(
-            (window.width, window.height, window.maximized),
-            (900.0, 600.0, false)
-        );
     }
 
     #[test]

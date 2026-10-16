@@ -35,7 +35,7 @@ ropey = { version = "1.6.1", default-features = false, features = ["cr_lines", "
 proptest = "1.12.0"
 # glow (OpenGL) backend instead of the default wgpu: half the size, faster startup, far less RAM
 # (measured in Phase 0, see docs/es/measurements.md). No `default_fonts`: system fonts are used.
-eframe = { version = "0.36.2", default-features = false, features = ["glow", "accesskit"] }
+eframe = { version = "0.36.2", default-features = false, features = ["glow", "accesskit", "persistence"] }
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 # Configuration: keeps comments and order when saving; read key by key so one bad value does
 # not discard the whole file.
