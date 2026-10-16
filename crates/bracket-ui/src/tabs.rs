@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 
 use bracket_core::Document;
-use bracket_core::document::SaveError;
+use bracket_core::document::{DiskStamp, SaveError};
 use bracket_core::encoding::TextEncoding;
 use bracket_session::SessionTab;
 use bracket_syntax::{Badge, LanguageRegistry};
@@ -14,11 +14,19 @@ use eframe::egui::{
     pos2, vec2,
 };
 
+use crate::disk::DiskWatch;
 use crate::editor_view::EditorView;
 use crate::i18n::Texts;
 
-/// Result of a background save: the version and encoding written, and whether it worked.
-pub type SaveOutcome = (u64, TextEncoding, Result<(), SaveError>);
+/// Result of a background save: the version and encoding written, and whether it worked (with
+/// the file's stamp afterwards).
+pub type SaveOutcome = (u64, TextEncoding, Result<Option<DiskStamp>, SaveError>);
+
+/// A document read on a worker thread, with the stamp of the file it came from.
+pub struct Loaded {
+    pub doc: Document,
+    pub stamp: Option<DiskStamp>,
+}
 
 /// A file being read on a worker thread.
 pub struct Loading {
@@ -28,7 +36,7 @@ pub struct Loading {
     pub read_encoding: Option<TextEncoding>,
     /// The session entry being restored. Until it finishes, it is saved again as it was.
     pub restore: Option<SessionTab>,
-    pub rx: Receiver<io::Result<Document>>,
+    pub rx: Receiver<io::Result<Loaded>>,
     /// The tab was opened for this file, so it goes away if the file cannot be read.
     pub new_tab: bool,
 }
@@ -46,6 +54,8 @@ pub struct Tab {
     pub read_encoding: Option<TextEncoding>,
     pub loading: Option<Loading>,
     pub saving: Option<Receiver<SaveOutcome>>,
+    /// The link with the file on disk: its stamp, pending checks and notice.
+    pub disk: DiskWatch,
 }
 
 impl Tab {
@@ -59,6 +69,7 @@ impl Tab {
             read_encoding: None,
             loading: None,
             saving: None,
+            disk: DiskWatch::default(),
         }
     }
 

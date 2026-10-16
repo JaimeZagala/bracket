@@ -53,3 +53,11 @@ convert_line_endings = "Convertir a {line_ending}"
 
 session_damaged = "No se pudo leer la sesión anterior ({error}); se ha apartado como session.damaged.toml"
 session_save_failed = "No se pudo guardar la sesión: {error}"
+
+disk_changed = "«{name}» ha cambiado en disco, pero aquí tiene cambios sin guardar."
+disk_reload = "Recargar del disco"
+disk_reload_tooltip = "Sustituye el texto por el del disco. Deshacer recupera tus cambios."
+disk_keep = "Mantener mis cambios"
+disk_missing = "«{name}» ya no está en el disco. Guárdalo para volver a crearlo."
+disk_dismiss = "Entendido"
+disk_reloaded = "«{name}» se ha recargado porque cambió en disco"

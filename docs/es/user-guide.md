@@ -31,6 +31,14 @@ Al cerrar Bracket se guarda la sesión: las pestañas abiertas, cuál estaba act
 - Si la sesión no se pudiera escribir al salir, Bracket pregunta qué hacer con los cambios sin guardar, como antes.
 - La ventana vuelve a la posición y el tamaño que tenía, y maximizada si lo estaba (se guarda en `window.ron`, junto a `session.toml`). Si su monitor ya no está conectado, se abre en uno visible. La primera vez se abre centrada.
 
+## Cambios en disco
+
+Bracket vigila los ficheros abiertos. Si otro programa los cambia mientras están abiertos:
+
+- **Sin cambios en Bracket:** el fichero se recarga solo y la barra de estado lo indica. El cursor se queda en la misma línea y columna, y Deshacer vuelve al texto anterior.
+- **Con cambios sin guardar:** aparece un aviso encima del texto. «Recargar del disco» sustituye tu texto por el del disco (Deshacer lo recupera); «Mantener mis cambios» lo deja como está y el siguiente guardado sobrescribe el fichero.
+- **Borrado o movido:** un aviso lo indica y la pestaña queda como modificada, así que el texto no se pierde: al guardar se vuelve a crear el fichero. Si el fichero vuelve con el mismo contenido, la pestaña deja de estar modificada.
+
 ## Codificación y saltos de línea
 
 La barra de estado muestra la codificación (por ejemplo `UTF-8`, `UTF-8 BOM`, `UTF-16 LE BOM` o `windows-1252`) y el salto de línea (`CRLF`, `LF` o `CR`). Pulsando sobre ellos:

@@ -53,3 +53,11 @@ convert_line_endings = "Convert to {line_ending}"
 
 session_damaged = "Could not read the previous session ({error}); it was set aside as session.damaged.toml"
 session_save_failed = "Could not save the session: {error}"
+
+disk_changed = "“{name}” changed on disk, but it has unsaved changes here."
+disk_reload = "Reload from disk"
+disk_reload_tooltip = "Replaces the text with the one on disk. Undo brings your changes back."
+disk_keep = "Keep my changes"
+disk_missing = "“{name}” is no longer on disk. Save it to create it again."
+disk_dismiss = "Got it"
+disk_reloaded = "“{name}” was reloaded because it changed on disk"

@@ -2,6 +2,7 @@
 
 mod app;
 mod dialogs;
+mod disk;
 mod editor_view;
 pub mod fonts;
 mod i18n;

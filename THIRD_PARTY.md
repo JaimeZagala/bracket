@@ -21,6 +21,7 @@ Solo las dependencias directas; las transitivas se revisarán con una herramient
 | [chardetng](https://crates.io/crates/chardetng) | 1.0.0 | Apache-2.0 OR MIT | Adivinar la codificación de ficheros que no son UTF-8 | (incluido arriba) |
 | [rfd](https://crates.io/crates/rfd) | 0.17.2 | MIT | Diálogos nativos de Abrir y Guardar como (`IFileDialog` de Windows) en `bracket-ui` | +50 KB junto con el menú Archivo |
 | [windows-sys](https://crates.io/crates/windows-sys) | 0.61.2 | MIT OR Apache-2.0 | Llamada a `ReplaceFileW` en `bracket-app` (guardado que conserva atributos y permisos); la misma versión ya estaba en el árbol por winit y winreg | +12 KB |
+| [notify](https://crates.io/crates/notify) | 8.2.0 | CC0-1.0 | Avisos de cambios en los ficheros abiertos (`ReadDirectoryChangesW`) en `bracket-session`; sin features por defecto (solo eligen backends de macOS). La 9.0 aún es candidata | +120 KB junto con el seguimiento de ficheros; sin efecto medible en el arranque |
 
 La parte BSD-3-Clause de encoding_rs (tablas de datos de WHATWG) exige reproducir su aviso de copyright en la distribución binaria: se incluirá en el fichero de licencias de terceros que acompañe al instalador y al zip (Fase 5).
 

@@ -122,6 +122,7 @@ Conclusions:
 | Step 8: tabs and language registry | 5,266,944 B | +39 KB | Tab bar, language registry and several files from the command line. Interleaved startup against step 7 (15 rounds, busy machine): 236.2 versus 238.6 ms (no regression) |
 | Step 9: recoverable session | 5,323,776 B | +57 KB | Session file and backups, restoring tabs. Interleaved startup against step 8 (15 rounds, quiet machine): 120.2 versus 127.0 ms. Reading a 10-tab session takes 30 µs (`cargo bench -p bracket-session`); the probes do not read it |
 | Step 9: window position | 5,870,592 B | +547 KB | eframe's `persistence` feature (serde and ron). Interleaved startup against step 9 without it (15 rounds): 126.8 versus 137.4 ms. With the probes, `window.ron` is neither read nor written |
+| Step 10: reload on disk changes | 5,992,960 B | +120 KB | `notify` (and `walkdir`; `windows-sys` 0.60 was already in the tree) and file following. Interleaved startup against step 9 (15 rounds): 119.6 versus 133.6 ms |
 
 Step 5, interleaved startup against step 4 (15 rounds): 144.9 ms versus 148.6 ms, within the noise. That day absolute medians were around 145–149 ms with a busy machine: the margin against 150 ms is minimal.
 

@@ -2,25 +2,31 @@
 //! window title, status bar and the unsaved-changes dialog.
 
 use std::collections::HashSet;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
+use std::time::Instant;
 
-use bracket_core::document::{self, Document, FileReplacer, LineEnding, SaveError};
+use bracket_core::document::{self, DiskStamp, Document, FileReplacer, LineEnding, SaveError};
 use bracket_core::encoding::{self, TextEncoding};
 use bracket_core::movement::{self, Motion};
-use bracket_session::{Config, ConfigWarning, Language, LoadedConfig, SessionTab, config};
+use bracket_session::{
+    Config, ConfigWarning, FileWatcher, Language, LoadedConfig, SessionTab, config,
+};
 use bracket_syntax::LanguageRegistry;
 use eframe::egui::{self, Id, Key, KeyboardShortcut, Modifiers, ViewportCommand};
 
 use crate::dialogs;
+use crate::disk::{self, DiskNotice, DiskState, DiskWatch, NoticeAction};
 use crate::editor_view::EditorView;
 use crate::fonts::{self, Fallback, FontSource, LoadedFallback};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
 use crate::session::{self, SessionKeeper};
-use crate::tabs::{self, Loading, Tab, TabAction};
+use crate::tabs::{self, Loaded, Loading, Tab, TabAction};
 use crate::{Launch, RestoredSession};
 
 /// Something picked in a status bar menu.
@@ -131,6 +137,11 @@ pub struct BracketApp {
     replacer: Arc<dyn FileReplacer>,
     /// `None` while measuring: the session is neither restored nor saved.
     session: Option<SessionKeeper>,
+    /// Reports open files changed by other programs (`None` if it could not start).
+    watcher: Option<FileWatcher>,
+    disk_rx: Receiver<PathBuf>,
+    /// Hash of the watched paths, to update the watcher only when they change.
+    watched_signature: Option<u64>,
     probe: Option<Probe>,
     frames_ready: u32,
 }
@@ -171,6 +182,13 @@ impl BracketApp {
             .expect("no usable font found: Consolas and Segoe UI ship with Windows");
         ctx.set_fonts(defs);
         let (fallback_tx, fallback_rx) = mpsc::channel();
+        let (disk_tx, disk_rx) = mpsc::channel();
+        let watcher_ctx = ctx.clone();
+        let watcher = FileWatcher::new(move |path| {
+            let _ = disk_tx.send(path);
+            watcher_ctx.request_repaint();
+        })
+        .ok();
 
         let mut app = Self {
             texts: i18n::texts(config.language),
@@ -195,6 +213,9 @@ impl BracketApp {
             allow_close: false,
             title: String::new(),
             session: None,
+            watcher,
+            disk_rx,
+            watched_signature: None,
             probe,
             frames_ready: 0,
         };
@@ -256,6 +277,109 @@ impl BracketApp {
         };
         if let Some(error) = keeper.tick(ctx, &self.tabs, self.active) {
             self.status = Some(self.texts.session_save_failed(&error));
+        }
+    }
+
+    /// Keeps the watched files in step with the tabs, and checks the files reported as changed
+    /// on disk once their burst of changes is over.
+    fn follow_disk(&mut self, ctx: &egui::Context) {
+        let loaded = |tab: &&Tab| tab.loading.is_none();
+        let mut hasher = DefaultHasher::new();
+        for tab in self.tabs.iter().filter(loaded) {
+            tab.doc.path().hash(&mut hasher);
+        }
+        let signature = Some(hasher.finish());
+        if let Some(watcher) = &mut self.watcher
+            && signature != self.watched_signature
+        {
+            watcher.set_paths(self.tabs.iter().filter(loaded).filter_map(|t| t.doc.path()));
+            self.watched_signature = signature;
+        }
+
+        let now = Instant::now();
+        while let Ok(path) = self.disk_rx.try_recv() {
+            // Matched by file name only: the watcher may spell the folder differently (long
+            // names for 8.3 ones, other case). A false match only costs a check of the stamp.
+            let Some(changed) = path.file_name() else {
+                continue;
+            };
+            for tab in &mut self.tabs {
+                let shows_it = tab
+                    .doc
+                    .path()
+                    .and_then(|p| p.file_name())
+                    .is_some_and(|name| name.eq_ignore_ascii_case(changed));
+                if tab.loading.is_none() && shows_it {
+                    tab.disk.check_at = Some(now + disk::SETTLE);
+                }
+            }
+        }
+
+        let mut next_check: Option<Instant> = None;
+        let mut reloaded = None;
+        for tab in &mut self.tabs {
+            if let Some(rx) = &tab.disk.checking {
+                match rx.try_recv() {
+                    Ok(result) => {
+                        tab.disk.checking = None;
+                        if tab.saving.is_some() {
+                            // Bracket is writing the file itself: look again afterwards.
+                            tab.disk.check_at = Some(now);
+                        } else if let Ok(state) = result
+                            && apply_disk_state(tab, state)
+                        {
+                            reloaded = Some(tab.title(self.texts));
+                        }
+                    }
+                    Err(TryRecvError::Empty) => {}
+                    Err(TryRecvError::Disconnected) => tab.disk.checking = None,
+                }
+            }
+            let Some(at) = tab.disk.check_at else {
+                continue;
+            };
+            // While loading or saving, the stamp is about to change: check afterwards.
+            if tab.loading.is_some() || tab.saving.is_some() || tab.disk.checking.is_some() {
+                continue;
+            }
+            if at > now {
+                next_check = Some(next_check.map_or(at, |next| next.min(at)));
+                continue;
+            }
+            tab.disk.check_at = None;
+            let Some(path) = tab.doc.path().map(PathBuf::from) else {
+                continue;
+            };
+            let (tx, rx) = mpsc::channel();
+            let (read_encoding, known) = (tab.read_encoding, tab.disk.stamp);
+            let ctx = ctx.clone();
+            thread::spawn(move || {
+                let _ = tx.send(disk::check(&path, read_encoding, known));
+                ctx.request_repaint();
+            });
+            tab.disk.checking = Some(rx);
+        }
+        if let Some(at) = next_check {
+            ctx.request_repaint_after(at - now);
+        }
+        if let Some(name) = reloaded {
+            self.status = Some(self.texts.disk_reloaded(&name));
+        }
+    }
+
+    /// Carries out what was picked in the active tab's notice about its file on disk.
+    fn resolve_disk_notice(&mut self, action: NoticeAction) {
+        let tab = &mut self.tabs[self.active];
+        match (tab.disk.notice.take(), action) {
+            (Some(DiskNotice::Changed { loaded, stamp }), NoticeAction::Reload) => {
+                tab.doc.reload(loaded);
+                tab.disk.stamp = Some(stamp);
+            }
+            // The user's text stays; the next save overwrites the file.
+            (Some(DiskNotice::Changed { stamp, .. }), NoticeAction::Keep) => {
+                tab.disk.stamp = Some(stamp);
+            }
+            _ => {}
         }
     }
 
@@ -394,6 +518,8 @@ impl BracketApp {
         let thread_path = path.clone();
         thread::spawn(move || {
             let path = thread_path;
+            // Taken before reading: a change while reading shows up as a newer stamp later.
+            let stamp = DiskStamp::of(&path).ok();
             let loaded = match encoding {
                 Some(encoding) => document::load_text_as(&path, encoding),
                 None => document::load_text(&path),
@@ -401,7 +527,7 @@ impl BracketApp {
             let result = loaded.map(|loaded| {
                 let mut doc = Document::from_loaded(path, loaded, line_ending);
                 doc.buffer.set_tab_width(tab_width);
-                doc
+                Loaded { doc, stamp }
             });
             // The receiver may be gone if the tab or the window closed; nothing to do then.
             let _ = tx.send(result);
@@ -427,7 +553,12 @@ impl BracketApp {
         let tab_width = self.config.tab_width;
         let thread_entry = entry.clone();
         thread::spawn(move || {
-            let result = session::restore_document(&thread_entry, &files, fallback, tab_width);
+            let stamp = thread_entry
+                .path
+                .as_deref()
+                .and_then(|path| DiskStamp::of(path).ok());
+            let result = session::restore_document(&thread_entry, &files, fallback, tab_width)
+                .map(|doc| Loaded { doc, stamp });
             let _ = tx.send(result);
             ctx.request_repaint();
         });
@@ -451,8 +582,9 @@ impl BracketApp {
             let read_encoding = loading.read_encoding;
             let top_line = loading.restore.as_ref().map(|entry| entry.top_line);
             match loading.rx.try_recv() {
-                Ok(Ok(doc)) => {
+                Ok(Ok(Loaded { doc, stamp })) => {
                     tab.doc = doc;
+                    tab.disk = DiskWatch::synced(stamp);
                     tab.view.reset();
                     if let Some(line) = top_line {
                         tab.view.scroll_to_line(line);
@@ -508,7 +640,9 @@ impl BracketApp {
         let ctx = ctx.clone();
         let replacer = Arc::clone(&self.replacer);
         thread::spawn(move || {
-            let result = request.write(replacer.as_ref());
+            let result = request
+                .write(replacer.as_ref())
+                .map(|()| DiskStamp::of(&request.path).ok());
             let _ = tx.send((request.version, request.encoding, result));
             ctx.request_repaint();
         });
@@ -519,8 +653,10 @@ impl BracketApp {
         for tab in &mut self.tabs {
             let Some(rx) = &tab.saving else { continue };
             match rx.try_recv() {
-                Ok((version, encoding, Ok(()))) => {
+                Ok((version, encoding, Ok(stamp))) => {
                     tab.doc.mark_saved(version, encoding);
+                    tab.disk.stamp = stamp;
+                    tab.disk.notice = None;
                     self.status = Some(self.texts.saved().to_owned());
                     tab.saving = None;
                 }
@@ -556,6 +692,7 @@ impl BracketApp {
             Some(request) => match request.write(self.replacer.as_ref()) {
                 Ok(()) => {
                     tab.doc.mark_saved(request.version, request.encoding);
+                    tab.disk = DiskWatch::synced(DiskStamp::of(&request.path).ok());
                     true
                 }
                 Err(err) => {
@@ -987,6 +1124,7 @@ impl eframe::App for BracketApp {
         self.poll_saving();
         self.poll_config_saving();
         self.poll_fallbacks(&ctx);
+        self.follow_disk(&ctx);
         self.handle_window_events(&ctx);
 
         // Application shortcuts work wherever the keyboard focus is (for example after using a
@@ -1010,14 +1148,23 @@ impl eframe::App for BracketApp {
             self.focus_editor(&ctx);
         }
         let mut missing_glyph = None;
+        let mut notice_action = None;
         egui::CentralPanel::default().show(ui, |ui| {
             let tab = &mut self.tabs[self.active];
             if tab.loading.is_some() {
                 ui.centered_and_justified(|ui| ui.label(self.texts.loading()));
             } else {
+                if let Some(notice) = &tab.disk.notice {
+                    let name = tab.title(self.texts);
+                    notice_action = disk::notice_bar(ui, notice, &name, self.texts);
+                }
                 missing_glyph = tab.view.show(ui, &mut tab.doc).missing_glyph;
             }
         });
+        if let Some(action) = notice_action {
+            self.resolve_disk_notice(action);
+            self.focus_editor(&ctx);
+        }
         if let Some(c) = missing_glyph {
             self.request_fallback(&ctx, c);
         }
@@ -1026,6 +1173,41 @@ impl eframe::App for BracketApp {
         self.keep_session(&ctx);
 
         self.run_probe(&ctx);
+    }
+}
+
+/// Applies the result of a disk check to a tab. Returns true if the document was reloaded
+/// silently (it had no unsaved changes).
+fn apply_disk_state(tab: &mut Tab, state: DiskState) -> bool {
+    match state {
+        DiskState::Unchanged => false,
+        DiskState::Missing => {
+            if !matches!(tab.disk.notice, Some(DiskNotice::Missing)) {
+                // Modified until saved again, so closing asks and the session keeps the text.
+                tab.doc.mark_missing();
+                tab.disk.notice = Some(DiskNotice::Missing);
+                tab.disk.stamp = None;
+            }
+            false
+        }
+        DiskState::Changed { loaded, stamp } => {
+            if tab.doc.matches(&loaded) {
+                // Touched, or written back with the same text: in sync again.
+                let version = tab.doc.buffer.version();
+                tab.doc.mark_saved(version, loaded.encoding);
+                tab.disk.stamp = Some(stamp);
+                tab.disk.notice = None;
+                false
+            } else if !tab.doc.is_dirty() {
+                tab.doc.reload(loaded);
+                tab.disk.stamp = Some(stamp);
+                tab.disk.notice = None;
+                true
+            } else {
+                tab.disk.notice = Some(DiskNotice::Changed { loaded, stamp });
+                false
+            }
+        }
     }
 }
 

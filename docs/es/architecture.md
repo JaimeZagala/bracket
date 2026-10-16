@@ -12,7 +12,7 @@ Estado: Fase 0. Este documento describe la estructura acordada; cada sección in
 | `bracket-syntax` | Carga de lenguajes integrados y externos, resaltado incremental por líneas con caché, temas. | `bracket-core` (previsto) | Fase 1: registro de lenguajes (los seis integrados, extensiones e insignia) |
 | `bracket-index` | Recorrido de proyecto, extracción de símbolos (tree-sitter y regex), índice incremental, búsqueda difusa, referencias por nombre. | `bracket-core` (previsto) | Vacía |
 | `bracket-search` | Buscar y reemplazar con regex en fichero y carpeta, cancelable, con resultados en streaming. | `bracket-core` (previsto) | Vacía |
-| `bracket-session` | Configuración TOML, modo portable, sesión recuperable, recientes, vigilancia de ficheros, registro de comandos. | `bracket-core` | Fase 1: rutas (modo portable o `%APPDATA%`), configuración TOML y sesión recuperable |
+| `bracket-session` | Configuración TOML, modo portable, sesión recuperable, recientes, vigilancia de ficheros, registro de comandos. | `bracket-core` | Fase 1: rutas (modo portable o `%APPDATA%`), configuración TOML, sesión recuperable y vigilancia de ficheros |
 | `bracket-update` | Comprobación de versiones por canal, descarga, verificación de suma y firma, aplicación y vuelta atrás. | — | Vacía |
 | `bracket-ui` | Interfaz egui: vista del editor, pestañas, árbol de proyecto, paleta, barra de estado. | `bracket-core`, `bracket-session`, `bracket-syntax` | Fase 1: pestañas, menú Archivo, barra de estado, fuentes del sistema, catálogos de textos |
 | `bracket-app` | Binario `bracket.exe`: arranque, instancia única, argumentos, manifiesto de Windows, registro en HKCU. | `bracket-ui`, `bracket-session`, `bracket-update` | Fase 0: arranque y fichero por argumento. Fase 1: resuelve rutas y carga la configuración |
@@ -74,6 +74,13 @@ En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync
 - `bracket-app` lee la sesión al arrancar (30 µs con 10 pestañas).
 - La ventana (posición, tamaño, maximizada) la guarda eframe con su feature `persistence` en `window.ron`, en la carpeta de datos (también en modo portable). eframe la devuelve a un monitor conectado si el suyo ya no está y tiene en cuenta el escalado de cada pantalla. Solo se guarda la ventana, no el estado de los widgets de egui. eframe aplica `centered` después de la posición guardada, así que solo se activa cuando aún no existe `window.ron`. Coste: 547 KB (serde y ron).
 - Con las sondas de medición activas no se lee ni se escribe la sesión, para que las medidas no dependan de la sesión del usuario ni la cambien.
+
+## Cambios en disco (Fase 1)
+
+- `bracket-session` (`watch.rs`) envuelve `notify` (`ReadDirectoryChangesW`): vigila exactamente las rutas de las pestañas cargadas (se actualiza cuando cambian) y solo informa de qué ruta cambió.
+- `bracket-ui` (`disk.rs`) guarda por pestaña el sello del fichero (fecha de modificación y tamaño, `DiskStamp`) tomado al leerlo y después de cada guardado. Un aviso del vigilante programa una comprobación 200 ms después (los editores escriben, renombran y tocan el fichero seguidos); la comprobación corre en un hilo y solo lee el fichero si el sello cambió. Mientras Bracket guarda la pestaña, la comprobación espera, así que los guardados propios no se confunden con cambios externos.
+- Los avisos se emparejan con las pestañas por nombre de fichero: el vigilante puede escribir la carpeta de otra forma (nombres largos en lugar de 8.3, otras mayúsculas) y una coincidencia de más solo cuesta comprobar un sello.
+- Recargar usa `Document::reload`: sustituye el texto en un paso deshacible manteniendo línea y columna de cada cursor. Un fichero borrado deja el documento como modificado (`Document::mark_missing`), así que cerrar pregunta y la sesión guarda su texto.
 
 ## Fuentes (Fase 1)
 

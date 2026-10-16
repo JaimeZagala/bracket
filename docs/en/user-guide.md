@@ -31,6 +31,14 @@ When Bracket closes it saves the session: the open tabs, which one was active, t
 - If the session could not be written when exiting, Bracket asks what to do with the unsaved changes, as before.
 - The window comes back to the position and size it had, and maximized if it was (kept in `window.ron`, next to `session.toml`). If its monitor is no longer connected, it opens on a visible one. The first time it opens centered.
 
+## Changes on disk
+
+Bracket watches open files. If another program changes them while they are open:
+
+- **No changes in Bracket:** the file reloads by itself and the status bar says so. The caret stays on the same line and column, and Undo goes back to the previous text.
+- **Unsaved changes:** a notice appears above the text. "Reload from disk" replaces your text with the one on disk (Undo brings it back); "Keep my changes" leaves it as it is and the next save overwrites the file.
+- **Deleted or moved:** a notice says so and the tab stays modified, so the text is not lost: saving creates the file again. If the file comes back with the same contents, the tab is no longer modified.
+
 ## Encoding and line endings
 
 The status bar shows the encoding (for example `UTF-8`, `UTF-8 BOM`, `UTF-16 LE BOM` or `windows-1252`) and the line ending (`CRLF`, `LF` or `CR`). Click them to:

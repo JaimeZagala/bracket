@@ -12,7 +12,7 @@ Status: Phase 0. This document describes the agreed structure; each section stat
 | `bracket-syntax` | Loading of built-in and external languages, incremental line-based highlighting with cache, themes. | `bracket-core` (planned) | Phase 1: language registry (the six built-in languages, extensions and badge) |
 | `bracket-index` | Project walking, symbol extraction (tree-sitter and regex), incremental index, fuzzy search, references by name. | `bracket-core` (planned) | Empty |
 | `bracket-search` | Cancellable regex find and replace in a file and across a folder, with streamed results. | `bracket-core` (planned) | Empty |
-| `bracket-session` | TOML configuration, portable mode, recoverable session, recent files, file watching, command registry. | `bracket-core` | Phase 1: paths (portable mode or `%APPDATA%`), TOML configuration and recoverable session |
+| `bracket-session` | TOML configuration, portable mode, recoverable session, recent files, file watching, command registry. | `bracket-core` | Phase 1: paths (portable mode or `%APPDATA%`), TOML configuration, recoverable session and file watching |
 | `bracket-update` | Release channel checks, download, checksum and signature verification, apply and rollback. | — | Empty |
 | `bracket-ui` | egui interface: editor view, tabs, project tree, palette, status bar. | `bracket-core`, `bracket-session`, `bracket-syntax` | Phase 1: tabs, File menu, status bar, system fonts, text catalogs |
 | `bracket-app` | `bracket.exe` binary: startup, single instance, arguments, Windows manifest, HKCU registration. | `bracket-ui`, `bracket-session`, `bracket-update` | Phase 0: startup and file argument. Phase 1: resolves paths and loads the configuration |
@@ -74,6 +74,13 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 - `bracket-app` reads the session at startup (30 µs with 10 tabs).
 - The window (position, size, maximized) is saved by eframe with its `persistence` feature in `window.ron`, in the data folder (portable mode too). eframe moves it back onto a connected monitor if its own is gone and accounts for each screen's scaling. Only the window is saved, not egui's widget state. eframe applies `centered` after the saved position, so it is only turned on while `window.ron` does not exist yet. Cost: 547 KB (serde and ron).
 - While the measurement probes are on, the session is neither read nor written, so measurements neither depend on the user's session nor change it.
+
+## Changes on disk (Phase 1)
+
+- `bracket-session` (`watch.rs`) wraps `notify` (`ReadDirectoryChangesW`): it watches exactly the paths of the loaded tabs (updated when they change) and only reports which path changed.
+- `bracket-ui` (`disk.rs`) keeps each tab's file stamp (modification time and size, `DiskStamp`), taken when reading it and after each save. A report from the watcher schedules a check 200 ms later (editors write, rename and touch the file in a row); the check runs on a thread and only reads the file if the stamp changed. While Bracket is saving the tab the check waits, so its own saves are not taken for outside changes.
+- Reports are matched to tabs by file name: the watcher may spell the folder differently (long names instead of 8.3 ones, other case) and a false match only costs checking a stamp.
+- Reloading uses `Document::reload`: it replaces the text in one undoable step keeping each caret's line and column. A deleted file leaves the document modified (`Document::mark_missing`), so closing asks and the session keeps its text.
 
 ## Fonts (Phase 1)
 

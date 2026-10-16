@@ -217,6 +217,34 @@ impl Texts {
         self.fill("session_save_failed", &[("error", &error)])
     }
 
+    pub fn disk_changed(&self, name: &str) -> String {
+        self.fill("disk_changed", &[("name", &name)])
+    }
+
+    pub fn disk_reload(&self) -> &str {
+        self.get("disk_reload")
+    }
+
+    pub fn disk_reload_tooltip(&self) -> &str {
+        self.get("disk_reload_tooltip")
+    }
+
+    pub fn disk_keep(&self) -> &str {
+        self.get("disk_keep")
+    }
+
+    pub fn disk_missing(&self, name: &str) -> String {
+        self.fill("disk_missing", &[("name", &name)])
+    }
+
+    pub fn disk_dismiss(&self) -> &str {
+        self.get("disk_dismiss")
+    }
+
+    pub fn disk_reloaded(&self, name: &str) -> String {
+        self.fill("disk_reloaded", &[("name", &name)])
+    }
+
     /// Translated text for a configuration warning.
     pub fn config_warning(&self, warning: &ConfigWarning) -> String {
         match warning {
@@ -336,6 +364,13 @@ mod tests {
                 ("convert_line_endings", t.convert_line_endings("LF")),
                 ("session_damaged", t.session_damaged("e")),
                 ("session_save_failed", t.session_save_failed("e")),
+                ("disk_changed", t.disk_changed("a.txt")),
+                ("disk_reload", t.disk_reload().to_owned()),
+                ("disk_reload_tooltip", t.disk_reload_tooltip().to_owned()),
+                ("disk_keep", t.disk_keep().to_owned()),
+                ("disk_missing", t.disk_missing("a.txt")),
+                ("disk_dismiss", t.disk_dismiss().to_owned()),
+                ("disk_reloaded", t.disk_reloaded("a.txt")),
             ];
             for (key, text) in pairs {
                 assert!(
