@@ -6,6 +6,7 @@ mod editor_view;
 pub mod fonts;
 mod i18n;
 mod measure;
+mod tabs;
 
 use std::path::PathBuf;
 use std::thread::JoinHandle;
@@ -17,8 +18,8 @@ pub use measure::Probe;
 
 /// Everything `bracket-app` prepares before the window opens.
 pub struct Launch {
-    /// File to open, from the command line.
-    pub file: Option<PathBuf>,
+    /// Files to open from the command line, each in its own tab.
+    pub files: Vec<PathBuf>,
     pub settings: bracket_session::LoadedConfig,
     /// Where language changes made from the interface are saved.
     pub config_path: PathBuf,

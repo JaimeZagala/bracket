@@ -7,10 +7,19 @@ Bracket está en desarrollo (Fase 1). Esta guía describe lo que ya funciona y c
 ## Abrir y guardar
 
 - Menú **Archivo**: Nuevo (Ctrl+N), Abrir (Ctrl+O), Guardar (Ctrl+S), Guardar como (Ctrl+Mayús+S) y Salir. Abrir y Guardar como usan los diálogos de Windows.
-- También se abre un fichero pasándolo como argumento (`bracket.exe fichero.txt`) o arrastrándolo a la ventana.
+- También se abren ficheros pasándolos como argumentos (`bracket.exe a.cs b.json`) o arrastrándolos a la ventana.
 - Guardar un documento sin título abre Guardar como. El guardado es atómico y conserva el BOM y los saltos de línea del fichero. Al guardar sobre un fichero existente se mantienen sus atributos (por ejemplo, oculto), sus permisos y su fecha de creación. El título de la ventana marca con ● los cambios sin guardar; si deshaces hasta el texto guardado, la marca desaparece.
-- Si hay cambios sin guardar, Bracket pregunta antes de abrir otro fichero, crear uno nuevo o salir.
+- Si hay cambios sin guardar, Bracket pregunta antes de cerrar la pestaña o salir. Al salir con varios documentos modificados, «Guardar todo» los guarda uno a uno (los que no tienen título pasan por Guardar como); si se cancela uno, Bracket no se cierra.
 - Bracket detecta la codificación al abrir (UTF-8, UTF-16 y codificaciones heredadas como windows-1252) y guarda en la misma, byte a byte. Si un fichero no se puede volver a escribir exactamente igual, se abre en solo lectura y la barra de estado lo indica.
+
+## Pestañas
+
+- Cada fichero se abre en su propia pestaña. Si la pestaña activa es un documento nuevo vacío, el fichero ocupa su lugar; si el fichero ya está abierto, se va a su pestaña.
+- La insignia de color indica el lenguaje según la extensión: `C#` (C#), `@` (Razor), `#` (CSS), `SQL` (T-SQL), `{}` (JSON) y `<>` (XML, también `.xsig`, `.config`, `.csproj`, `.resx`...). Al pasar el ratón por una pestaña se ve la ruta completa.
+- Un punto en lugar de la × indica cambios sin guardar.
+- **Cerrar:** Ctrl+W, la × o clic con el botón central. Al cerrar la última queda un documento nuevo.
+- **Cambiar de pestaña:** Ctrl+Tab y Ctrl+Mayús+Tab, o Ctrl+AvPág y Ctrl+RePág.
+- Los documentos nuevos se numeran: «Sin título 1», «Sin título 2»...
 
 ## Codificación y saltos de línea
 

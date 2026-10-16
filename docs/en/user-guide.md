@@ -7,10 +7,19 @@ Bracket is under development (Phase 1). This guide describes what already works 
 ## Opening and saving
 
 - **File** menu: New (Ctrl+N), Open (Ctrl+O), Save (Ctrl+S), Save As (Ctrl+Shift+S) and Exit. Open and Save As use the Windows dialogs.
-- A file can also be opened by passing it as an argument (`bracket.exe file.txt`) or by dropping it on the window.
+- Files can also be opened by passing them as arguments (`bracket.exe a.cs b.json`) or by dropping them on the window.
 - Saving an untitled document opens Save As. Saving is atomic and keeps the file's BOM and line endings. Saving over an existing file keeps its attributes (hidden, for example), permissions and creation time. The window title marks unsaved changes with ●; if you undo back to the saved text, the mark goes away.
-- If there are unsaved changes, Bracket asks before opening another file, creating a new one or exiting.
+- If there are unsaved changes, Bracket asks before closing the tab or exiting. When exiting with several modified documents, "Save all" saves them one by one (untitled ones go through Save As); if one is cancelled, Bracket stays open.
 - Bracket detects the encoding when opening (UTF-8, UTF-16 and legacy encodings such as windows-1252) and saves in the same one, byte for byte. If a file cannot be written back exactly the same, it opens read-only and the status bar says so.
+
+## Tabs
+
+- Each file opens in its own tab. If the active tab is an empty new document, the file takes its place; if the file is already open, its tab is shown.
+- The colored badge shows the language from the extension: `C#` (C#), `@` (Razor), `#` (CSS), `SQL` (T-SQL), `{}` (JSON) and `<>` (XML, also `.xsig`, `.config`, `.csproj`, `.resx`...). Hovering over a tab shows the full path.
+- A dot instead of the × means unsaved changes.
+- **Close:** Ctrl+W, the × or a middle click. Closing the last one leaves a new document.
+- **Switch tabs:** Ctrl+Tab and Ctrl+Shift+Tab, or Ctrl+PageDown and Ctrl+PageUp.
+- New documents are numbered: "Untitled 1", "Untitled 2"...
 
 ## Encoding and line endings
 

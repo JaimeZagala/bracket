@@ -70,8 +70,8 @@ impl Texts {
         self.get("language_tooltip")
     }
 
-    pub fn untitled(&self) -> &str {
-        self.get("untitled")
+    pub fn untitled(&self, number: u32) -> String {
+        self.fill("untitled", &[("number", &number)])
     }
 
     pub fn loading(&self) -> &str {
@@ -110,6 +110,10 @@ impl Texts {
         self.get("menu_save_as")
     }
 
+    pub fn menu_close_tab(&self) -> &str {
+        self.get("menu_close_tab")
+    }
+
     pub fn menu_exit(&self) -> &str {
         self.get("menu_exit")
     }
@@ -142,12 +146,20 @@ impl Texts {
         self.get("unsaved_title")
     }
 
-    pub fn unsaved_message(&self) -> &str {
-        self.get("unsaved_message")
+    pub fn unsaved_message(&self, name: &str) -> String {
+        self.fill("unsaved_message", &[("name", &name)])
+    }
+
+    pub fn unsaved_many_message(&self, count: usize) -> String {
+        self.fill("unsaved_many_message", &[("count", &count)])
     }
 
     pub fn save(&self) -> &str {
         self.get("save")
+    }
+
+    pub fn save_all(&self) -> &str {
+        self.get("save_all")
     }
 
     pub fn discard(&self) -> &str {
@@ -277,7 +289,7 @@ mod tests {
             let pairs = [
                 ("language_name", t.language_name().to_owned()),
                 ("language_tooltip", t.language_tooltip().to_owned()),
-                ("untitled", t.untitled().to_owned()),
+                ("untitled", t.untitled(1)),
                 ("loading", t.loading().to_owned()),
                 ("read_only", t.read_only().to_owned()),
                 ("drop_hint", t.drop_hint().to_owned()),
@@ -287,6 +299,7 @@ mod tests {
                 ("menu_open", t.menu_open().to_owned()),
                 ("menu_save", t.menu_save().to_owned()),
                 ("menu_save_as", t.menu_save_as().to_owned()),
+                ("menu_close_tab", t.menu_close_tab().to_owned()),
                 ("menu_exit", t.menu_exit().to_owned()),
                 ("dialog_open_title", t.dialog_open_title().to_owned()),
                 ("dialog_save_as_title", t.dialog_save_as_title().to_owned()),
@@ -295,8 +308,10 @@ mod tests {
                 ("open_failed", t.open_failed("e")),
                 ("save_failed", t.save_failed("e")),
                 ("unsaved_title", t.unsaved_title().to_owned()),
-                ("unsaved_message", t.unsaved_message().to_owned()),
+                ("unsaved_message", t.unsaved_message("a.txt")),
+                ("unsaved_many_message", t.unsaved_many_message(2)),
                 ("save", t.save().to_owned()),
+                ("save_all", t.save_all().to_owned()),
                 ("discard", t.discard().to_owned()),
                 ("cancel", t.cancel().to_owned()),
                 ("config_save_failed", t.config_save_failed("e")),

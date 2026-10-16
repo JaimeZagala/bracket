@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 bracket-core.workspace = true
 bracket-session.workspace = true
+bracket-syntax.workspace = true
 eframe.workspace = true
 rfd.workspace = true
 toml_edit.workspace = true

@@ -51,6 +51,15 @@ impl EditorView {
         }
     }
 
+    /// A view for one tab. Each tab needs its own id: egui keeps focus and the scroll offset
+    /// by id, so views sharing one would share them too.
+    pub fn for_tab(tab: u64, font_size: f32) -> Self {
+        Self {
+            id: Id::new(("bracket-editor", tab)),
+            ..Self::with_font_size(font_size)
+        }
+    }
+
     pub fn new() -> Self {
         Self {
             id: Id::new("bracket-editor"),
@@ -108,6 +117,7 @@ impl EditorView {
         };
 
         ScrollArea::both()
+            .id_salt(self.id)
             .auto_shrink([false, false])
             .show_viewport(ui, |ui, viewport| {
                 let line_count = doc.buffer.len_lines();

@@ -20,8 +20,8 @@ use crate::system_fonts::SystemFonts;
 fn main() -> Result<(), Box<dyn Error>> {
     // Taken first so the startup measurement covers as much as possible.
     let probe = bracket_ui::Probe::from_env();
-    // Phase 0: the only argument is an optional file to open.
-    let file = std::env::args_os().nth(1).map(PathBuf::from);
+    // Every argument is a file to open, each in its own tab.
+    let files = std::env::args_os().skip(1).map(PathBuf::from).collect();
 
     let exe = std::env::current_exe()?;
     let exe_dir = exe.parent().unwrap_or(&exe);
@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     });
 
     let launch = bracket_ui::Launch {
-        file,
+        files,
         settings,
         config_path: paths.config_file(),
         fonts,

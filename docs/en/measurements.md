@@ -119,6 +119,7 @@ Conclusions:
 | Step 5: encodings | 5,165,568 B | +430 KB | `encoding_rs` (tables for every WHATWG encoding) and `chardetng` |
 | Step 6: file dialogs | 5,216,256 B | +50 KB | `rfd` and the File menu. Interleaved startup against step 5: 135.6 versus 134.3 ms |
 | Step 7: saving with `ReplaceFileW` | 5,228,032 B | +12 KB | `windows-sys` (already in the tree). Interleaved startup against step 6 on a very busy machine: 289 versus 312 ms (no regression) |
+| Step 8: tabs and language registry | 5,266,944 B | +39 KB | Tab bar, language registry and several files from the command line. Interleaved startup against step 7 (15 rounds, busy machine): 236.2 versus 238.6 ms (no regression) |
 
 Step 5, interleaved startup against step 4 (15 rounds): 144.9 ms versus 148.6 ms, within the noise. That day absolute medians were around 145–149 ms with a busy machine: the margin against 150 ms is minimal.
 

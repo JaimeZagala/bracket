@@ -9,12 +9,12 @@ Status: Phase 0. This document describes the agreed structure; each section stat
 | Crate | Responsibility | Depends on (workspace) | Status |
 |---|---|---|---|
 | `bracket-core` | Buffer (ropey), multiple selections, transactional undo/redo, cursor movement, encoding, line endings, document model. No UI and no Windows APIs. | — | Phase 0: buffer, selections, transactions, history, movement and UTF-8 document |
-| `bracket-syntax` | Loading of built-in and external languages, incremental line-based highlighting with cache, themes. | `bracket-core` (planned) | Empty |
+| `bracket-syntax` | Loading of built-in and external languages, incremental line-based highlighting with cache, themes. | `bracket-core` (planned) | Phase 1: language registry (the six built-in languages, extensions and badge) |
 | `bracket-index` | Project walking, symbol extraction (tree-sitter and regex), incremental index, fuzzy search, references by name. | `bracket-core` (planned) | Empty |
 | `bracket-search` | Cancellable regex find and replace in a file and across a folder, with streamed results. | `bracket-core` (planned) | Empty |
 | `bracket-session` | TOML configuration, portable mode, recoverable session, recent files, file watching, command registry. | `bracket-core` | Phase 1: paths (portable mode or `%APPDATA%`) and TOML configuration |
 | `bracket-update` | Release channel checks, download, checksum and signature verification, apply and rollback. | — | Empty |
-| `bracket-ui` | egui interface: editor view, tabs, project tree, palette, status bar. | `bracket-core`, `bracket-session` | Phase 0: prototype (editor view, window, minimal status bar, text catalog) |
+| `bracket-ui` | egui interface: editor view, tabs, project tree, palette, status bar. | `bracket-core`, `bracket-session`, `bracket-syntax` | Phase 1: tabs, File menu, status bar, system fonts, text catalogs |
 | `bracket-app` | `bracket.exe` binary: startup, single instance, arguments, Windows manifest, HKCU registration. | `bracket-ui`, `bracket-session`, `bracket-update` | Phase 0: startup and file argument. Phase 1: resolves paths and loads the configuration |
 
 ## Dependency rules
@@ -58,6 +58,13 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 
 - `dialogs.rs` wraps `rfd`'s native dialogs with Bracket's window as parent: they are modal and run on the UI thread, as in any editor.
 - Application shortcuts (Ctrl+N/O/S, Ctrl+Shift+S) are consumed by the app before the editor paints, so they work wherever the focus is. Saving an untitled document goes through Save As.
+
+## Tabs (Phase 1)
+
+- `tabs.rs` defines `Tab` (document, view, language, loading and saving in progress) and draws the tab bar. The app keeps a `Vec<Tab>` that is never empty plus the active index; the status bar, the title and the commands act on the active tab.
+- Each tab has an id that is unique for the run, and its `EditorView` derives its egui `Id` from it, so focus and scrolling are independent per tab.
+- Loading and saving run per tab on worker threads; the result reaches its tab even if it is no longer active. If loading a file opened in a new tab fails, the tab is closed.
+- Each tab's language comes from `LanguageRegistry::for_path` (`bracket-syntax`) when opening and on Save As. Badges are colored text; the registry allows adding SVG icons later.
 
 ## Fonts (Phase 1)
 

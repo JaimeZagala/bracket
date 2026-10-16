@@ -1,8 +1,7 @@
-//! The application shell: one document, file loading and saving on worker threads, window
-//! title, status bar and the unsaved-changes dialog.
+//! The application shell: open documents as tabs, file loading and saving on worker threads,
+//! window title, status bar and the unsaved-changes dialog.
 
 use std::collections::HashSet;
-use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
@@ -12,6 +11,7 @@ use bracket_core::document::{self, Document, FileReplacer, LineEnding, SaveError
 use bracket_core::encoding::{self, TextEncoding};
 use bracket_core::movement::{self, Motion};
 use bracket_session::{Config, ConfigWarning, Language, LoadedConfig, config};
+use bracket_syntax::LanguageRegistry;
 use eframe::egui::{self, Id, Key, KeyboardShortcut, Modifiers, ViewportCommand};
 
 use crate::Launch;
@@ -20,9 +20,7 @@ use crate::editor_view::EditorView;
 use crate::fonts::{self, Fallback, FontSource, LoadedFallback};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
-
-/// Result of a background save: the version and encoding written, and whether it worked.
-type SaveOutcome = (u64, TextEncoding, Result<(), SaveError>);
+use crate::tabs::{self, Loading, Tab, TabAction};
 
 /// Something picked in a status bar menu.
 #[derive(Debug, Clone, Copy)]
@@ -33,32 +31,37 @@ enum StatusAction {
     SaveWith(TextEncoding),
 }
 
-/// What to do once the user has dealt with unsaved changes.
-#[derive(Debug, Clone)]
+/// What waits for the user to deal with unsaved changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingAction {
-    Close,
-    Open(PathBuf),
-    New,
-    /// Show the Open dialog.
-    OpenDialog,
+    /// Close the tab with this id.
+    CloseTab(u64),
+    CloseWindow,
 }
 
-/// File menu commands, also bound to keyboard shortcuts.
+/// Menu commands, also bound to keyboard shortcuts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FileCommand {
+enum Command {
     New,
     Open,
     Save,
     SaveAs,
+    CloseTab,
+    NextTab,
+    PreviousTab,
     Exit,
 }
 
-impl FileCommand {
-    const SHORTCUTS: [(Self, KeyboardShortcut); 4] = [
-        // Save As before Save, so Ctrl+Shift+S is not taken as Ctrl+S.
+impl Command {
+    const SHORTCUTS: [(Self, KeyboardShortcut); 9] = [
+        // Shortcuts with Shift go first: Ctrl+S would also match Ctrl+Shift+S.
         (
             Self::SaveAs,
             KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S),
+        ),
+        (
+            Self::PreviousTab,
+            KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::Tab),
         ),
         (
             Self::Save,
@@ -69,8 +72,25 @@ impl FileCommand {
             Self::Open,
             KeyboardShortcut::new(Modifiers::COMMAND, Key::O),
         ),
+        (
+            Self::CloseTab,
+            KeyboardShortcut::new(Modifiers::COMMAND, Key::W),
+        ),
+        (
+            Self::NextTab,
+            KeyboardShortcut::new(Modifiers::COMMAND, Key::Tab),
+        ),
+        (
+            Self::PreviousTab,
+            KeyboardShortcut::new(Modifiers::COMMAND, Key::PageUp),
+        ),
+        (
+            Self::NextTab,
+            KeyboardShortcut::new(Modifiers::COMMAND, Key::PageDown),
+        ),
     ];
 
+    /// The first shortcut bound to the command, as shown in menus.
     fn shortcut(self) -> Option<KeyboardShortcut> {
         Self::SHORTCUTS
             .iter()
@@ -82,10 +102,13 @@ impl FileCommand {
 pub struct BracketApp {
     texts: &'static Texts,
     config: Config,
-    doc: Document,
-    view: EditorView,
-    loading: Option<Receiver<io::Result<Document>>>,
-    saving: Option<Receiver<SaveOutcome>>,
+    /// Never empty: closing the last tab opens an untitled one.
+    tabs: Vec<Tab>,
+    active: usize,
+    next_tab_id: u64,
+    languages: LanguageRegistry,
+    /// Scroll the tab bar to the active tab on the next frame.
+    reveal_active_tab: bool,
     /// Latest result of a user action (open, save...).
     status: Option<String>,
     /// Configuration warnings, shown (translated) while there is no other status message.
@@ -98,6 +121,7 @@ pub struct BracketApp {
     /// Configured editor font that is not installed, and the font used instead.
     missing_font: Option<(String, String)>,
     font_source: Option<Arc<dyn FontSource>>,
+    /// Fallback kinds already requested; no view checks their characters again.
     fallbacks_requested: HashSet<Fallback>,
     fallback_tx: Sender<LoadedFallback>,
     fallback_rx: Receiver<LoadedFallback>,
@@ -114,7 +138,7 @@ impl BracketApp {
             startup.mark_app_created();
         }
         let Launch {
-            file,
+            files,
             settings,
             config_path,
             fonts,
@@ -143,16 +167,14 @@ impl BracketApp {
         ctx.set_fonts(defs);
         let (fallback_tx, fallback_rx) = mpsc::channel();
 
-        let texts = i18n::texts(config.language);
-        let mut doc = Document::new_empty(config.line_ending, config.encoding);
-        doc.buffer.set_tab_width(config.tab_width);
         let mut app = Self {
-            texts,
-            doc,
-            view: EditorView::with_font_size(config.font_size),
+            texts: i18n::texts(config.language),
             config,
-            loading: None,
-            saving: None,
+            tabs: Vec::new(),
+            active: 0,
+            next_tab_id: 0,
+            languages: LanguageRegistry::builtin(),
+            reveal_active_tab: false,
             status: None,
             config_warnings: warnings,
             config_path,
@@ -170,24 +192,115 @@ impl BracketApp {
             probe,
             frames_ready: 0,
         };
-        ctx.memory_mut(|m| m.request_focus(app.view.id()));
-        if let Some(path) = file {
-            app.start_loading(ctx, path, None);
+        let doc = app.empty_document();
+        app.add_tab(doc);
+        app.focus_editor(ctx);
+        for path in files {
+            app.open_file(ctx, path);
         }
         app
+    }
+
+    fn active_tab(&self) -> &Tab {
+        &self.tabs[self.active]
+    }
+
+    fn tab_index(&self, id: u64) -> Option<usize> {
+        self.tabs.iter().position(|tab| tab.id == id)
+    }
+
+    fn empty_document(&self) -> Document {
+        let mut doc = Document::new_empty(self.config.line_ending, self.config.encoding);
+        doc.buffer.set_tab_width(self.config.tab_width);
+        doc
+    }
+
+    /// Adds a tab at the end and returns its index; it does not become active.
+    fn add_tab(&mut self, doc: Document) -> usize {
+        let id = self.next_tab_id;
+        self.next_tab_id += 1;
+        let mut view = EditorView::for_tab(id, self.config.font_size);
+        for kind in &self.fallbacks_requested {
+            view.fallback_requested(*kind);
+        }
+        let untitled = tabs::free_untitled_number(&self.tabs);
+        let mut tab = Tab::new(id, doc, view, untitled);
+        tab.refresh_language(&self.languages);
+        self.tabs.push(tab);
+        self.tabs.len() - 1
+    }
+
+    fn activate(&mut self, ctx: &egui::Context, index: usize) {
+        self.active = index;
+        self.reveal_active_tab = true;
+        self.focus_editor(ctx);
+    }
+
+    fn focus_editor(&self, ctx: &egui::Context) {
+        let id = self.active_tab().view.id();
+        ctx.memory_mut(|m| m.request_focus(id));
+    }
+
+    /// Closes a tab, asking first if it has unsaved changes.
+    fn close_tab(&mut self, ctx: &egui::Context, index: usize) {
+        let tab = &self.tabs[index];
+        if tab.doc.is_dirty() {
+            self.pending = Some(PendingAction::CloseTab(tab.id));
+        } else {
+            self.remove_tab(ctx, index);
+        }
+    }
+
+    /// Removes a tab without asking. The tab to its right becomes active (or the one to its
+    /// left at the end); closing the last tab leaves an untitled one.
+    fn remove_tab(&mut self, ctx: &egui::Context, index: usize) {
+        self.tabs.remove(index);
+        if self.tabs.is_empty() {
+            let doc = self.empty_document();
+            self.add_tab(doc);
+        }
+        let active = if index < self.active {
+            self.active - 1
+        } else {
+            self.active.min(self.tabs.len() - 1)
+        };
+        self.activate(ctx, active);
+    }
+
+    /// Opens a file in a tab: the one already showing it, the active one if it is blank, or a
+    /// new one.
+    fn open_file(&mut self, ctx: &egui::Context, path: PathBuf) {
+        let open = self.tabs.iter().position(|tab| {
+            tab.path()
+                .is_some_and(|tab_path| tabs::same_file(tab_path, &path))
+        });
+        if let Some(index) = open {
+            self.activate(ctx, index);
+            return;
+        }
+        let (index, new_tab) = if self.active_tab().is_blank() {
+            (self.active, false)
+        } else {
+            let doc = self.empty_document();
+            (self.add_tab(doc), true)
+        };
+        self.start_loading(ctx, index, path, None, new_tab);
+        self.activate(ctx, index);
     }
 
     /// Loads a fallback font for `c` on a worker thread, once per kind of fallback.
     fn request_fallback(&mut self, ctx: &egui::Context, c: char) {
         let kind = Fallback::for_char(c);
-        // Whatever happens next, the view stops looking for this kind of character.
-        self.view.fallback_requested(kind);
-        let Some(source) = self.font_source.clone() else {
-            return;
-        };
         if !self.fallbacks_requested.insert(kind) {
             return;
         }
+        // Whatever happens next, the views stop looking for this kind of character.
+        for tab in &mut self.tabs {
+            tab.view.fallback_requested(kind);
+        }
+        let Some(source) = self.font_source.clone() else {
+            return;
+        };
         let tx = self.fallback_tx.clone();
         let ctx = ctx.clone();
         let (primary, font_size) = (self.editor_font.clone(), self.config.font_size);
@@ -206,18 +319,23 @@ impl BracketApp {
         }
     }
 
-    /// Loads a file on a worker thread; the UI keeps running and shows a loading message.
-    /// `encoding` forces how the bytes are decoded ("reopen with encoding"); `None` detects it.
+    /// Loads a file into a tab on a worker thread; the UI keeps running and the tab shows a
+    /// loading message. `encoding` forces how the bytes are decoded ("reopen with encoding");
+    /// `None` detects it.
     fn start_loading(
         &mut self,
         ctx: &egui::Context,
+        index: usize,
         path: PathBuf,
         encoding: Option<TextEncoding>,
+        new_tab: bool,
     ) {
         let (tx, rx) = mpsc::channel();
         let ctx = ctx.clone();
         let (line_ending, tab_width) = (self.config.line_ending, self.config.tab_width);
+        let thread_path = path.clone();
         thread::spawn(move || {
+            let path = thread_path;
             let loaded = match encoding {
                 Some(encoding) => document::load_text_as(&path, encoding),
                 None => document::load_text(&path),
@@ -227,43 +345,69 @@ impl BracketApp {
                 doc.buffer.set_tab_width(tab_width);
                 doc
             });
-            // The receiver may be gone if the window closed; nothing to do then.
+            // The receiver may be gone if the tab or the window closed; nothing to do then.
             let _ = tx.send(result);
             ctx.request_repaint();
         });
-        self.loading = Some(rx);
+        self.tabs[index].loading = Some(Loading { path, rx, new_tab });
     }
 
     fn poll_loading(&mut self, ctx: &egui::Context) {
-        let Some(rx) = &self.loading else { return };
-        match rx.try_recv() {
-            Ok(Ok(doc)) => {
-                self.doc = doc;
-                self.view.reset();
-                self.status = None;
-                self.loading = None;
-                ctx.memory_mut(|m| m.request_focus(self.view.id()));
+        let mut failed = Vec::new();
+        let mut loaded_active = false;
+        for (index, tab) in self.tabs.iter_mut().enumerate() {
+            let Some(loading) = &tab.loading else {
+                continue;
+            };
+            let new_tab = loading.new_tab;
+            match loading.rx.try_recv() {
+                Ok(Ok(doc)) => {
+                    tab.doc = doc;
+                    tab.view.reset();
+                    tab.loading = None;
+                    tab.refresh_language(&self.languages);
+                    self.status = None;
+                    loaded_active |= index == self.active;
+                }
+                Ok(Err(err)) => {
+                    self.status = Some(self.texts.open_failed(&err.to_string()));
+                    tab.loading = None;
+                    if new_tab {
+                        failed.push(tab.id);
+                    }
+                }
+                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Disconnected) => {
+                    tab.loading = None;
+                    if new_tab {
+                        failed.push(tab.id);
+                    }
+                }
             }
-            Ok(Err(err)) => {
-                self.status = Some(self.texts.open_failed(&err.to_string()));
-                self.loading = None;
+        }
+        // A tab opened for a file that could not be read has nothing to show.
+        for id in failed {
+            if let Some(index) = self.tab_index(id) {
+                self.remove_tab(ctx, index);
             }
-            Err(TryRecvError::Empty) => {}
-            Err(TryRecvError::Disconnected) => self.loading = None,
+        }
+        if loaded_active {
+            self.focus_editor(ctx);
         }
     }
 
-    /// Saves on a worker thread. The text is a cheap snapshot, so editing can continue.
-    fn start_saving(&mut self, ctx: &egui::Context) {
-        if self.saving.is_some() {
+    /// Saves a tab on a worker thread. The text is a cheap snapshot, so editing can continue.
+    fn start_saving(&mut self, ctx: &egui::Context, index: usize) {
+        let tab = &mut self.tabs[index];
+        if tab.saving.is_some() {
             return;
         }
-        if self.doc.is_read_only() {
+        if tab.doc.is_read_only() {
             self.status = Some(self.texts.save_read_only().to_owned());
             return;
         }
         // Untitled documents go through Save As first, so there is always a path here.
-        let Some(request) = self.doc.save_request() else {
+        let Some(request) = tab.doc.save_request() else {
             return;
         };
         let (tx, rx) = mpsc::channel();
@@ -274,56 +418,54 @@ impl BracketApp {
             let _ = tx.send((request.version, request.encoding, result));
             ctx.request_repaint();
         });
-        self.saving = Some(rx);
+        tab.saving = Some(rx);
     }
 
     fn poll_saving(&mut self) {
-        let Some(rx) = &self.saving else { return };
-        match rx.try_recv() {
-            Ok((version, encoding, Ok(()))) => {
-                self.doc.mark_saved(version, encoding);
-                self.status = Some(self.texts.saved().to_owned());
-                self.saving = None;
+        for tab in &mut self.tabs {
+            let Some(rx) = &tab.saving else { continue };
+            match rx.try_recv() {
+                Ok((version, encoding, Ok(()))) => {
+                    tab.doc.mark_saved(version, encoding);
+                    self.status = Some(self.texts.saved().to_owned());
+                    tab.saving = None;
+                }
+                Ok((_, _, Err(err))) => {
+                    self.status = Some(save_error_text(self.texts, &err));
+                    tab.saving = None;
+                }
+                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Disconnected) => tab.saving = None,
             }
-            Ok((_, _, Err(err))) => {
-                self.status = Some(self.save_error_text(&err));
-                self.saving = None;
-            }
-            Err(TryRecvError::Empty) => {}
-            Err(TryRecvError::Disconnected) => self.saving = None,
         }
     }
 
-    fn save_error_text(&self, err: &SaveError) -> String {
-        match err {
-            SaveError::Encode(err) => {
-                let character = err.character.map(String::from).unwrap_or_default();
-                self.texts
-                    .save_encode_failed(&err.encoding.label(), &character)
-            }
-            SaveError::Io(err) => self.texts.save_failed(&err.to_string()),
-        }
-    }
-
-    /// Saves on the UI thread. Only used from the unsaved-changes dialog, where the next
+    /// Saves a tab on the UI thread. Only used from the unsaved-changes dialog, where the next
     /// action must wait for the result anyway.
-    fn save_now(&mut self, frame: &eframe::Frame) -> bool {
-        if self.doc.path().is_none() {
-            let Some(path) =
-                dialogs::pick_file_to_save(frame, self.texts.dialog_save_as_title(), None)
-            else {
+    fn save_now(&mut self, frame: &eframe::Frame, index: usize) -> bool {
+        if self.tabs[index].doc.path().is_none() {
+            // With several untitled tabs to save, the title says which one this is.
+            let title = format!(
+                "{} — {}",
+                self.texts.dialog_save_as_title(),
+                self.tabs[index].title(self.texts)
+            );
+            let Some(path) = dialogs::pick_file_to_save(frame, &title, None) else {
                 return false;
             };
-            self.doc.set_path(path);
+            let tab = &mut self.tabs[index];
+            tab.doc.set_path(path);
+            tab.refresh_language(&self.languages);
         }
-        match self.doc.save_request() {
+        let tab = &mut self.tabs[index];
+        match tab.doc.save_request() {
             Some(request) => match request.write(self.replacer.as_ref()) {
                 Ok(()) => {
-                    self.doc.mark_saved(request.version, request.encoding);
+                    tab.doc.mark_saved(request.version, request.encoding);
                     true
                 }
                 Err(err) => {
-                    self.status = Some(self.save_error_text(&err));
+                    self.status = Some(save_error_text(self.texts, &err));
                     false
                 }
             },
@@ -334,77 +476,71 @@ impl BracketApp {
         }
     }
 
-    fn run_pending(&mut self, ctx: &egui::Context, frame: &eframe::Frame, action: PendingAction) {
-        match action {
-            PendingAction::Close => {
-                self.allow_close = true;
-                ctx.send_viewport_cmd(ViewportCommand::Close);
-            }
-            PendingAction::Open(path) => self.start_loading(ctx, path, None),
-            PendingAction::New => self.new_document(ctx),
-            PendingAction::OpenDialog => self.open_with_dialog(ctx, frame),
-        }
-    }
-
-    fn run_file_command(
-        &mut self,
-        ctx: &egui::Context,
-        frame: &eframe::Frame,
-        command: FileCommand,
-    ) {
+    fn run_command(&mut self, ctx: &egui::Context, frame: &eframe::Frame, command: Command) {
+        let index = self.active;
+        let loading = self.active_tab().loading.is_some();
         match command {
-            FileCommand::New if self.doc.is_dirty() => self.pending = Some(PendingAction::New),
-            FileCommand::New => self.new_document(ctx),
-            FileCommand::Open if self.doc.is_dirty() => {
-                self.pending = Some(PendingAction::OpenDialog);
+            Command::New => {
+                let doc = self.empty_document();
+                let index = self.add_tab(doc);
+                self.activate(ctx, index);
+                self.status = None;
             }
-            FileCommand::Open => self.open_with_dialog(ctx, frame),
-            FileCommand::Save if self.doc.path().is_none() => self.save_as(ctx, frame),
-            FileCommand::Save => self.start_saving(ctx),
-            FileCommand::SaveAs => self.save_as(ctx, frame),
+            Command::Open => self.open_with_dialog(ctx, frame),
+            // Nothing to save until the file has loaded.
+            Command::Save | Command::SaveAs if loading => {}
+            Command::Save if self.active_tab().doc.path().is_none() => {
+                self.save_as(ctx, frame, index);
+            }
+            Command::Save => self.start_saving(ctx, index),
+            Command::SaveAs => self.save_as(ctx, frame, index),
+            Command::CloseTab => self.close_tab(ctx, index),
+            Command::NextTab => self.activate(ctx, (index + 1) % self.tabs.len()),
+            Command::PreviousTab => {
+                let count = self.tabs.len();
+                self.activate(ctx, (index + count - 1) % count);
+            }
             // Closing goes through the unsaved-changes check in handle_window_events.
-            FileCommand::Exit => ctx.send_viewport_cmd(ViewportCommand::Close),
+            Command::Exit => ctx.send_viewport_cmd(ViewportCommand::Close),
         }
-        ctx.memory_mut(|m| m.request_focus(self.view.id()));
-    }
-
-    fn new_document(&mut self, ctx: &egui::Context) {
-        let mut doc = Document::new_empty(self.config.line_ending, self.config.encoding);
-        doc.buffer.set_tab_width(self.config.tab_width);
-        self.doc = doc;
-        self.view.reset();
-        self.status = None;
-        ctx.memory_mut(|m| m.request_focus(self.view.id()));
+        self.focus_editor(ctx);
     }
 
     fn open_with_dialog(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
-        let start_dir = self.doc.path().and_then(|p| p.parent()).map(PathBuf::from);
+        let start_dir = self
+            .active_tab()
+            .path()
+            .and_then(|p| p.parent())
+            .map(PathBuf::from);
         let title = self.texts.dialog_open_title();
         if let Some(path) = dialogs::pick_file_to_open(frame, title, start_dir.as_deref()) {
-            self.start_loading(ctx, path, None);
+            self.open_file(ctx, path);
         }
     }
 
-    fn save_as(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
-        if self.doc.is_read_only() {
+    fn save_as(&mut self, ctx: &egui::Context, frame: &eframe::Frame, index: usize) {
+        if self.tabs[index].doc.is_read_only() {
             self.status = Some(self.texts.save_read_only().to_owned());
             return;
         }
         let title = self.texts.dialog_save_as_title();
-        if let Some(path) = dialogs::pick_file_to_save(frame, title, self.doc.path()) {
-            self.doc.set_path(path);
-            self.start_saving(ctx);
+        if let Some(path) = dialogs::pick_file_to_save(frame, title, self.tabs[index].doc.path()) {
+            let tab = &mut self.tabs[index];
+            tab.doc.set_path(path);
+            tab.refresh_language(&self.languages);
+            self.start_saving(ctx, index);
         }
     }
 
     /// Draws the menu bar. Returns the command picked, if any.
-    fn menu_bar(&self, ui: &mut egui::Ui) -> Option<FileCommand> {
+    fn menu_bar(&self, ui: &mut egui::Ui) -> Option<Command> {
         let mut picked = None;
         let items = [
-            (FileCommand::New, self.texts.menu_new()),
-            (FileCommand::Open, self.texts.menu_open()),
-            (FileCommand::Save, self.texts.menu_save()),
-            (FileCommand::SaveAs, self.texts.menu_save_as()),
+            (Command::New, self.texts.menu_new()),
+            (Command::Open, self.texts.menu_open()),
+            (Command::Save, self.texts.menu_save()),
+            (Command::SaveAs, self.texts.menu_save_as()),
+            (Command::CloseTab, self.texts.menu_close_tab()),
         ];
         egui::Panel::top("menu").show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
@@ -421,7 +557,7 @@ impl BracketApp {
                     }
                     ui.separator();
                     if ui.button(self.texts.menu_exit()).clicked() {
-                        picked = Some(FileCommand::Exit);
+                        picked = Some(Command::Exit);
                         ui.close();
                     }
                 });
@@ -430,32 +566,50 @@ impl BracketApp {
         picked
     }
 
+    /// Draws the tab bar. Returns what was done with the mouse, if anything.
+    fn tab_bar(&mut self, ui: &mut egui::Ui) -> Option<TabAction> {
+        let fill = ui.visuals().extreme_bg_color;
+        let action = egui::Panel::top("tabs")
+            .frame(egui::Frame::NONE.fill(fill))
+            .show(ui, |ui| {
+                tabs::tab_bar(
+                    ui,
+                    &self.tabs,
+                    self.active,
+                    &self.languages,
+                    self.texts,
+                    self.reveal_active_tab,
+                )
+            })
+            .inner;
+        self.reveal_active_tab = false;
+        action
+    }
+
     fn handle_window_events(&mut self, ctx: &egui::Context) {
         let close_requested = ctx.input(|i| i.viewport().close_requested());
-        if close_requested && self.doc.is_dirty() && !self.allow_close {
+        let any_dirty = self.tabs.iter().any(|tab| tab.doc.is_dirty());
+        if close_requested && any_dirty && !self.allow_close {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
-            self.pending = Some(PendingAction::Close);
+            self.pending = Some(PendingAction::CloseWindow);
         }
 
-        let dropped = ctx.input(|i| i.raw.dropped_files.first().map(|f| f.path().to_path_buf()));
-        if let Some(path) = dropped {
-            if self.doc.is_dirty() {
-                self.pending = Some(PendingAction::Open(path));
-            } else {
-                self.start_loading(ctx, path, None);
-            }
+        let dropped: Vec<PathBuf> = ctx.input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .map(|f| f.path().to_path_buf())
+                .collect()
+        });
+        for path in dropped {
+            self.open_file(ctx, path);
         }
     }
 
     fn update_title(&mut self, ctx: &egui::Context) {
-        let name = self
-            .doc
-            .path()
-            .and_then(|p| p.file_name())
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| self.texts.untitled().to_owned());
-        let dirty = if self.doc.is_dirty() { " ●" } else { "" };
-        let title = format!("{name}{dirty} — Bracket");
+        let tab = self.active_tab();
+        let dirty = if tab.doc.is_dirty() { " ●" } else { "" };
+        let title = format!("{}{dirty} — Bracket", tab.title(self.texts));
         if title != self.title {
             ctx.send_viewport_cmd(ViewportCommand::Title(title.clone()));
             self.title = title;
@@ -465,15 +619,16 @@ impl BracketApp {
     /// Draws the status bar. Returns what was picked in one of its menus, if anything.
     fn status_bar(&self, ui: &mut egui::Ui) -> Option<StatusAction> {
         let mut picked = None;
+        let doc = &self.active_tab().doc;
         egui::Panel::bottom("status").show(ui, |ui| {
             ui.horizontal(|ui| {
-                let text = self.doc.buffer.text();
-                let head = self.doc.buffer.selections().primary().head;
+                let text = doc.buffer.text();
+                let head = doc.buffer.selections().primary().head;
                 let line = movement::line_of(text, head) + 1;
-                let column = movement::visual_column(text, head, self.doc.buffer.tab_width()) + 1;
+                let column = movement::visual_column(text, head, doc.buffer.tab_width()) + 1;
                 ui.label(self.texts.position(line, column));
                 ui.separator();
-                let current_line_ending = self.doc.line_ending();
+                let current_line_ending = doc.line_ending();
                 ui.menu_button(current_line_ending.label(), |ui| {
                     for line_ending in LineEnding::ALL {
                         let label = self.texts.convert_line_endings(line_ending.label());
@@ -489,7 +644,7 @@ impl BracketApp {
                 .response
                 .on_hover_text(self.texts.line_ending_tooltip());
                 ui.separator();
-                let current_encoding = self.doc.encoding();
+                let current_encoding = doc.encoding();
                 ui.menu_button(current_encoding.label(), |ui| {
                     ui.menu_button(self.texts.reopen_with_encoding(), |ui| {
                         for encoding in encoding::selectable() {
@@ -513,7 +668,7 @@ impl BracketApp {
                 })
                 .response
                 .on_hover_text(self.texts.encoding_tooltip());
-                if self.doc.is_read_only() {
+                if doc.is_read_only() {
                     ui.separator();
                     ui.label(self.texts.read_only());
                 }
@@ -524,7 +679,7 @@ impl BracketApp {
                 });
                 match self.status.as_ref().or(notice.as_ref()) {
                     Some(message) => ui.label(message.as_str()),
-                    None if self.doc.path().is_none() => ui.weak(self.texts.drop_hint()),
+                    None if doc.path().is_none() => ui.weak(self.texts.drop_hint()),
                     None => ui.label(""),
                 };
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -549,26 +704,28 @@ impl BracketApp {
     }
 
     fn run_status_action(&mut self, ctx: &egui::Context, action: StatusAction) {
+        let index = self.active;
+        let doc = &mut self.tabs[index].doc;
         match action {
             StatusAction::Language(language) => self.set_language(ctx, language),
             StatusAction::ConvertLineEndings(line_ending) => {
-                if !self.doc.is_read_only() {
-                    self.doc.convert_line_endings(line_ending);
+                if !doc.is_read_only() {
+                    doc.convert_line_endings(line_ending);
                 }
             }
             StatusAction::SaveWith(encoding) => {
-                if !self.doc.is_read_only() {
-                    self.doc.set_encoding(encoding);
+                if !doc.is_read_only() {
+                    doc.set_encoding(encoding);
                 }
             }
             StatusAction::ReopenWith(encoding) => {
-                let Some(path) = self.doc.path().map(PathBuf::from) else {
+                let Some(path) = doc.path().map(PathBuf::from) else {
                     return;
                 };
-                if self.doc.is_dirty() {
+                if doc.is_dirty() {
                     self.status = Some(self.texts.reopen_needs_clean().to_owned());
                 } else {
-                    self.start_loading(ctx, path, Some(encoding));
+                    self.start_loading(ctx, index, path, Some(encoding), false);
                 }
             }
         }
@@ -613,17 +770,38 @@ impl BracketApp {
     }
 
     fn unsaved_dialog(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
-        let Some(action) = self.pending.clone() else {
+        let Some(action) = self.pending else {
             return;
         };
+        let dirty: Vec<usize> = match action {
+            PendingAction::CloseTab(id) => self.tab_index(id).into_iter().collect(),
+            PendingAction::CloseWindow => (0..self.tabs.len()).collect(),
+        };
+        let dirty: Vec<usize> = dirty
+            .into_iter()
+            .filter(|&index| self.tabs[index].doc.is_dirty())
+            .collect();
+        if dirty.is_empty() {
+            self.pending = None;
+            self.finish_pending(ctx, action);
+            return;
+        }
+
         let texts = self.texts;
+        let (message, save_label) = match dirty.as_slice() {
+            [index] => (
+                texts.unsaved_message(&self.tabs[*index].title(texts)),
+                texts.save(),
+            ),
+            many => (texts.unsaved_many_message(many.len()), texts.save_all()),
+        };
         let mut choice = None;
         egui::Modal::new(Id::new("unsaved-changes")).show(ctx, |ui| {
             ui.heading(texts.unsaved_title());
-            ui.label(texts.unsaved_message());
+            ui.label(message);
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                if ui.button(texts.save()).clicked() {
+                if ui.button(save_label).clicked() {
                     choice = Some(true);
                 }
                 if ui.button(texts.discard()).clicked() {
@@ -634,18 +812,31 @@ impl BracketApp {
                 }
             });
         });
-        match choice {
-            Some(true) => {
-                self.pending = None;
-                if self.save_now(frame) {
-                    self.run_pending(ctx, frame, action);
+        let Some(save) = choice else { return };
+        self.pending = None;
+        if save {
+            for index in dirty {
+                // Show the document being saved; stop at the first one that is not saved.
+                self.activate(ctx, index);
+                if !self.save_now(frame, index) {
+                    return;
                 }
             }
-            Some(false) => {
-                self.pending = None;
-                self.run_pending(ctx, frame, action);
+        }
+        self.finish_pending(ctx, action);
+    }
+
+    fn finish_pending(&mut self, ctx: &egui::Context, action: PendingAction) {
+        match action {
+            PendingAction::CloseTab(id) => {
+                if let Some(index) = self.tab_index(id) {
+                    self.remove_tab(ctx, index);
+                }
             }
-            None => {}
+            PendingAction::CloseWindow => {
+                self.allow_close = true;
+                ctx.send_viewport_cmd(ViewportCommand::Close);
+            }
         }
     }
 }
@@ -660,7 +851,8 @@ impl BracketApp {
         ctx.request_repaint();
         // The second frame with the final content means the first one has been presented.
         // Count frames, not passes: egui may run extra layout passes within one frame.
-        if self.loading.is_some() || ctx.current_pass_index() != 0 {
+        let tab = &mut self.tabs[self.active];
+        if tab.loading.is_some() || ctx.current_pass_index() != 0 {
             return;
         }
         self.frames_ready += 1;
@@ -671,13 +863,13 @@ impl BracketApp {
             Probe::Startup(startup) => startup.finish(),
             Probe::Scroll(scroll) => {
                 // One page further every frame, wrapping at the end: each frame lays out new lines.
-                let buffer = &mut self.doc.buffer;
+                let buffer = &mut tab.doc.buffer;
                 if buffer.selections().primary().head == buffer.len_chars() {
                     buffer.set_selections(bracket_core::Selections::caret(0));
                 } else {
-                    buffer.move_selections(Motion::Down(self.view.page_lines()), false);
+                    buffer.move_selections(Motion::Down(tab.view.page_lines()), false);
                 }
-                self.view.request_scroll_to_caret();
+                tab.view.request_scroll_to_caret();
                 scroll.frame();
             }
         }
@@ -695,33 +887,50 @@ impl eframe::App for BracketApp {
 
         // Application shortcuts work wherever the keyboard focus is (for example after using a
         // status bar menu); consuming them keeps the editor from seeing them too.
-        let shortcut = FileCommand::SHORTCUTS
+        let shortcut = Command::SHORTCUTS
             .iter()
             .find(|(_, shortcut)| ctx.input_mut(|i| i.consume_shortcut(shortcut)))
             .map(|(command, _)| *command);
         let menu_command = self.menu_bar(ui);
         if let Some(command) = shortcut.or(menu_command) {
-            self.run_file_command(&ctx, frame, command);
+            self.run_command(&ctx, frame, command);
+        }
+        match self.tab_bar(ui) {
+            Some(TabAction::Activate(index)) => self.activate(&ctx, index),
+            Some(TabAction::Close(index)) => self.close_tab(&ctx, index),
+            None => {}
         }
         if let Some(action) = self.status_bar(ui) {
             self.run_status_action(&ctx, action);
             // Give the keyboard back to the editor after using a menu.
-            ctx.memory_mut(|m| m.request_focus(self.view.id()));
+            self.focus_editor(&ctx);
         }
+        let mut missing_glyph = None;
         egui::CentralPanel::default().show(ui, |ui| {
-            if self.loading.is_some() {
+            let tab = &mut self.tabs[self.active];
+            if tab.loading.is_some() {
                 ui.centered_and_justified(|ui| ui.label(self.texts.loading()));
             } else {
-                let output = self.view.show(ui, &mut self.doc);
-                if let Some(c) = output.missing_glyph {
-                    self.request_fallback(&ctx, c);
-                }
+                missing_glyph = tab.view.show(ui, &mut tab.doc).missing_glyph;
             }
         });
+        if let Some(c) = missing_glyph {
+            self.request_fallback(&ctx, c);
+        }
         self.unsaved_dialog(&ctx, frame);
         self.update_title(&ctx);
 
         self.run_probe(&ctx);
+    }
+}
+
+fn save_error_text(texts: &Texts, err: &SaveError) -> String {
+    match err {
+        SaveError::Encode(err) => {
+            let character = err.character.map(String::from).unwrap_or_default();
+            texts.save_encode_failed(&err.encoding.label(), &character)
+        }
+        SaveError::Io(err) => texts.save_failed(&err.to_string()),
     }
 }
 

@@ -9,12 +9,12 @@ Estado: Fase 0. Este documento describe la estructura acordada; cada sección in
 | Crate | Responsabilidad | Depende de (workspace) | Estado |
 |---|---|---|---|
 | `bracket-core` | Buffer (ropey), selecciones múltiples, deshacer/rehacer por transacciones, movimiento de cursor, codificación, saltos de línea, modelo de documento. Sin UI ni APIs de Windows. | — | Fase 0: buffer, selecciones, transacciones, historial, movimiento y documento UTF-8 |
-| `bracket-syntax` | Carga de lenguajes integrados y externos, resaltado incremental por líneas con caché, temas. | `bracket-core` (previsto) | Vacía |
+| `bracket-syntax` | Carga de lenguajes integrados y externos, resaltado incremental por líneas con caché, temas. | `bracket-core` (previsto) | Fase 1: registro de lenguajes (los seis integrados, extensiones e insignia) |
 | `bracket-index` | Recorrido de proyecto, extracción de símbolos (tree-sitter y regex), índice incremental, búsqueda difusa, referencias por nombre. | `bracket-core` (previsto) | Vacía |
 | `bracket-search` | Buscar y reemplazar con regex en fichero y carpeta, cancelable, con resultados en streaming. | `bracket-core` (previsto) | Vacía |
 | `bracket-session` | Configuración TOML, modo portable, sesión recuperable, recientes, vigilancia de ficheros, registro de comandos. | `bracket-core` | Fase 1: rutas (modo portable o `%APPDATA%`) y configuración TOML |
 | `bracket-update` | Comprobación de versiones por canal, descarga, verificación de suma y firma, aplicación y vuelta atrás. | — | Vacía |
-| `bracket-ui` | Interfaz egui: vista del editor, pestañas, árbol de proyecto, paleta, barra de estado. | `bracket-core`, `bracket-session` | Fase 0: prototipo (vista del editor, ventana, barra de estado mínima, catálogo de textos) |
+| `bracket-ui` | Interfaz egui: vista del editor, pestañas, árbol de proyecto, paleta, barra de estado. | `bracket-core`, `bracket-session`, `bracket-syntax` | Fase 1: pestañas, menú Archivo, barra de estado, fuentes del sistema, catálogos de textos |
 | `bracket-app` | Binario `bracket.exe`: arranque, instancia única, argumentos, manifiesto de Windows, registro en HKCU. | `bracket-ui`, `bracket-session`, `bracket-update` | Fase 0: arranque y fichero por argumento. Fase 1: resuelve rutas y carga la configuración |
 
 ## Reglas de dependencias
@@ -58,6 +58,13 @@ En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync
 
 - `dialogs.rs` envuelve los diálogos nativos de `rfd` con la ventana de Bracket como padre: son modales y se ejecutan en el hilo de interfaz, como en cualquier editor.
 - Los atajos de la aplicación (Ctrl+N/O/S, Ctrl+Mayús+S) se consumen en la app antes de pintar el editor, así que funcionan esté donde esté el foco. Guardar un documento sin título pasa por Guardar como.
+
+## Pestañas (Fase 1)
+
+- `tabs.rs` define `Tab` (documento, vista, lenguaje, carga y guardado en curso) y dibuja la barra de pestañas. La app guarda un `Vec<Tab>` que nunca está vacío y el índice de la activa; la barra de estado, el título y los comandos actúan sobre la activa.
+- Cada pestaña tiene un identificador único durante la ejecución y su `EditorView` deriva de él su `Id` de egui, así que el foco y el desplazamiento de cada pestaña son independientes.
+- La carga y el guardado van por pestaña en hilos de trabajo; el resultado llega a su pestaña aunque ya no sea la activa. Si falla la carga de un fichero abierto en una pestaña nueva, la pestaña se cierra.
+- El lenguaje de cada pestaña sale de `LanguageRegistry::for_path` (`bracket-syntax`) al abrir y al guardar como. Las insignias son texto con color; el registro admite añadir iconos SVG más adelante.
 
 ## Fuentes (Fase 1)
 
