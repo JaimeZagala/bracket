@@ -31,3 +31,4 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - Línea de comandos: `fichero:línea` y `fichero:línea:columna` abren el fichero con el cursor en esa posición; `--help` y `--version` (la ayuda, en el idioma de la interfaz) se muestran en la consola desde la que se lanzó Bracket, o en un mensaje si no hay consola.
 - Corregido: al cerrar la ventana minimizada se guardaba una ventana diminuta en (0, 0) y la sesión no se guardaba.
 - Corregido: al abrir Bracket con la ventana maximizada se veía la ventana en negro un momento antes de la interfaz. Además, «Cargando…» solo aparece si la carga dura más de 200 ms, para que no destelle con ficheros normales.
+- Al restaurar la sesión solo se lee la pestaña activa (y las que tienen cambios sin guardar); las demás se leen al activarlas. Con dos ficheros grandes en pestañas inactivas, el arranque pasa de 226 MB a 47 MB de memoria.

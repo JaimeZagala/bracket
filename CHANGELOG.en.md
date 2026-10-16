@@ -31,3 +31,4 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Command line: `file:line` and `file:line:column` open the file with the caret at that position; `--help` and `--version` (the help in the interface language) are printed to the console Bracket was started from, or shown in a message when there is no console.
 - Fixed: closing the window while minimized stored a tiny window at (0, 0) and did not save the session.
 - Fixed: opening Bracket with the window maximized showed a black window for a moment before the interface. Also, "Loading…" only appears if loading takes over 200 ms, so it does not flash for ordinary files.
+- Restoring the session only reads the active tab (and those with unsaved changes); the others are read when activated. With two big files in inactive tabs, startup memory goes from 226 MB to 47 MB.

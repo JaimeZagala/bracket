@@ -124,6 +124,7 @@ Conclusions:
 | Step 9: window position | 5,870,592 B | +547 KB | eframe's `persistence` feature (serde and ron). Interleaved startup against step 9 without it (15 rounds): 126.8 versus 137.4 ms. With the probes, `window.ron` is neither read nor written |
 | Step 10: reload on disk changes | 5,992,960 B | +120 KB | `notify` (and `walkdir`; `windows-sys` 0.60 was already in the tree) and file following. Interleaved startup against step 9 (15 rounds): 119.6 versus 133.6 ms |
 | Step 11: single instance and command line | 6,055,424 B | +61 KB | Arguments, help in the catalogs, `rfd` message, lock and inbox. Interleaved startup against step 10 (15 rounds): 133.1 versus 131.0 ms (noise). Handing files to the open instance: the second one exits in 110–230 ms |
+| Step 11: lazy session loading | — | — | Session with one small active tab and two inactive ones of 100 and 52 MB, private memory after 3 s: 226 MB before, 47 MB with lazy loading (221 MB after activating the 100 MB one) |
 
 Step 5, interleaved startup against step 4 (15 rounds): 144.9 ms versus 148.6 ms, within the noise. That day absolute medians were around 145–149 ms with a busy machine: the margin against 150 ms is minimal.
 

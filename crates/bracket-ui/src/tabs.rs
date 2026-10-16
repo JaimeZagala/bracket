@@ -63,6 +63,9 @@ pub struct Tab {
     pub saving: Option<Receiver<SaveOutcome>>,
     /// The link with the file on disk: its stamp, pending checks and notice.
     pub disk: DiskWatch,
+    /// A tab of the previous session that has not been read yet: it is read when it is first
+    /// activated. Only tabs without unsaved changes wait like this.
+    pub unloaded: Option<SessionTab>,
 }
 
 impl Tab {
@@ -77,6 +80,7 @@ impl Tab {
             loading: None,
             saving: None,
             disk: DiskWatch::default(),
+            unloaded: None,
         }
     }
 
@@ -90,15 +94,19 @@ impl Tab {
 
     /// The file shown (or being loaded) in this tab.
     pub fn path(&self) -> Option<&Path> {
-        match &self.loading {
-            Some(loading) => loading.path.as_deref(),
-            None => self.doc.path(),
+        if let Some(loading) = &self.loading {
+            return loading.path.as_deref();
         }
+        if let Some(entry) = &self.unloaded {
+            return entry.path.as_deref();
+        }
+        self.doc.path()
     }
 
     /// Untitled, empty and unmodified: opening a file can take its place.
     pub fn is_blank(&self) -> bool {
         self.loading.is_none()
+            && self.unloaded.is_none()
             && self.doc.path().is_none()
             && !self.doc.is_dirty()
             && self.doc.buffer.len_chars() == 0
@@ -107,7 +115,6 @@ impl Tab {
     /// Looks the language up again after the path changed.
     pub fn refresh_language(&mut self, registry: &LanguageRegistry) {
         self.language = self
-            .doc
             .path()
             .and_then(|path| registry.for_path(path))
             .map(|language| language.id.clone());

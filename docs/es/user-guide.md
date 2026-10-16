@@ -37,6 +37,7 @@ bracket [opciones] [fichero[:línea[:columna]]]...
 
 Al cerrar Bracket se guarda la sesión: las pestañas abiertas, cuál estaba activa, la posición del cursor y del scroll de cada una, y el texto de los documentos con cambios sin guardar, incluidos los que no tienen título. Al volver a abrirlo todo aparece como estaba y esos documentos siguen marcados como modificados: no se escribe nada en tus ficheros hasta que guardas.
 
+- Al abrir, solo se lee la pestaña activa (y las que tienen cambios sin guardar); las demás se leen la primera vez que las activas, así Bracket arranca rápido aunque la sesión tenga ficheros grandes.
 - La sesión también se guarda unos segundos después de cada cambio, así que si Bracket o Windows se cierran de golpe se pierden como mucho esos segundos.
 - Si un fichero ya no existe y no tenía cambios, su pestaña no se abre. Si tenía cambios sin guardar, se abre con ellos y al guardar se vuelve a crear.
 - Se guarda en `session.toml`, y el texto sin guardar en la carpeta `backups`, junto a `config.toml` (en `%APPDATA%\Bracket` o junto al exe en modo portable). Si `session.toml` estuviera dañado, Bracket lo aparta como `session.damaged.toml`, empieza sin sesión y no borra ninguna copia de `backups`.

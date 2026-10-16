@@ -280,10 +280,18 @@ impl BracketApp {
             self.status = Some(self.texts.session_damaged(&error));
         }
         self.session = Some(SessionKeeper::new(files, &previous));
-        for entry in previous.tabs {
+        // Only the active tab and tabs with unsaved changes are read now; the others wait
+        // until they are activated, so startup does not read files nobody is looking at.
+        for (position, entry) in previous.tabs.into_iter().enumerate() {
             let doc = self.empty_document();
             let index = self.add_tab(doc);
-            self.start_restoring(ctx, index, entry);
+            if position == previous.active || entry.unsaved.is_some() {
+                self.start_restoring(ctx, index, entry);
+            } else {
+                let tab = &mut self.tabs[index];
+                tab.unloaded = Some(entry);
+                tab.refresh_language(&self.languages);
+            }
         }
         if !self.tabs.is_empty() {
             self.active = previous.active.min(self.tabs.len() - 1);
@@ -490,6 +498,9 @@ impl BracketApp {
     fn activate(&mut self, ctx: &egui::Context, index: usize) {
         self.active = index;
         self.reveal_active_tab = true;
+        if let Some(entry) = self.tabs[index].unloaded.take() {
+            self.start_restoring(ctx, index, entry);
+        }
         self.focus_editor(ctx);
     }
 

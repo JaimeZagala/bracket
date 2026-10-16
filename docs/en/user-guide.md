@@ -37,6 +37,7 @@ bracket [options] [file[:line[:column]]]...
 
 When Bracket closes it saves the session: the open tabs, which one was active, the caret and scroll position of each, and the text of documents with unsaved changes, untitled ones included. When it opens again everything is as it was and those documents are still marked as modified: nothing is written to your files until you save.
 
+- On startup only the active tab is read (and those with unsaved changes); the others are read the first time you activate them, so Bracket starts quickly even if the session has big files.
 - The session is also saved a few seconds after each change, so if Bracket or Windows closes suddenly, at most those seconds are lost.
 - If a file no longer exists and had no changes, its tab is not opened. If it had unsaved changes, it opens with them and saving creates it again.
 - It is stored in `session.toml`, and the unsaved text in the `backups` folder, next to `config.toml` (in `%APPDATA%\Bracket`, or next to the exe in portable mode). If `session.toml` were damaged, Bracket sets it aside as `session.damaged.toml`, starts without a session and deletes nothing in `backups`.

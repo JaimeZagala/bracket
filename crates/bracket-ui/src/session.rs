@@ -214,14 +214,16 @@ impl SessionKeeper {
             if index == active {
                 session.active = session.tabs.len();
             }
-            let entry = match &tab.loading {
+            let entry = match (&tab.loading, &tab.unloaded) {
                 // Not loaded yet: keep what is known (a restored entry keeps its backup).
-                Some(loading) => loading.restore.clone().unwrap_or_else(|| SessionTab {
+                (Some(loading), _) => loading.restore.clone().unwrap_or_else(|| SessionTab {
                     path: loading.path.clone(),
                     read_encoding: loading.read_encoding,
                     ..SessionTab::default()
                 }),
-                None => {
+                // Never activated: saved again exactly as it was restored.
+                (None, Some(entry)) => entry.clone(),
+                (None, None) => {
                     let doc = &tab.doc;
                     // An untitled document with nothing in it has nothing to restore.
                     if doc.path().is_none() && !doc.is_dirty() {
@@ -272,6 +274,7 @@ fn signature(tabs: &[Tab], active: usize) -> u64 {
         tab.id.hash(&mut hasher);
         tab.path().hash(&mut hasher);
         tab.loading.is_some().hash(&mut hasher);
+        tab.unloaded.is_some().hash(&mut hasher);
         tab.read_encoding.map(|e| e.code()).hash(&mut hasher);
         let doc = &tab.doc;
         doc.is_dirty().hash(&mut hasher);
@@ -396,6 +399,24 @@ mod tests {
         keeper.save_now(&tabs, 0).unwrap();
         let left = fs::read_dir(&files.backup_dir).unwrap().count();
         assert_eq!(left, 0);
+        fs::remove_dir_all(files.file.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn tabs_never_activated_are_saved_as_they_were_restored() {
+        let files = temp_files("unloaded");
+        let entry = SessionTab {
+            path: Some(PathBuf::from(r"C:\src\big.log")),
+            anchor: 7,
+            head: 9,
+            top_line: 120,
+            ..SessionTab::default()
+        };
+        let mut waiting = tab(4, Document::new_empty(LineEnding::CrLf, TextEncoding::UTF8));
+        waiting.unloaded = Some(entry.clone());
+        let keeper = SessionKeeper::new(files.clone(), &Session::default());
+        let (snapshot, _) = keeper.snapshot(&[waiting], 0);
+        assert_eq!(snapshot.session.tabs, [entry]);
         fs::remove_dir_all(files.file.parent().unwrap()).unwrap();
     }
 
