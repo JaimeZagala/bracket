@@ -245,6 +245,14 @@ impl Texts {
         self.fill("disk_reloaded", &[("name", &name)])
     }
 
+    pub fn cli_help(&self, version: &str) -> String {
+        self.fill("cli_help", &[("version", &version)])
+    }
+
+    pub fn cli_unknown_option(&self, option: &str) -> String {
+        self.fill("cli_unknown_option", &[("option", &option)])
+    }
+
     /// Translated text for a configuration warning.
     pub fn config_warning(&self, warning: &ConfigWarning) -> String {
         match warning {
@@ -371,6 +379,8 @@ mod tests {
                 ("disk_missing", t.disk_missing("a.txt")),
                 ("disk_dismiss", t.disk_dismiss().to_owned()),
                 ("disk_reloaded", t.disk_reloaded("a.txt")),
+                ("cli_help", t.cli_help("1.0.0")),
+                ("cli_unknown_option", t.cli_unknown_option("-x")),
             ];
             for (key, text) in pairs {
                 assert!(

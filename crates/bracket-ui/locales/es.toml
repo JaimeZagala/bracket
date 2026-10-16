@@ -61,3 +61,18 @@ disk_keep = "Mantener mis cambios"
 disk_missing = "«{name}» ya no está en el disco. Guárdalo para volver a crearlo."
 disk_dismiss = "Entendido"
 disk_reloaded = "«{name}» se ha recargado porque cambió en disco"
+
+cli_help = """
+Bracket {version}: editor de código ligero para Windows.
+
+Uso: bracket [opciones] [fichero[:línea[:columna]]]...
+
+  fichero               Abre el fichero en una pestaña.
+  fichero:línea         Abre el fichero con el cursor en esa línea.
+  fichero:línea:columna Abre el fichero con el cursor en esa línea y columna.
+  -h, --help            Muestra esta ayuda.
+  -v, --version         Muestra la versión.
+  --                    Lo que sigue son ficheros aunque empiecen por «-».
+
+Si Bracket ya está abierto, los ficheros se abren en esa ventana."""
+cli_unknown_option = "Opción desconocida: {option}"

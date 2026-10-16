@@ -10,11 +10,13 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::Instant;
 
+use bracket_core::Selections;
 use bracket_core::document::{self, DiskStamp, Document, FileReplacer, LineEnding, SaveError};
 use bracket_core::encoding::{self, TextEncoding};
 use bracket_core::movement::{self, Motion};
 use bracket_session::{
-    Config, ConfigWarning, FileWatcher, Language, LoadedConfig, SessionTab, config,
+    Config, ConfigWarning, FileWatcher, Language, LoadedConfig, OpenRequest, SessionTab, config,
+    requests,
 };
 use bracket_syntax::LanguageRegistry;
 use eframe::egui::{self, Id, Key, KeyboardShortcut, Modifiers, ViewportCommand};
@@ -28,6 +30,9 @@ use crate::measure::Probe;
 use crate::session::{self, SessionKeeper};
 use crate::tabs::{self, Loaded, Loading, Tab, TabAction};
 use crate::{Launch, RestoredSession};
+
+/// eframe's storage key for the window position and size.
+pub const WINDOW_KEY: &str = "window";
 
 /// Something picked in a status bar menu.
 #[derive(Debug, Clone, Copy)]
@@ -137,6 +142,8 @@ pub struct BracketApp {
     replacer: Arc<dyn FileReplacer>,
     /// `None` while measuring: the session is neither restored nor saved.
     session: Option<SessionKeeper>,
+    /// Files handed over by other Bracket processes (single instance).
+    inbox: Option<Inbox>,
     /// Reports open files changed by other programs (`None` if it could not start).
     watcher: Option<FileWatcher>,
     disk_rx: Receiver<PathBuf>,
@@ -144,15 +151,25 @@ pub struct BracketApp {
     watched_signature: Option<u64>,
     probe: Option<Probe>,
     frames_ready: u32,
+    /// What eframe last stored for the window while it was not minimized.
+    stored_window: Option<String>,
+    minimized: bool,
 }
 
 impl BracketApp {
-    pub fn new(ctx: &egui::Context, launch: Launch, mut probe: Option<Probe>) -> Self {
+    /// `stored_window` is the window position and size eframe stored last time (see `save`).
+    pub fn new(
+        ctx: &egui::Context,
+        launch: Launch,
+        mut probe: Option<Probe>,
+        stored_window: Option<String>,
+    ) -> Self {
         if let Some(Probe::Startup(startup)) = &mut probe {
             startup.mark_app_created();
         }
         let Launch {
             files,
+            requests_dir,
             settings,
             config_path,
             fonts,
@@ -213,11 +230,14 @@ impl BracketApp {
             allow_close: false,
             title: String::new(),
             session: None,
+            inbox: None,
             watcher,
             disk_rx,
             watched_signature: None,
             probe,
             frames_ready: 0,
+            stored_window,
+            minimized: false,
         };
         if let Some(restored) = session {
             app.restore_session(ctx, restored);
@@ -227,8 +247,11 @@ impl BracketApp {
             app.add_tab(doc);
         }
         app.focus_editor(ctx);
-        for path in files {
-            app.open_file(ctx, path);
+        for request in files {
+            app.open_request(ctx, request);
+        }
+        if let Some(dir) = requests_dir {
+            app.inbox = Inbox::start(ctx, dir);
         }
         app
     }
@@ -278,6 +301,30 @@ impl BracketApp {
         if let Some(error) = keeper.tick(ctx, &self.tabs, self.active) {
             self.status = Some(self.texts.session_save_failed(&error));
         }
+    }
+
+    /// Opens a file from the command line or another Bracket, at its line and column if given.
+    fn open_request(&mut self, ctx: &egui::Context, request: OpenRequest) {
+        let OpenRequest { path, line, column } = request;
+        self.open_file(ctx, path);
+        let Some(line) = line else { return };
+        let position = (line, column.unwrap_or(1));
+        let tab = &mut self.tabs[self.active];
+        match &mut tab.loading {
+            Some(loading) => loading.goto = Some(position),
+            None => go_to(tab, position),
+        }
+    }
+
+    /// Opens what other Bracket processes handed over, and comes to the front.
+    fn poll_inbox(&mut self, ctx: &egui::Context) {
+        let Some(inbox) = &mut self.inbox else { return };
+        let Some(requests) = inbox.take() else { return };
+        for request in requests {
+            self.open_request(ctx, request);
+        }
+        ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
+        ctx.send_viewport_cmd(ViewportCommand::Focus);
     }
 
     /// Keeps the watched files in step with the tabs, and checks the files reported as changed
@@ -539,6 +586,7 @@ impl BracketApp {
             restore: None,
             rx,
             new_tab,
+            goto: None,
         });
     }
 
@@ -568,6 +616,7 @@ impl BracketApp {
             restore: Some(entry),
             rx,
             new_tab: true,
+            goto: None,
         });
     }
 
@@ -581,6 +630,7 @@ impl BracketApp {
             let new_tab = loading.new_tab;
             let read_encoding = loading.read_encoding;
             let top_line = loading.restore.as_ref().map(|entry| entry.top_line);
+            let goto = loading.goto;
             match loading.rx.try_recv() {
                 Ok(Ok(Loaded { doc, stamp })) => {
                     tab.doc = doc;
@@ -591,6 +641,9 @@ impl BracketApp {
                     }
                     tab.read_encoding = read_encoding;
                     tab.loading = None;
+                    if let Some(position) = goto {
+                        go_to(tab, position);
+                    }
                     tab.refresh_language(&self.languages);
                     self.status = None;
                     loaded_active |= index == self.active;
@@ -1118,14 +1171,42 @@ impl eframe::App for BracketApp {
         false
     }
 
-    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        let ctx = ui.ctx().clone();
-        self.poll_loading(&ctx);
+    /// eframe has just stored the window position and size. While minimized it would store a
+    /// tiny window at (0, 0), so the last value stored with the window not minimized goes back.
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        if !self.minimized {
+            self.stored_window = storage.get_string(WINDOW_KEY);
+        } else if let Some(window) = &self.stored_window {
+            storage.set_string(WINDOW_KEY, window.clone());
+        } else {
+            // Nothing good to put back: next time the window opens centered.
+            storage.remove_string(WINDOW_KEY);
+        }
+    }
+
+    /// Often enough that the value kept for a minimized window is recent. eframe only writes
+    /// the file when something changed.
+    fn auto_save_interval(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(5)
+    }
+
+    /// Everything that does not paint. eframe calls it before each `ui`, and also while the
+    /// window is minimized, so files handed over by another Bracket, changes on disk, the
+    /// session and closing from the taskbar are handled even then.
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.minimized = ctx.input(|i| i.viewport().minimized.unwrap_or(false));
+        self.poll_loading(ctx);
         self.poll_saving();
         self.poll_config_saving();
-        self.poll_fallbacks(&ctx);
-        self.follow_disk(&ctx);
-        self.handle_window_events(&ctx);
+        self.poll_fallbacks(ctx);
+        self.poll_inbox(ctx);
+        self.follow_disk(ctx);
+        self.handle_window_events(ctx);
+        self.keep_session(ctx);
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
 
         // Application shortcuts work wherever the keyboard focus is (for example after using a
         // status bar menu); consuming them keeps the editor from seeing them too.
@@ -1170,10 +1251,64 @@ impl eframe::App for BracketApp {
         }
         self.unsaved_dialog(&ctx, frame);
         self.update_title(&ctx);
-        self.keep_session(&ctx);
 
         self.run_probe(&ctx);
     }
+}
+
+/// The folder where other Bracket processes leave files for this one, and its watcher.
+struct Inbox {
+    dir: PathBuf,
+    _watcher: Option<FileWatcher>,
+    rx: Receiver<()>,
+    /// Requests left before the watcher started are read on the first frame.
+    checked: bool,
+}
+
+impl Inbox {
+    fn start(ctx: &egui::Context, dir: PathBuf) -> Option<Self> {
+        std::fs::create_dir_all(&dir).ok()?;
+        let (tx, rx) = mpsc::channel();
+        let ctx = ctx.clone();
+        let watcher = FileWatcher::new(move |_| {
+            let _ = tx.send(());
+            ctx.request_repaint();
+        })
+        .ok()
+        .map(|mut watcher| {
+            watcher.set_paths([dir.as_path()]);
+            watcher
+        });
+        Some(Self {
+            dir,
+            _watcher: watcher,
+            rx,
+            checked: false,
+        })
+    }
+
+    /// The requests waiting in the folder, if something arrived since the last look.
+    fn take(&mut self) -> Option<Vec<OpenRequest>> {
+        let mut arrived = !self.checked;
+        while self.rx.try_recv().is_ok() {
+            arrived = true;
+        }
+        self.checked = true;
+        if !arrived {
+            return None;
+        }
+        requests::take_requests(&self.dir)
+    }
+}
+
+/// Puts the caret on a 1-based line and column (in characters), clamped to the text.
+fn go_to(tab: &mut Tab, (line, column): (usize, usize)) {
+    let text = tab.doc.buffer.text();
+    let line = line.saturating_sub(1).min(text.len_lines() - 1);
+    let start = movement::line_start(text, line);
+    let pos = (start + column.saturating_sub(1)).min(movement::line_end(text, line));
+    tab.doc.buffer.set_selections(Selections::caret(pos));
+    tab.view.request_scroll_to_caret();
 }
 
 /// Applies the result of a disk check to a tab. Returns true if the document was reloaded

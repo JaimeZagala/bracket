@@ -61,3 +61,18 @@ disk_keep = "Keep my changes"
 disk_missing = "“{name}” is no longer on disk. Save it to create it again."
 disk_dismiss = "Got it"
 disk_reloaded = "“{name}” was reloaded because it changed on disk"
+
+cli_help = """
+Bracket {version}: a lightweight code editor for Windows.
+
+Usage: bracket [options] [file[:line[:column]]]...
+
+  file                  Opens the file in a tab.
+  file:line             Opens the file with the caret on that line.
+  file:line:column      Opens the file with the caret on that line and column.
+  -h, --help            Shows this help.
+  -v, --version         Shows the version.
+  --                    What follows are files even if they start with "-".
+
+If Bracket is already open, the files open in that window."""
+cli_unknown_option = "Unknown option: {option}"

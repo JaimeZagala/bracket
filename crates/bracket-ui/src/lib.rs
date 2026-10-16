@@ -21,7 +21,10 @@ pub use measure::Probe;
 /// Everything `bracket-app` prepares before the window opens.
 pub struct Launch {
     /// Files to open from the command line, each in its own tab.
-    pub files: Vec<PathBuf>,
+    pub files: Vec<bracket_session::OpenRequest>,
+    /// Where other Bracket processes leave files for this one (single instance). `None` while
+    /// measuring or when this is not the only instance.
+    pub requests_dir: Option<PathBuf>,
     pub settings: bracket_session::LoadedConfig,
     /// Where language changes made from the interface are saved.
     pub config_path: PathBuf,
@@ -43,6 +46,21 @@ pub struct RestoredSession {
     pub previous: bracket_session::Session,
     /// Why the previous session could not be read, if it could not.
     pub error: Option<String>,
+}
+
+/// The command line help, in the interface language.
+pub fn cli_help(language: bracket_session::Language, version: &str) -> String {
+    i18n::texts(language).cli_help(version)
+}
+
+/// The message for an option Bracket does not know, in the interface language.
+pub fn cli_unknown_option(language: bracket_session::Language, option: &str) -> String {
+    i18n::texts(language).cli_unknown_option(option)
+}
+
+/// A message box without a parent window, for when there is no console to print to.
+pub fn show_message(text: &str) {
+    dialogs::message(text);
 }
 
 /// Opens the main window and runs the event loop until it closes.
@@ -70,6 +88,14 @@ pub fn run(launch: Launch, probe: Option<Probe>) -> eframe::Result {
     eframe::run_native(
         "Bracket",
         options,
-        Box::new(move |cc| Ok(Box::new(app::BracketApp::new(&cc.egui_ctx, launch, probe)))),
+        Box::new(move |cc| {
+            let stored_window = cc.storage.and_then(|s| s.get_string(app::WINDOW_KEY));
+            Ok(Box::new(app::BracketApp::new(
+                &cc.egui_ctx,
+                launch,
+                probe,
+                stored_window,
+            )))
+        }),
     )
 }

@@ -50,7 +50,7 @@ En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync
 - **Edición:** toda edición se planifica por selección contra el texto anterior y se aplica como una sola transacción (lista de cambios con el texto borrado, invertible).
 - **Deshacer:** escribir caracteres seguidos o borrar carácter a carácter forma un solo paso; pegar, Intro, borrar una selección y las ediciones multicursor son pasos propios. Mover el cursor corta el grupo.
 - **Estado modificado:** cada paso del historial tiene un identificador único y la versión del buffer es la del último paso aplicado; deshacer y rehacer recuperan identificadores anteriores, así que volver al texto guardado lo deja como no modificado.
-- **Reemplazo de ficheros:** el núcleo define el trait `FileReplacer` (por defecto, renombrar). `bracket-app` usa `ReplaceFileW` (`file_replace.rs`), que conserva atributos, ACL y fecha de creación. Es el único bloque `unsafe` del proyecto, con su comentario `SAFETY`.
+- **Reemplazo de ficheros:** el núcleo define el trait `FileReplacer` (por defecto, renombrar). `bracket-app` usa `ReplaceFileW` (`file_replace.rs`), que conserva atributos, ACL y fecha de creación. Junto con `console.rs` (ver abajo), son los únicos bloques `unsafe` del proyecto, cada uno con su comentario `SAFETY`.
 - **Documento:** buffer + ruta + codificación + salto de línea + versión guardada. Guardado atómico: fichero temporal en la misma carpeta, `sync_all` y renombrado sobre el destino.
 - **Codificaciones (`encoding.rs`):** detección por BOM, UTF-16 sin BOM (patrón de bytes cero), UTF-8 válido y, si no, `chardetng`. Un fichero solo es editable si codificar de nuevo su texto reproduce exactamente sus bytes; si no, solo lectura. Al guardar, un carácter que no existe en la codificación hace fallar el guardado (encoding_rs lo sustituiría por `&#NNNN;`). UTF-16 se codifica a mano porque encoding_rs solo escribe UTF-8 para él. El UTF-8 válido se decodifica sin copiar los bytes.
 
@@ -74,6 +74,16 @@ En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync
 - `bracket-app` lee la sesión al arrancar (30 µs con 10 pestañas).
 - La ventana (posición, tamaño, maximizada) la guarda eframe con su feature `persistence` en `window.ron`, en la carpeta de datos (también en modo portable). eframe la devuelve a un monitor conectado si el suyo ya no está y tiene en cuenta el escalado de cada pantalla. Solo se guarda la ventana, no el estado de los widgets de egui. eframe aplica `centered` después de la posición guardada, así que solo se activa cuando aún no existe `window.ron`. Coste: 547 KB (serde y ron).
 - Con las sondas de medición activas no se lee ni se escribe la sesión, para que las medidas no dependan de la sesión del usuario ni la cambien.
+
+## Línea de comandos e instancia única (Fase 1)
+
+- `bracket-app` (`cli.rs`) interpreta los argumentos; `OpenRequest::parse` (`bracket-session`) separa `fichero:línea:columna` (un `:número` final siempre es posición, porque los nombres de fichero de Windows no admiten `:` salvo tras la unidad).
+- `--help` y `--version` salen antes de crear la ventana. Las versiones release son programas de interfaz gráfica sin consola propia: `console.rs` usa la salida redirigida si la hay, se engancha a la consola del proceso padre (`AttachConsole`) o, si no hay ninguna, muestra un mensaje. Es el segundo bloque `unsafe` del proyecto (`GetStdHandle` y `AttachConsole`); no hay alternativa segura en la biblioteca estándar.
+- Instancia única sin dependencias nuevas (`instance.rs`): la primera instancia mantiene abierto `instance.lock` en la carpeta de datos sin compartirlo (`share_mode(0)`); Windows lo cierra al terminar el proceso, también si se cuelga, así que no puede quedar un bloqueo huérfano. Otra instancia escribe sus ficheros (rutas absolutas) en `requests/` y espera hasta 3 s a que desaparezca la petición; si nadie la recoge, la retira y abre su propia ventana.
+- La instancia principal vigila `requests/` con el mismo `FileWatcher` que los ficheros abiertos, lee al arrancar las peticiones que hubiera y descarta las de más de 30 s.
+- Todo lo que no pinta (sondeos de hilos, buzón, cambios en disco, sesión, petición de cierre) va en `App::logic`, que eframe llama antes de cada `ui` y también con la ventana minimizada u oculta. Así se atienden las peticiones con la ventana minimizada y se guarda la sesión al cerrarla desde la barra de tareas.
+- eframe guarda una ventana diminuta en (0, 0) si guarda estando minimizada (al salir o en el autoguardado). `App::save` repone el último valor guardado con la ventana sin minimizar; el autoguardado es cada 5 s (eframe solo escribe si algo cambió).
+- Con las sondas de medición no hay instancia única: cada ejecución es independiente.
 
 ## Cambios en disco (Fase 1)
 

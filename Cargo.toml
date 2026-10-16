@@ -47,9 +47,13 @@ encoding_rs = "0.8.42"
 chardetng = "1.0.0"
 # Native file dialogs (IFileDialog on Windows); Linux portal features off.
 rfd = { version = "0.17.2", default-features = false }
-# Windows API bindings, only for what has no safe wrapper (ReplaceFileW). Same version as the
-# rest of the dependency tree.
-windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
+# Windows API bindings, only for what has no safe wrapper (ReplaceFileW, attaching to the
+# parent console). Same version as the rest of the dependency tree.
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+] }
 # File change notifications (ReadDirectoryChangesW on Windows) to reload files changed on disk.
 # Without default features: they only select macOS backends.
 notify = { version = "8.2.0", default-features = false }

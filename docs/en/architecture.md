@@ -50,7 +50,7 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 - **Editing:** every edit is planned per selection against the previous text and applied as a single transaction (a list of changes that store the removed text, so they can be inverted).
 - **Undo:** typing characters in a row or deleting char by char forms one step; paste, Enter, deleting a selection and multi-caret edits are steps of their own. Moving the caret ends the group.
 - **Modified state:** every undo step has a unique id and the buffer version is the id of the last step applied; undo and redo bring earlier ids back, so returning to the saved text leaves it unmodified.
-- **File replacement:** the core defines the `FileReplacer` trait (renaming by default). `bracket-app` uses `ReplaceFileW` (`file_replace.rs`), which keeps attributes, ACLs and creation time. It is the only `unsafe` block in the project, with its `SAFETY` comment.
+- **File replacement:** the core defines the `FileReplacer` trait (renaming by default). `bracket-app` uses `ReplaceFileW` (`file_replace.rs`), which keeps attributes, ACLs and creation time. Together with `console.rs` (see below), they are the only `unsafe` blocks in the project, each with its `SAFETY` comment.
 - **Document:** buffer + path + encoding + line ending + saved version. Atomic save: temporary file in the same folder, `sync_all` and rename over the target.
 - **Encodings (`encoding.rs`):** detection by BOM, UTF-16 without BOM (zero-byte pattern), valid UTF-8 and otherwise `chardetng`. A file is only editable if encoding its text again reproduces exactly its bytes; otherwise it is read-only. When saving, a character that does not exist in the encoding makes the save fail (encoding_rs would replace it with `&#NNNN;`). UTF-16 is encoded by hand because encoding_rs only writes UTF-8 for it. Valid UTF-8 is decoded without copying the bytes.
 
@@ -74,6 +74,16 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 - `bracket-app` reads the session at startup (30 µs with 10 tabs).
 - The window (position, size, maximized) is saved by eframe with its `persistence` feature in `window.ron`, in the data folder (portable mode too). eframe moves it back onto a connected monitor if its own is gone and accounts for each screen's scaling. Only the window is saved, not egui's widget state. eframe applies `centered` after the saved position, so it is only turned on while `window.ron` does not exist yet. Cost: 547 KB (serde and ron).
 - While the measurement probes are on, the session is neither read nor written, so measurements neither depend on the user's session nor change it.
+
+## Command line and single instance (Phase 1)
+
+- `bracket-app` (`cli.rs`) parses the arguments; `OpenRequest::parse` (`bracket-session`) splits `file:line:column` (a trailing `:number` is always a position, because Windows file names cannot contain `:` except after the drive).
+- `--help` and `--version` are handled before the window is created. Release builds are GUI programs without a console of their own: `console.rs` uses the redirected output if there is one, attaches to the parent process's console (`AttachConsole`) or, if there is none, shows a message. It is the project's second `unsafe` block (`GetStdHandle` and `AttachConsole`); the standard library has no safe alternative.
+- Single instance without new dependencies (`instance.rs`): the first instance keeps `instance.lock` in the data folder open without sharing it (`share_mode(0)`); Windows closes it when the process ends, even after a crash, so a stale lock cannot remain. Another instance writes its files (absolute paths) to `requests/` and waits up to 3 s for the request to disappear; if nobody takes it, it withdraws it and opens its own window.
+- The main instance watches `requests/` with the same `FileWatcher` as the open files, reads any pending requests at startup and discards those older than 30 s.
+- Everything that does not paint (thread polling, inbox, changes on disk, session, close requests) runs in `App::logic`, which eframe calls before each `ui` and also while the window is minimized or hidden. That way requests are handled while minimized and the session is saved when closing from the taskbar.
+- eframe stores a tiny window at (0, 0) if it saves while minimized (on exit or in the autosave). `App::save` puts back the last value stored with the window not minimized; the autosave runs every 5 s (eframe only writes when something changed).
+- With the measurement probes there is no single instance: every run is on its own.
 
 ## Changes on disk (Phase 1)
 

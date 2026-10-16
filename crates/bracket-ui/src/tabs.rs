@@ -39,6 +39,8 @@ pub struct Loading {
     pub rx: Receiver<io::Result<Loaded>>,
     /// The tab was opened for this file, so it goes away if the file cannot be read.
     pub new_tab: bool,
+    /// Line and column (1-based) to put the caret on once loaded (`file:line:column`).
+    pub goto: Option<(usize, usize)>,
 }
 
 pub struct Tab {

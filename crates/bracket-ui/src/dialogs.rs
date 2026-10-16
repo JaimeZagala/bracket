@@ -5,6 +5,16 @@
 
 use std::path::{Path, PathBuf};
 
+/// Shows a message with an OK button and waits until it is closed.
+pub fn message(text: &str) {
+    rfd::MessageDialog::new()
+        .set_title("Bracket")
+        .set_description(text)
+        .set_level(rfd::MessageLevel::Info)
+        .set_buttons(rfd::MessageButtons::Ok)
+        .show();
+}
+
 /// Asks for a file to open. Starts in `start_dir` if given.
 pub fn pick_file_to_open(
     parent: &eframe::Frame,

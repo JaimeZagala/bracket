@@ -123,6 +123,7 @@ Conclusiones:
 | Paso 9: sesión recuperable | 5.323.776 B | +57 KB | Fichero de sesión y copias, restauración de pestañas. Arranque intercalado frente al paso 8 (15 rondas, equipo tranquilo): 120,2 frente a 127,0 ms. Leer una sesión de 10 pestañas cuesta 30 µs (`cargo bench -p bracket-session`); las sondas no la leen |
 | Paso 9: posición de la ventana | 5.870.592 B | +547 KB | Feature `persistence` de eframe (serde y ron). Arranque intercalado frente al paso 9 sin ella (15 rondas): 126,8 frente a 137,4 ms. Con las sondas no se lee ni escribe `window.ron` |
 | Paso 10: recarga por cambios en disco | 5.992.960 B | +120 KB | `notify` (y `walkdir`; `windows-sys` 0.60 ya estaba en el árbol) y el seguimiento de ficheros. Arranque intercalado frente al paso 9 (15 rondas): 119,6 frente a 133,6 ms |
+| Paso 11: instancia única y línea de comandos | 6.055.424 B | +61 KB | Argumentos, ayuda en catálogos, mensaje de `rfd`, bloqueo y buzón. Arranque intercalado frente al paso 10 (15 rondas): 133,1 frente a 131,0 ms (ruido). Entregar ficheros a la instancia abierta: la segunda termina en 110–230 ms |
 
 Paso 5, arranque intercalado frente al paso 4 (15 rondas): 144,9 ms frente a 148,6 ms, dentro del ruido. Ese día las medianas absolutas rondaron 145–149 ms con el equipo cargado: el margen frente a los 150 ms es mínimo.
 

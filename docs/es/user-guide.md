@@ -7,7 +7,7 @@ Bracket está en desarrollo (Fase 1). Esta guía describe lo que ya funciona y c
 ## Abrir y guardar
 
 - Menú **Archivo**: Nuevo (Ctrl+N), Abrir (Ctrl+O), Guardar (Ctrl+S), Guardar como (Ctrl+Mayús+S) y Salir. Abrir y Guardar como usan los diálogos de Windows.
-- También se abren ficheros pasándolos como argumentos (`bracket.exe a.cs b.json`) o arrastrándolos a la ventana.
+- También se abren ficheros pasándolos como argumentos (`bracket.exe a.cs b.json`, ver [Línea de comandos](#línea-de-comandos)) o arrastrándolos a la ventana.
 - Guardar un documento sin título abre Guardar como. El guardado es atómico y conserva el BOM y los saltos de línea del fichero. Al guardar sobre un fichero existente se mantienen sus atributos (por ejemplo, oculto), sus permisos y su fecha de creación. El título de la ventana marca con ● los cambios sin guardar; si deshaces hasta el texto guardado, la marca desaparece.
 - Si hay cambios sin guardar, Bracket pregunta antes de cerrar la pestaña. Al salir no pregunta: los cambios se quedan en la sesión (ver abajo).
 - Bracket detecta la codificación al abrir (UTF-8, UTF-16 y codificaciones heredadas como windows-1252) y guarda en la misma, byte a byte. Si un fichero no se puede volver a escribir exactamente igual, se abre en solo lectura y la barra de estado lo indica.
@@ -20,6 +20,18 @@ Bracket está en desarrollo (Fase 1). Esta guía describe lo que ya funciona y c
 - **Cerrar:** Ctrl+W, la × o clic con el botón central. Al cerrar la última queda un documento nuevo.
 - **Cambiar de pestaña:** Ctrl+Tab y Ctrl+Mayús+Tab, o Ctrl+AvPág y Ctrl+RePág.
 - Los documentos nuevos se numeran: «Sin título 1», «Sin título 2»...
+
+## Línea de comandos
+
+```text
+bracket [opciones] [fichero[:línea[:columna]]]...
+```
+
+- `fichero:línea` abre el fichero con el cursor en esa línea; `fichero:línea:columna`, también en esa columna (cuenta caracteres: una tabulación es uno). Sirve para abrir directamente los errores de un compilador, como `bracket Program.cs:42:13`.
+- `-h`, `--help` muestra la ayuda en el idioma de la interfaz; `-v`, `--version`, la versión. Se escriben en la consola desde la que se lanzó Bracket, o en un mensaje si se lanzó desde el Explorador o un acceso directo.
+- `--` indica que lo que sigue son ficheros aunque empiecen por `-`.
+
+**Una sola ventana.** Si Bracket ya está abierto, lanzarlo de nuevo abre los ficheros en esa ventana y la trae al frente, aunque esté minimizada. Bracket en modo portable y Bracket instalado son instancias distintas, porque cada uno tiene su carpeta de datos.
 
 ## Sesión
 
