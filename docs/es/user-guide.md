@@ -9,7 +9,7 @@ Bracket está en desarrollo (Fase 1). Esta guía describe lo que ya funciona y c
 - Menú **Archivo**: Nuevo (Ctrl+N), Abrir (Ctrl+O), Guardar (Ctrl+S), Guardar como (Ctrl+Mayús+S) y Salir. Abrir y Guardar como usan los diálogos de Windows.
 - También se abren ficheros pasándolos como argumentos (`bracket.exe a.cs b.json`) o arrastrándolos a la ventana.
 - Guardar un documento sin título abre Guardar como. El guardado es atómico y conserva el BOM y los saltos de línea del fichero. Al guardar sobre un fichero existente se mantienen sus atributos (por ejemplo, oculto), sus permisos y su fecha de creación. El título de la ventana marca con ● los cambios sin guardar; si deshaces hasta el texto guardado, la marca desaparece.
-- Si hay cambios sin guardar, Bracket pregunta antes de cerrar la pestaña o salir. Al salir con varios documentos modificados, «Guardar todo» los guarda uno a uno (los que no tienen título pasan por Guardar como); si se cancela uno, Bracket no se cierra.
+- Si hay cambios sin guardar, Bracket pregunta antes de cerrar la pestaña. Al salir no pregunta: los cambios se quedan en la sesión (ver abajo).
 - Bracket detecta la codificación al abrir (UTF-8, UTF-16 y codificaciones heredadas como windows-1252) y guarda en la misma, byte a byte. Si un fichero no se puede volver a escribir exactamente igual, se abre en solo lectura y la barra de estado lo indica.
 
 ## Pestañas
@@ -20,6 +20,16 @@ Bracket está en desarrollo (Fase 1). Esta guía describe lo que ya funciona y c
 - **Cerrar:** Ctrl+W, la × o clic con el botón central. Al cerrar la última queda un documento nuevo.
 - **Cambiar de pestaña:** Ctrl+Tab y Ctrl+Mayús+Tab, o Ctrl+AvPág y Ctrl+RePág.
 - Los documentos nuevos se numeran: «Sin título 1», «Sin título 2»...
+
+## Sesión
+
+Al cerrar Bracket se guarda la sesión: las pestañas abiertas, cuál estaba activa, la posición del cursor y del scroll de cada una, y el texto de los documentos con cambios sin guardar, incluidos los que no tienen título. Al volver a abrirlo todo aparece como estaba y esos documentos siguen marcados como modificados: no se escribe nada en tus ficheros hasta que guardas.
+
+- La sesión también se guarda unos segundos después de cada cambio, así que si Bracket o Windows se cierran de golpe se pierden como mucho esos segundos.
+- Si un fichero ya no existe y no tenía cambios, su pestaña no se abre. Si tenía cambios sin guardar, se abre con ellos y al guardar se vuelve a crear.
+- Se guarda en `session.toml`, y el texto sin guardar en la carpeta `backups`, junto a `config.toml` (en `%APPDATA%\Bracket` o junto al exe en modo portable). Si `session.toml` estuviera dañado, Bracket lo aparta como `session.damaged.toml`, empieza sin sesión y no borra ninguna copia de `backups`.
+- Si la sesión no se pudiera escribir al salir, Bracket pregunta qué hacer con los cambios sin guardar, como antes.
+- La ventana se abre centrada, con el tamaño que tenía y maximizada si lo estaba.
 
 ## Codificación y saltos de línea
 

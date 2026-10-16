@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 
-use bracket_session::{Paths, config};
+use bracket_session::{Paths, config, session};
 use bracket_ui::fonts::{self, FontSetup};
 
 use crate::file_replace::WindowsReplacer;
@@ -37,12 +37,29 @@ fn main() -> Result<(), Box<dyn Error>> {
         FontSetup { source, startup }
     });
 
+    // While measuring, the user's session is neither restored nor changed.
+    let session = probe.is_none().then(|| {
+        let files = paths.session_files();
+        let (previous, error) = session::load_previous(&files);
+        bracket_ui::RestoredSession {
+            files,
+            previous,
+            error,
+        }
+    });
+    let window = session
+        .as_ref()
+        .and_then(|s| s.previous.window)
+        .unwrap_or(bracket_ui::DEFAULT_WINDOW);
+
     let launch = bracket_ui::Launch {
         files,
         settings,
         config_path: paths.config_file(),
         fonts,
         replacer: Arc::new(WindowsReplacer),
+        session,
+        window,
     };
     bracket_ui::run(launch, probe)?;
     Ok(())

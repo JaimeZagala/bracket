@@ -12,7 +12,7 @@ Status: Phase 0. This document describes the agreed structure; each section stat
 | `bracket-syntax` | Loading of built-in and external languages, incremental line-based highlighting with cache, themes. | `bracket-core` (planned) | Phase 1: language registry (the six built-in languages, extensions and badge) |
 | `bracket-index` | Project walking, symbol extraction (tree-sitter and regex), incremental index, fuzzy search, references by name. | `bracket-core` (planned) | Empty |
 | `bracket-search` | Cancellable regex find and replace in a file and across a folder, with streamed results. | `bracket-core` (planned) | Empty |
-| `bracket-session` | TOML configuration, portable mode, recoverable session, recent files, file watching, command registry. | `bracket-core` | Phase 1: paths (portable mode or `%APPDATA%`) and TOML configuration |
+| `bracket-session` | TOML configuration, portable mode, recoverable session, recent files, file watching, command registry. | `bracket-core` | Phase 1: paths (portable mode or `%APPDATA%`), TOML configuration and recoverable session |
 | `bracket-update` | Release channel checks, download, checksum and signature verification, apply and rollback. | — | Empty |
 | `bracket-ui` | egui interface: editor view, tabs, project tree, palette, status bar. | `bracket-core`, `bracket-session`, `bracket-syntax` | Phase 1: tabs, File menu, status bar, system fonts, text catalogs |
 | `bracket-app` | `bracket.exe` binary: startup, single instance, arguments, Windows manifest, HKCU registration. | `bracket-ui`, `bracket-session`, `bracket-update` | Phase 0: startup and file argument. Phase 1: resolves paths and loads the configuration |
@@ -65,6 +65,14 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 - Each tab has an id that is unique for the run, and its `EditorView` derives its egui `Id` from it, so focus and scrolling are independent per tab.
 - Loading and saving run per tab on worker threads; the result reaches its tab even if it is no longer active. If loading a file opened in a new tab fails, the tab is closed.
 - Each tab's language comes from `LanguageRegistry::for_path` (`bracket-syntax`) when opening and on Save As. Badges are colored text; the registry allows adding SVG icons later.
+
+## Session (Phase 1)
+
+- `bracket-session` (`session.rs`) defines the format: `session.toml` with the tabs (path, forced encoding, primary selection, first visible line) and the window size, plus one UTF-8 file per modified document in `backups/`. Saving writes the backups first and then `session.toml`, both atomically, so the list never points to a half-written backup.
+- Only backups the current session no longer uses and that are "owned" are deleted: those restored at startup or written by this run. Names carry the startup time and the PID, so one run never overwrites another run's backups. A damaged session is set aside as `session.damaged.toml` and its backups are left alone.
+- `bracket-ui` (`session.rs`) restores each tab on a thread: it reads the file and applies the saved text on top as a single undoable step (`Document::restore_unsaved`), so undo goes back to the text on disk. `SessionKeeper` saves on a thread 2 s after the last change (detected with a hash of the state) and rewrites a backup only if its text changed. When the window closes it saves on the UI thread; if that fails, it asks about the unsaved changes again.
+- `bracket-app` reads the session before creating the window (30 µs with 10 tabs) to give it its size. The position is not kept: the window opens centered and is never left on a disconnected monitor. Keeping the position with eframe's persistence would cost 551 KB (serde and ron).
+- While the measurement probes are on, the session is neither read nor written, so measurements neither depend on the user's session nor change it.
 
 ## Fonts (Phase 1)
 

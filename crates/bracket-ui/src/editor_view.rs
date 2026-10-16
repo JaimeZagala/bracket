@@ -36,6 +36,10 @@ pub struct EditorView {
     /// Anchor of the selection being made with the mouse.
     drag_anchor: Option<usize>,
     scroll_to_caret: bool,
+    /// Scroll so this line is at the top on the next frame (restoring a session).
+    scroll_to_line: Option<usize>,
+    /// First visible line in the last frame.
+    top_line: usize,
     /// Lines that fit in the viewport, from the last frame (Page Up/Down distance).
     page_lines: usize,
     font_size: f32,
@@ -67,6 +71,8 @@ impl EditorView {
             max_line_width: 0.0,
             drag_anchor: None,
             scroll_to_caret: false,
+            scroll_to_line: None,
+            top_line: 0,
             page_lines: 1,
             font_size: DEFAULT_FONT_SIZE,
             fallbacks_requested: HashSet::new(),
@@ -80,6 +86,16 @@ impl EditorView {
     /// Scrolls the primary caret into view on the next frame.
     pub fn request_scroll_to_caret(&mut self) {
         self.scroll_to_caret = true;
+    }
+
+    /// Scrolls so `line` is the first visible one on the next frame.
+    pub fn scroll_to_line(&mut self, line: usize) {
+        self.scroll_to_line = Some(line);
+    }
+
+    /// First visible line, as of the last frame.
+    pub fn top_line(&self) -> usize {
+        self.scroll_to_line.unwrap_or(self.top_line)
     }
 
     /// Stops checking characters of `kind` for missing glyphs (its fallback was requested).
@@ -116,62 +132,64 @@ impl EditorView {
             gutter_width: gutter_width(doc.buffer.len_lines(), char_width),
         };
 
-        ScrollArea::both()
+        let mut area = ScrollArea::both()
             .id_salt(self.id)
-            .auto_shrink([false, false])
-            .show_viewport(ui, |ui, viewport| {
-                let line_count = doc.buffer.len_lines();
-                let size = vec2(
-                    (metrics.gutter_width + self.max_line_width + 4.0 * char_width)
-                        .max(ui.available_width()),
-                    line_count as f32 * row_height,
-                );
-                let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
-                let response = ui.interact(rect, self.id, Sense::click_and_drag());
-                let layout = Layout {
-                    origin: rect.min,
-                    metrics: &metrics,
-                };
+            .auto_shrink([false, false]);
+        if let Some(line) = self.scroll_to_line.take() {
+            area = area.vertical_scroll_offset(line as f32 * row_height);
+        }
+        area.show_viewport(ui, |ui, viewport| {
+            let line_count = doc.buffer.len_lines();
+            let size = vec2(
+                (metrics.gutter_width + self.max_line_width + 4.0 * char_width)
+                    .max(ui.available_width()),
+                line_count as f32 * row_height,
+            );
+            let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+            let response = ui.interact(rect, self.id, Sense::click_and_drag());
+            let layout = Layout {
+                origin: rect.min,
+                metrics: &metrics,
+            };
 
-                self.handle_pointer(ui, &response, doc, &layout);
+            self.handle_pointer(ui, &response, doc, &layout);
 
-                self.page_lines = ((viewport.height() / row_height) as usize)
-                    .saturating_sub(1)
-                    .max(1);
-                if response.has_focus() {
-                    self.handle_events(ui, doc, self.page_lines);
-                }
+            self.page_lines = ((viewport.height() / row_height) as usize)
+                .saturating_sub(1)
+                .max(1);
+            if response.has_focus() {
+                self.handle_events(ui, doc, self.page_lines);
+            }
 
-                // Input above may have edited the text: count the lines again before painting.
-                // The content size allocated earlier is one frame behind, which is harmless.
-                let line_count = doc.buffer.len_lines();
-                let first =
-                    ((viewport.min.y / row_height).floor().max(0.0) as usize).min(line_count);
-                let last = ((viewport.max.y / row_height).ceil().max(0.0) as usize).min(line_count);
-                output.missing_glyph =
-                    self.paint(ui, doc, &layout, first..last, response.has_focus());
+            // Input above may have edited the text: count the lines again before painting.
+            // The content size allocated earlier is one frame behind, which is harmless.
+            let line_count = doc.buffer.len_lines();
+            let first = ((viewport.min.y / row_height).floor().max(0.0) as usize).min(line_count);
+            let last = ((viewport.max.y / row_height).ceil().max(0.0) as usize).min(line_count);
+            self.top_line = first;
+            output.missing_glyph = self.paint(ui, doc, &layout, first..last, response.has_focus());
 
-                let caret_rect = self.caret_rect(ui, doc, &layout);
-                if response.has_focus() {
-                    let to_global = ui
-                        .ctx()
-                        .layer_transform_to_global(ui.layer_id())
-                        .unwrap_or_default();
-                    let visible = ui.clip_rect();
-                    ui.ctx().output_mut(|o| {
-                        o.ime = Some(IMEOutput {
-                            purpose: IMEPurpose::Normal,
-                            rect: to_global * visible,
-                            cursor_rect: to_global * caret_rect,
-                            should_interrupt_composition: false,
-                        });
+            let caret_rect = self.caret_rect(ui, doc, &layout);
+            if response.has_focus() {
+                let to_global = ui
+                    .ctx()
+                    .layer_transform_to_global(ui.layer_id())
+                    .unwrap_or_default();
+                let visible = ui.clip_rect();
+                ui.ctx().output_mut(|o| {
+                    o.ime = Some(IMEOutput {
+                        purpose: IMEPurpose::Normal,
+                        rect: to_global * visible,
+                        cursor_rect: to_global * caret_rect,
+                        should_interrupt_composition: false,
                     });
-                }
-                if self.scroll_to_caret {
-                    self.scroll_to_caret = false;
-                    ui.scroll_to_rect(caret_rect.expand2(vec2(4.0 * char_width, row_height)), None);
-                }
-            });
+                });
+            }
+            if self.scroll_to_caret {
+                self.scroll_to_caret = false;
+                ui.scroll_to_rect(caret_rect.expand2(vec2(4.0 * char_width, row_height)), None);
+            }
+        });
 
         output
     }

@@ -10,17 +10,20 @@ use std::thread;
 use bracket_core::document::{self, Document, FileReplacer, LineEnding, SaveError};
 use bracket_core::encoding::{self, TextEncoding};
 use bracket_core::movement::{self, Motion};
-use bracket_session::{Config, ConfigWarning, Language, LoadedConfig, config};
+use bracket_session::{
+    Config, ConfigWarning, Language, LoadedConfig, SessionTab, WindowState, config,
+};
 use bracket_syntax::LanguageRegistry;
 use eframe::egui::{self, Id, Key, KeyboardShortcut, Modifiers, ViewportCommand};
 
-use crate::Launch;
 use crate::dialogs;
 use crate::editor_view::EditorView;
 use crate::fonts::{self, Fallback, FontSource, LoadedFallback};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
+use crate::session::{self, SessionKeeper};
 use crate::tabs::{self, Loading, Tab, TabAction};
+use crate::{Launch, RestoredSession};
 
 /// Something picked in a status bar menu.
 #[derive(Debug, Clone, Copy)]
@@ -128,6 +131,10 @@ pub struct BracketApp {
     /// Editor font actually in use; fallbacks are aligned to its baseline.
     editor_font: String,
     replacer: Arc<dyn FileReplacer>,
+    /// `None` while measuring: the session is neither restored nor saved.
+    session: Option<SessionKeeper>,
+    /// Window size when not maximized, and whether it is maximized, for the session.
+    window: WindowState,
     probe: Option<Probe>,
     frames_ready: u32,
 }
@@ -143,6 +150,8 @@ impl BracketApp {
             config_path,
             fonts,
             replacer,
+            session,
+            window,
         } = launch;
         let LoadedConfig { config, warnings } = settings;
 
@@ -189,16 +198,85 @@ impl BracketApp {
             pending: None,
             allow_close: false,
             title: String::new(),
+            session: None,
+            window,
             probe,
             frames_ready: 0,
         };
-        let doc = app.empty_document();
-        app.add_tab(doc);
+        if let Some(restored) = session {
+            app.restore_session(ctx, restored);
+        }
+        if app.tabs.is_empty() {
+            let doc = app.empty_document();
+            app.add_tab(doc);
+        }
         app.focus_editor(ctx);
         for path in files {
             app.open_file(ctx, path);
         }
         app
+    }
+
+    /// Opens the tabs of the previous session; each one loads on a worker thread.
+    fn restore_session(&mut self, ctx: &egui::Context, restored: RestoredSession) {
+        let RestoredSession {
+            files,
+            previous,
+            error,
+        } = restored;
+        if let Some(error) = error {
+            self.status = Some(self.texts.session_damaged(&error));
+        }
+        self.session = Some(SessionKeeper::new(files, &previous));
+        for entry in previous.tabs {
+            let doc = self.empty_document();
+            let index = self.add_tab(doc);
+            self.start_restoring(ctx, index, entry);
+        }
+        if !self.tabs.is_empty() {
+            self.active = previous.active.min(self.tabs.len() - 1);
+            self.reveal_active_tab = true;
+        }
+    }
+
+    /// Writes the session now (the window is closing). Returns false if it could not be
+    /// written, and then unsaved changes must be dealt with before closing.
+    fn save_session_now(&mut self) -> bool {
+        let Some(keeper) = &mut self.session else {
+            return false;
+        };
+        match keeper.save_now(&self.tabs, self.active, Some(self.window)) {
+            Ok(()) => true,
+            Err(err) => {
+                self.status = Some(self.texts.session_save_failed(&err.to_string()));
+                false
+            }
+        }
+    }
+
+    /// Keeps the session up to date while the app runs.
+    fn keep_session(&mut self, ctx: &egui::Context) {
+        let (maximized, minimized, size) = ctx.input(|i| {
+            let viewport = i.viewport();
+            (
+                viewport.maximized.unwrap_or(false),
+                viewport.minimized.unwrap_or(false),
+                viewport.inner_rect.map(|r| r.size()),
+            )
+        });
+        if !minimized {
+            self.window.maximized = maximized;
+            if let Some(size) = size.filter(|_| !maximized) {
+                self.window.width = size.x;
+                self.window.height = size.y;
+            }
+        }
+        let Some(keeper) = &mut self.session else {
+            return;
+        };
+        if let Some(error) = keeper.tick(ctx, &self.tabs, self.active, Some(self.window)) {
+            self.status = Some(self.texts.session_save_failed(&error));
+        }
     }
 
     fn active_tab(&self) -> &Tab {
@@ -349,7 +427,37 @@ impl BracketApp {
             let _ = tx.send(result);
             ctx.request_repaint();
         });
-        self.tabs[index].loading = Some(Loading { path, rx, new_tab });
+        self.tabs[index].loading = Some(Loading {
+            path: Some(path),
+            read_encoding: encoding,
+            restore: None,
+            rx,
+            new_tab,
+        });
+    }
+
+    /// Rebuilds a tab of the previous session on a worker thread, like [`Self::start_loading`].
+    fn start_restoring(&mut self, ctx: &egui::Context, index: usize, entry: SessionTab) {
+        let Some(files) = self.session.as_ref().map(|keeper| keeper.files().clone()) else {
+            return;
+        };
+        let (tx, rx) = mpsc::channel();
+        let ctx = ctx.clone();
+        let fallback = (self.config.line_ending, self.config.encoding);
+        let tab_width = self.config.tab_width;
+        let thread_entry = entry.clone();
+        thread::spawn(move || {
+            let result = session::restore_document(&thread_entry, &files, fallback, tab_width);
+            let _ = tx.send(result);
+            ctx.request_repaint();
+        });
+        self.tabs[index].loading = Some(Loading {
+            path: entry.path.clone(),
+            read_encoding: entry.read_encoding,
+            restore: Some(entry),
+            rx,
+            new_tab: true,
+        });
     }
 
     fn poll_loading(&mut self, ctx: &egui::Context) {
@@ -360,10 +468,16 @@ impl BracketApp {
                 continue;
             };
             let new_tab = loading.new_tab;
+            let read_encoding = loading.read_encoding;
+            let top_line = loading.restore.as_ref().map(|entry| entry.top_line);
             match loading.rx.try_recv() {
                 Ok(Ok(doc)) => {
                     tab.doc = doc;
                     tab.view.reset();
+                    if let Some(line) = top_line {
+                        tab.view.scroll_to_line(line);
+                    }
+                    tab.read_encoding = read_encoding;
                     tab.loading = None;
                     tab.refresh_language(&self.languages);
                     self.status = None;
@@ -588,10 +702,15 @@ impl BracketApp {
 
     fn handle_window_events(&mut self, ctx: &egui::Context) {
         let close_requested = ctx.input(|i| i.viewport().close_requested());
-        let any_dirty = self.tabs.iter().any(|tab| tab.doc.is_dirty());
-        if close_requested && any_dirty && !self.allow_close {
-            ctx.send_viewport_cmd(ViewportCommand::CancelClose);
-            self.pending = Some(PendingAction::CloseWindow);
+        if close_requested && !self.allow_close {
+            // Unsaved changes go into the session and come back next time. Only if it cannot
+            // be written does the user have to decide about them now.
+            if self.save_session_now() {
+                self.allow_close = true;
+            } else if self.tabs.iter().any(|tab| tab.doc.is_dirty()) {
+                ctx.send_viewport_cmd(ViewportCommand::CancelClose);
+                self.pending = Some(PendingAction::CloseWindow);
+            }
         }
 
         let dropped: Vec<PathBuf> = ctx.input(|i| {
@@ -919,6 +1038,7 @@ impl eframe::App for BracketApp {
         }
         self.unsaved_dialog(&ctx, frame);
         self.update_title(&ctx);
+        self.keep_session(&ctx);
 
         self.run_probe(&ctx);
     }

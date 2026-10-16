@@ -50,3 +50,6 @@ reopen_needs_clean = "Save or discard your changes before reopening with another
 save_encode_failed = "Cannot save as {encoding}: “{character}” does not exist in that encoding. Pick another one in “Save with encoding”"
 line_ending_tooltip = "Line ending"
 convert_line_endings = "Convert to {line_ending}"
+
+session_damaged = "Could not read the previous session ({error}); it was set aside as session.damaged.toml"
+session_save_failed = "Could not save the session: {error}"

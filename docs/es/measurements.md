@@ -120,6 +120,7 @@ Conclusiones:
 | Paso 6: diálogos de ficheros | 5.216.256 B | +50 KB | `rfd` y el menú Archivo. Arranque intercalado frente al paso 5: 135,6 frente a 134,3 ms |
 | Paso 7: guardado con `ReplaceFileW` | 5.228.032 B | +12 KB | `windows-sys` (ya en el árbol). Arranque intercalado frente al paso 6 con el equipo muy cargado: 289 frente a 312 ms (sin regresión) |
 | Paso 8: pestañas y registro de lenguajes | 5.266.944 B | +39 KB | Barra de pestañas, registro de lenguajes y varios ficheros por argumento. Arranque intercalado frente al paso 7 (15 rondas, equipo cargado): 236,2 frente a 238,6 ms (sin regresión) |
+| Paso 9: sesión recuperable | 5.323.776 B | +57 KB | Fichero de sesión y copias, restauración de pestañas. Arranque intercalado frente al paso 8 (15 rondas, equipo tranquilo): 120,2 frente a 127,0 ms. Leer una sesión de 10 pestañas cuesta 30 µs (`cargo bench -p bracket-session`); las sondas no la leen. La feature `persistence` de eframe (para recordar la posición de la ventana) midió +551 KB y no se usa |
 
 Paso 5, arranque intercalado frente al paso 4 (15 rondas): 144,9 ms frente a 148,6 ms, dentro del ruido. Ese día las medianas absolutas rondaron 145–149 ms con el equipo cargado: el margen frente a los 150 ms es mínimo.
 

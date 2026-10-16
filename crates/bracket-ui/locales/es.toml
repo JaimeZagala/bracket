@@ -50,3 +50,6 @@ reopen_needs_clean = "Guarda o descarta los cambios antes de reabrir con otra co
 save_encode_failed = "No se puede guardar en {encoding}: «{character}» no existe en esa codificación. Elige otra en «Guardar con codificación»"
 line_ending_tooltip = "Salto de línea"
 convert_line_endings = "Convertir a {line_ending}"
+
+session_damaged = "No se pudo leer la sesión anterior ({error}); se ha apartado como session.damaged.toml"
+session_save_failed = "No se pudo guardar la sesión: {error}"

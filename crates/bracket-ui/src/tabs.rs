@@ -7,6 +7,7 @@ use std::sync::mpsc::Receiver;
 use bracket_core::Document;
 use bracket_core::document::SaveError;
 use bracket_core::encoding::TextEncoding;
+use bracket_session::SessionTab;
 use bracket_syntax::{Badge, LanguageRegistry};
 use eframe::egui::{
     self, Color32, FontId, Rect, Sense, Stroke, StrokeKind, TextStyle, Ui, WidgetInfo, WidgetType,
@@ -21,7 +22,12 @@ pub type SaveOutcome = (u64, TextEncoding, Result<(), SaveError>);
 
 /// A file being read on a worker thread.
 pub struct Loading {
-    pub path: PathBuf,
+    /// `None` for an untitled document restored from the session.
+    pub path: Option<PathBuf>,
+    /// Encoding forced with "reopen with encoding".
+    pub read_encoding: Option<TextEncoding>,
+    /// The session entry being restored. Until it finishes, it is saved again as it was.
+    pub restore: Option<SessionTab>,
     pub rx: Receiver<io::Result<Document>>,
     /// The tab was opened for this file, so it goes away if the file cannot be read.
     pub new_tab: bool,
@@ -36,6 +42,8 @@ pub struct Tab {
     pub language: Option<String>,
     /// Number shown in "Untitled N" while the document has no path.
     pub untitled: u32,
+    /// Encoding picked with "reopen with encoding"; the session reopens the file with it.
+    pub read_encoding: Option<TextEncoding>,
     pub loading: Option<Loading>,
     pub saving: Option<Receiver<SaveOutcome>>,
 }
@@ -48,6 +56,7 @@ impl Tab {
             view,
             language: None,
             untitled,
+            read_encoding: None,
             loading: None,
             saving: None,
         }
@@ -64,7 +73,7 @@ impl Tab {
     /// The file shown (or being loaded) in this tab.
     pub fn path(&self) -> Option<&Path> {
         match &self.loading {
-            Some(loading) => Some(&loading.path),
+            Some(loading) => loading.path.as_deref(),
             None => self.doc.path(),
         }
     }

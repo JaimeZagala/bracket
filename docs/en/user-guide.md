@@ -9,7 +9,7 @@ Bracket is under development (Phase 1). This guide describes what already works 
 - **File** menu: New (Ctrl+N), Open (Ctrl+O), Save (Ctrl+S), Save As (Ctrl+Shift+S) and Exit. Open and Save As use the Windows dialogs.
 - Files can also be opened by passing them as arguments (`bracket.exe a.cs b.json`) or by dropping them on the window.
 - Saving an untitled document opens Save As. Saving is atomic and keeps the file's BOM and line endings. Saving over an existing file keeps its attributes (hidden, for example), permissions and creation time. The window title marks unsaved changes with ●; if you undo back to the saved text, the mark goes away.
-- If there are unsaved changes, Bracket asks before closing the tab or exiting. When exiting with several modified documents, "Save all" saves them one by one (untitled ones go through Save As); if one is cancelled, Bracket stays open.
+- If there are unsaved changes, Bracket asks before closing the tab. It does not ask when exiting: the changes stay in the session (see below).
 - Bracket detects the encoding when opening (UTF-8, UTF-16 and legacy encodings such as windows-1252) and saves in the same one, byte for byte. If a file cannot be written back exactly the same, it opens read-only and the status bar says so.
 
 ## Tabs
@@ -20,6 +20,16 @@ Bracket is under development (Phase 1). This guide describes what already works 
 - **Close:** Ctrl+W, the × or a middle click. Closing the last one leaves a new document.
 - **Switch tabs:** Ctrl+Tab and Ctrl+Shift+Tab, or Ctrl+PageDown and Ctrl+PageUp.
 - New documents are numbered: "Untitled 1", "Untitled 2"...
+
+## Session
+
+When Bracket closes it saves the session: the open tabs, which one was active, the caret and scroll position of each, and the text of documents with unsaved changes, untitled ones included. When it opens again everything is as it was and those documents are still marked as modified: nothing is written to your files until you save.
+
+- The session is also saved a few seconds after each change, so if Bracket or Windows closes suddenly, at most those seconds are lost.
+- If a file no longer exists and had no changes, its tab is not opened. If it had unsaved changes, it opens with them and saving creates it again.
+- It is stored in `session.toml`, and the unsaved text in the `backups` folder, next to `config.toml` (in `%APPDATA%\Bracket`, or next to the exe in portable mode). If `session.toml` were damaged, Bracket sets it aside as `session.damaged.toml`, starts without a session and deletes nothing in `backups`.
+- If the session could not be written when exiting, Bracket asks what to do with the unsaved changes, as before.
+- The window opens centered, with the size it had, and maximized if it was.
 
 ## Encoding and line endings
 

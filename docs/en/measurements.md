@@ -120,6 +120,7 @@ Conclusions:
 | Step 6: file dialogs | 5,216,256 B | +50 KB | `rfd` and the File menu. Interleaved startup against step 5: 135.6 versus 134.3 ms |
 | Step 7: saving with `ReplaceFileW` | 5,228,032 B | +12 KB | `windows-sys` (already in the tree). Interleaved startup against step 6 on a very busy machine: 289 versus 312 ms (no regression) |
 | Step 8: tabs and language registry | 5,266,944 B | +39 KB | Tab bar, language registry and several files from the command line. Interleaved startup against step 7 (15 rounds, busy machine): 236.2 versus 238.6 ms (no regression) |
+| Step 9: recoverable session | 5,323,776 B | +57 KB | Session file and backups, restoring tabs. Interleaved startup against step 8 (15 rounds, quiet machine): 120.2 versus 127.0 ms. Reading a 10-tab session takes 30 µs (`cargo bench -p bracket-session`); the probes do not read it. eframe's `persistence` feature (to remember the window position) measured +551 KB and was not used |
 
 Step 5, interleaved startup against step 4 (15 rounds): 144.9 ms versus 148.6 ms, within the noise. That day absolute medians were around 145–149 ms with a busy machine: the margin against 150 ms is minimal.
 

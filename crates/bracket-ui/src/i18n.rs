@@ -209,6 +209,14 @@ impl Texts {
         self.fill("convert_line_endings", &[("line_ending", &line_ending)])
     }
 
+    pub fn session_damaged(&self, error: &str) -> String {
+        self.fill("session_damaged", &[("error", &error)])
+    }
+
+    pub fn session_save_failed(&self, error: &str) -> String {
+        self.fill("session_save_failed", &[("error", &error)])
+    }
+
     /// Translated text for a configuration warning.
     pub fn config_warning(&self, warning: &ConfigWarning) -> String {
         match warning {
@@ -326,6 +334,8 @@ mod tests {
                 ("save_encode_failed", t.save_encode_failed("X", "y")),
                 ("line_ending_tooltip", t.line_ending_tooltip().to_owned()),
                 ("convert_line_endings", t.convert_line_endings("LF")),
+                ("session_damaged", t.session_damaged("e")),
+                ("session_save_failed", t.session_save_failed("e")),
             ];
             for (key, text) in pairs {
                 assert!(

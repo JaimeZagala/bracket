@@ -12,7 +12,7 @@ Estado: Fase 0. Este documento describe la estructura acordada; cada sección in
 | `bracket-syntax` | Carga de lenguajes integrados y externos, resaltado incremental por líneas con caché, temas. | `bracket-core` (previsto) | Fase 1: registro de lenguajes (los seis integrados, extensiones e insignia) |
 | `bracket-index` | Recorrido de proyecto, extracción de símbolos (tree-sitter y regex), índice incremental, búsqueda difusa, referencias por nombre. | `bracket-core` (previsto) | Vacía |
 | `bracket-search` | Buscar y reemplazar con regex en fichero y carpeta, cancelable, con resultados en streaming. | `bracket-core` (previsto) | Vacía |
-| `bracket-session` | Configuración TOML, modo portable, sesión recuperable, recientes, vigilancia de ficheros, registro de comandos. | `bracket-core` | Fase 1: rutas (modo portable o `%APPDATA%`) y configuración TOML |
+| `bracket-session` | Configuración TOML, modo portable, sesión recuperable, recientes, vigilancia de ficheros, registro de comandos. | `bracket-core` | Fase 1: rutas (modo portable o `%APPDATA%`), configuración TOML y sesión recuperable |
 | `bracket-update` | Comprobación de versiones por canal, descarga, verificación de suma y firma, aplicación y vuelta atrás. | — | Vacía |
 | `bracket-ui` | Interfaz egui: vista del editor, pestañas, árbol de proyecto, paleta, barra de estado. | `bracket-core`, `bracket-session`, `bracket-syntax` | Fase 1: pestañas, menú Archivo, barra de estado, fuentes del sistema, catálogos de textos |
 | `bracket-app` | Binario `bracket.exe`: arranque, instancia única, argumentos, manifiesto de Windows, registro en HKCU. | `bracket-ui`, `bracket-session`, `bracket-update` | Fase 0: arranque y fichero por argumento. Fase 1: resuelve rutas y carga la configuración |
@@ -65,6 +65,14 @@ En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync
 - Cada pestaña tiene un identificador único durante la ejecución y su `EditorView` deriva de él su `Id` de egui, así que el foco y el desplazamiento de cada pestaña son independientes.
 - La carga y el guardado van por pestaña en hilos de trabajo; el resultado llega a su pestaña aunque ya no sea la activa. Si falla la carga de un fichero abierto en una pestaña nueva, la pestaña se cierra.
 - El lenguaje de cada pestaña sale de `LanguageRegistry::for_path` (`bracket-syntax`) al abrir y al guardar como. Las insignias son texto con color; el registro admite añadir iconos SVG más adelante.
+
+## Sesión (Fase 1)
+
+- `bracket-session` (`session.rs`) define el formato: `session.toml` con las pestañas (ruta, codificación forzada, selección principal, primera línea visible) y el tamaño de la ventana, y un fichero UTF-8 por documento modificado en `backups/`. Guardar escribe primero las copias y después `session.toml`, ambos de forma atómica, así que la lista nunca apunta a una copia a medias.
+- Solo se borran copias que la sesión actual ya no usa y que son "propias": las restauradas al arrancar o las escritas en esta ejecución. Los nombres llevan la hora de arranque y el PID, así que una ejecución nunca sobrescribe las copias de otra. Una sesión dañada se aparta como `session.damaged.toml` y sus copias no se tocan.
+- `bracket-ui` (`session.rs`) restaura cada pestaña en un hilo: lee el fichero y aplica encima el texto guardado como un único paso deshacible (`Document::restore_unsaved`), así que deshacer vuelve al texto del disco. `SessionKeeper` guarda en un hilo 2 s después del último cambio (detectado con un hash del estado) y reescribe una copia solo si su texto cambió. Al cerrar la ventana guarda en el hilo de interfaz; si falla, vuelve a preguntar por los cambios sin guardar.
+- `bracket-app` lee la sesión antes de crear la ventana (30 µs con 10 pestañas) para darle su tamaño. La posición no se guarda: la ventana se abre centrada y nunca queda en un monitor desconectado. Recordar la posición con la persistencia de eframe costaría 551 KB (serde y ron).
+- Con las sondas de medición activas no se lee ni se escribe la sesión, para que las medidas no dependan de la sesión del usuario ni la cambien.
 
 ## Fuentes (Fase 1)
 
