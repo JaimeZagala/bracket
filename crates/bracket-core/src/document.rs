@@ -8,6 +8,7 @@ use std::fmt;
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use ropey::Rope;
 
@@ -106,6 +107,24 @@ impl From<encoding::Decoded> for LoadedText {
 /// [`LoadedText::exact`].
 pub fn load_text(path: &Path) -> io::Result<LoadedText> {
     Ok(encoding::decode(fs::read(path)?).into())
+}
+
+/// A version of a file on disk, told apart by modification time and size. Comparing stamps shows
+/// whether a file changed since it was read or written, without reading it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DiskStamp {
+    modified: SystemTime,
+    len: u64,
+}
+
+impl DiskStamp {
+    pub fn of(path: &Path) -> io::Result<Self> {
+        let metadata = fs::metadata(path)?;
+        Ok(Self {
+            modified: metadata.modified()?,
+            len: metadata.len(),
+        })
+    }
 }
 
 /// Reads a file decoding it as `encoding` ("reopen with encoding").
@@ -288,6 +307,32 @@ impl Document {
         self.buffer.seal_undo_step();
         self.encoding = encoding;
         self.line_ending = line_ending;
+    }
+
+    /// Takes the file's new contents after it changed on disk, in one undo step (undo brings back
+    /// the text it had), keeping each caret on the same line and column. Afterwards the document
+    /// matches the disk.
+    pub fn reload(&mut self, loaded: LoadedText) {
+        self.buffer.replace_all_keeping_positions(&loaded.text);
+        self.buffer.seal_undo_step();
+        if let Some(line_ending) = LineEnding::detect(self.buffer.text()) {
+            self.line_ending = line_ending;
+        }
+        self.encoding = loaded.encoding;
+        self.saved_encoding = loaded.encoding;
+        self.read_only = !loaded.exact;
+        self.saved_version = self.buffer.version();
+    }
+
+    /// True when `loaded` holds exactly this document's text and encoding.
+    pub fn matches(&self, loaded: &LoadedText) -> bool {
+        self.encoding == loaded.encoding && *self.buffer.text() == loaded.text.as_str()
+    }
+
+    /// Records that the file is gone from disk: the document counts as modified until it is
+    /// saved again. (No undo state ever has the id `u64::MAX`.)
+    pub fn mark_missing(&mut self) {
+        self.saved_version = u64::MAX;
     }
 
     pub fn is_dirty(&self) -> bool {
@@ -526,36 +571,72 @@ mod tests {
     fn restored_unsaved_text_is_modified_and_undoes_to_the_disk_text() {
         let dir = temp_dir("restore");
         let path = dir.join("a.txt");
-        fs::write(
-            &path, "disk
-",
-        )
-        .unwrap();
+        fs::write(&path, "disk\r\n").unwrap();
         let mut doc = open(&path);
-        doc.restore_unsaved(
-            "edited
-",
-            TextEncoding::UTF8_BOM,
-            LineEnding::Lf,
-        );
+        doc.restore_unsaved("edited\n", TextEncoding::UTF8_BOM, LineEnding::Lf);
         assert!(doc.is_dirty());
-        assert_eq!(
-            doc.buffer.text().to_string(),
-            "edited
-"
-        );
+        assert_eq!(doc.buffer.text().to_string(), "edited\n");
         assert_eq!(doc.line_ending(), LineEnding::Lf);
         assert_eq!(doc.save_request().unwrap().encoding, TextEncoding::UTF8_BOM);
         doc.buffer.undo();
-        assert_eq!(
-            doc.buffer.text().to_string(),
-            "disk
-"
-        );
+        assert_eq!(doc.buffer.text().to_string(), "disk\r\n");
 
         let mut untitled = Document::new_empty(LineEnding::CrLf, TextEncoding::UTF8);
         untitled.restore_unsaved("draft", TextEncoding::UTF8, LineEnding::CrLf);
         assert!(untitled.is_dirty());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn reloading_keeps_the_caret_and_can_be_undone() {
+        let dir = temp_dir("reload");
+        let path = dir.join("a.txt");
+        fs::write(&path, "one\ntwo\nthree\n").unwrap();
+        let mut doc = open(&path);
+        doc.buffer.set_selections(crate::Selections::caret(5)); // "t|wo"
+        let changed = LoadedText {
+            text: "one\r\nTWO!\r\nthree\r\n".to_owned(),
+            encoding: TextEncoding::UTF8_BOM,
+            exact: true,
+        };
+        assert!(!doc.matches(&changed));
+        doc.reload(changed);
+        assert!(!doc.is_dirty());
+        assert_eq!(
+            doc.buffer.selections().primary().head,
+            6,
+            "same line and column"
+        );
+        assert_eq!(doc.line_ending(), LineEnding::CrLf);
+        assert_eq!(doc.encoding(), TextEncoding::UTF8_BOM);
+        doc.buffer.undo();
+        assert_eq!(doc.buffer.text().to_string(), "one\ntwo\nthree\n");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_missing_file_leaves_the_document_modified() {
+        let mut doc = Document::new_empty(LineEnding::CrLf, TextEncoding::UTF8);
+        assert!(!doc.is_dirty());
+        doc.mark_missing();
+        assert!(doc.is_dirty());
+        let same = LoadedText {
+            text: String::new(),
+            encoding: TextEncoding::UTF8,
+            exact: true,
+        };
+        assert!(doc.matches(&same));
+    }
+
+    #[test]
+    fn stamps_change_when_the_file_changes() {
+        let dir = temp_dir("stamp");
+        let path = dir.join("a.txt");
+        fs::write(&path, "a").unwrap();
+        let first = DiskStamp::of(&path).unwrap();
+        assert_eq!(DiskStamp::of(&path).unwrap(), first);
+        fs::write(&path, "ab").unwrap();
+        assert_ne!(DiskStamp::of(&path).unwrap(), first);
         fs::remove_dir_all(&dir).unwrap();
     }
 

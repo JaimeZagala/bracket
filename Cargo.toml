@@ -50,6 +50,9 @@ rfd = { version = "0.17.2", default-features = false }
 # Windows API bindings, only for what has no safe wrapper (ReplaceFileW). Same version as the
 # rest of the dependency tree.
 windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
+# File change notifications (ReadDirectoryChangesW on Windows) to reload files changed on disk.
+# Without default features: they only select macOS backends.
+notify = { version = "8.2.0", default-features = false }
 
 [workspace.lints.rust]
 # `deny` (not `forbid`) so a justified exception can opt out locally with a SAFETY comment.
