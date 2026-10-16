@@ -523,6 +523,7 @@ name = "bracket-session"
 version = "0.0.0"
 dependencies = [
  "bracket-core",
+ "criterion",
  "toml_edit",
 ]
 

@@ -197,7 +197,7 @@ fn number(item: &Item) -> Option<f32> {
         .map(|v| v as f32)
 }
 
-fn line_ending_code(line_ending: LineEnding) -> &'static str {
+pub(crate) fn line_ending_code(line_ending: LineEnding) -> &'static str {
     match line_ending {
         LineEnding::CrLf => "crlf",
         LineEnding::Lf => "lf",
@@ -205,7 +205,7 @@ fn line_ending_code(line_ending: LineEnding) -> &'static str {
     }
 }
 
-fn line_ending_from_code(code: &str) -> Option<LineEnding> {
+pub(crate) fn line_ending_from_code(code: &str) -> Option<LineEnding> {
     match code {
         "crlf" => Some(LineEnding::CrLf),
         "lf" => Some(LineEnding::Lf),

@@ -280,6 +280,16 @@ impl Document {
         self.buffer.replace_all_keeping_positions(&converted);
     }
 
+    /// Puts back text that had not been saved when the session ended, in one undo step:
+    /// undoing it returns to the text read from disk. `encoding` and `line_ending` are the ones
+    /// the document had, so the next save writes what the user would have written.
+    pub fn restore_unsaved(&mut self, text: &str, encoding: TextEncoding, line_ending: LineEnding) {
+        self.buffer.replace_all_keeping_positions(text);
+        self.buffer.seal_undo_step();
+        self.encoding = encoding;
+        self.line_ending = line_ending;
+    }
+
     pub fn is_dirty(&self) -> bool {
         self.buffer.version() != self.saved_version || self.encoding != self.saved_encoding
     }
@@ -510,6 +520,43 @@ mod tests {
         assert_eq!(doc.line_ending(), LineEnding::Lf);
         doc.buffer.undo();
         assert_eq!(doc.buffer.text().to_string(), "a\r\nb\rc\n");
+    }
+
+    #[test]
+    fn restored_unsaved_text_is_modified_and_undoes_to_the_disk_text() {
+        let dir = temp_dir("restore");
+        let path = dir.join("a.txt");
+        fs::write(
+            &path, "disk
+",
+        )
+        .unwrap();
+        let mut doc = open(&path);
+        doc.restore_unsaved(
+            "edited
+",
+            TextEncoding::UTF8_BOM,
+            LineEnding::Lf,
+        );
+        assert!(doc.is_dirty());
+        assert_eq!(
+            doc.buffer.text().to_string(),
+            "edited
+"
+        );
+        assert_eq!(doc.line_ending(), LineEnding::Lf);
+        assert_eq!(doc.save_request().unwrap().encoding, TextEncoding::UTF8_BOM);
+        doc.buffer.undo();
+        assert_eq!(
+            doc.buffer.text().to_string(),
+            "disk
+"
+        );
+
+        let mut untitled = Document::new_empty(LineEnding::CrLf, TextEncoding::UTF8);
+        untitled.restore_unsaved("draft", TextEncoding::UTF8, LineEnding::CrLf);
+        assert!(untitled.is_dirty());
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

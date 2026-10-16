@@ -6,10 +6,16 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::session::SessionFiles;
+
 /// A file with this name next to the executable turns on portable mode.
 pub const PORTABLE_MARKER: &str = "portable.toml";
 /// Configuration file name inside the data folder.
 pub const CONFIG_FILE: &str = "config.toml";
+/// Session file name inside the data folder.
+pub const SESSION_FILE: &str = "session.toml";
+/// Folder for the text of documents with unsaved changes, inside the data folder.
+pub const BACKUP_DIR: &str = "backups";
 /// Folder created inside `%APPDATA%` in installed mode.
 pub const APP_DIR_NAME: &str = "Bracket";
 
@@ -48,6 +54,13 @@ impl Paths {
 
     pub fn config_file(&self) -> PathBuf {
         self.data_dir.join(CONFIG_FILE)
+    }
+
+    pub fn session_files(&self) -> SessionFiles {
+        SessionFiles {
+            file: self.data_dir.join(SESSION_FILE),
+            backup_dir: self.data_dir.join(BACKUP_DIR),
+        }
     }
 }
 

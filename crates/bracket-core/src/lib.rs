@@ -13,5 +13,6 @@ pub mod transaction;
 pub use buffer::Buffer;
 pub use document::{Document, LineEnding};
 pub use movement::Motion;
+pub use ropey::Rope;
 pub use selection::{Selection, Selections};
 pub use transaction::{Change, Transaction};
