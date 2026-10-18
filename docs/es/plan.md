@@ -47,7 +47,7 @@ Se miden, no se suponen. Si alguno no es alcanzable, se informa con datos y alte
 - **Buffer:** ropey. Selección múltiple desde el inicio. Deshacer/rehacer propio por transacciones (un multicursor o un reemplazo masivo es un solo paso).
 - **Resaltado:** syntect con la feature `default-fancy` (sin dependencias de C), gramáticas `.sublime-syntax`/`.tmLanguage`.
 - **Símbolos:** tree-sitter para C#, CSS, JSON y XML. T-SQL por reglas regex (CREATE/ALTER de PROCEDURE, FUNCTION, VIEW, TABLE, TRIGGER; `GO` como separador). Razor en tres capas: resaltado TextMate; símbolos de directivas (`@page`, `@inject`, `@using`, `@inherits`) y bloques `@code` pasados al extractor de C#; navegación de `<MiComponente />` a `MiComponente.razor` por nombre de fichero.
-- **Proyecto y búsqueda:** ignore, regex + grep-searcher, nucleo-matcher.
+- **Proyecto y búsqueda:** ignore, regex + grep-searcher, emparejador difuso propio, trash (Papelera de reciclaje).
 - **Otros:** notify, similar, encoding_rs + chardetng, toml_edit (configuración: conserva comentarios al guardar y lee clave a clave; sustituye a serde + toml desde la Fase 1), anyhow + thiserror + tracing, crossbeam-channel.
 - **Distribución:** winreg, winresource o embed-resource, ureq, semver, sha2 + ed25519-dalek, self-replace, zip. Instalador con Inno Setup. Publicación con GitHub Actions en runner de Windows.
 - **Pruebas:** cargo test, proptest, criterion.
@@ -152,6 +152,28 @@ Aprobada el 2026-10-15 y completada el 2026-10-18 (0.1.0, etiqueta local `v0.1.0
 17. Cierre: mediciones frente a los presupuestos (incluida la RAM con 10 pestañas), CHANGELOG, README y documentación, y etiqueta local `v0.1.0`.
 
 Valores por defecto: ficheros nuevos en UTF-8 sin BOM con CRLF; tabulación de ancho 4. Ambos configurables.
+
+### Fase 2 en detalle
+
+Aprobada el 2026-10-18. Pasos ordenados por dependencias; cada uno compila, tiene tests y lleva su propio commit.
+
+1. Cancelación y generaciones: token de cancelación y número de generación comunes en `bracket-core` para las tareas largas (recorrido, índice, búsquedas).
+2. Abrir carpeta como proyecto: menú, línea de comandos (`bracket <carpeta>`), arrastrar una carpeta e instancia única. La sesión recuerda el proyecto y el título muestra la carpeta.
+3. Recientes: ficheros y carpetas en Archivo → Recientes, persistentes, sin los que ya no existen.
+4. Recorrido del proyecto en `bracket-index` con `ignore` (`.gitignore`, `.ignore`, ocultos y `[project] exclude`), en hilos y cancelable. Generador de un proyecto sintético de 50.000 ficheros y benchmarks.
+5. Panel lateral con el árbol: carga perezosa por carpeta en un hilo, redimensionable, Ctrl+B para ocultarlo, teclado, insignia de lenguaje; ancho, visibilidad y carpetas abiertas en la sesión.
+6. Pestaña de vista previa: un clic abre una pestaña provisional (cursiva) que reemplaza el siguiente clic; doble clic o editar la fija.
+7. Vigilancia del proyecto: `notify` recursivo sobre la raíz actualiza el árbol y el índice de forma incremental, con antirrebote.
+8. Acciones del árbol: nuevo fichero, nueva carpeta, renombrar, eliminar a la Papelera de reciclaje (`trash`), copiar ruta y mostrar en el Explorador.
+9. Ctrl+P: búsqueda difusa propia sobre el índice, en un hilo, con las letras coincidentes resaltadas, recientes con la consulta vacía, `fichero:línea` y `:línea`. Benchmark frente al presupuesto (< 50 ms por pulsación con 50.000 ficheros).
+10. Registro de comandos y paleta (Ctrl+Mayús+P): comandos con id, texto traducido, atajo y disponibilidad; menús y atajos usan el registro; búsqueda difusa; Ir a línea (Ctrl+G).
+11. Buscar en el fichero (Ctrl+F): mayúsculas, palabra completa y regex, coincidencias marcadas, contador, F3/Mayús+F3; en ficheros grandes, en un hilo.
+12. Reemplazar en el fichero (Ctrl+H): uno a uno o todos (un solo paso de deshacer), capturas `$1`, respetando los saltos de línea.
+13. Buscar en la carpeta (Ctrl+Mayús+F): consulta, opciones y filtros de inclusión y exclusión; resultados en streaming por fichero con la línea de contexto; clic para abrir en la coincidencia; cancelable; se saltan binarios y ficheros enormes; respeta la codificación de cada fichero.
+14. Reemplazar en la carpeta: vista previa con casillas; en las pestañas abiertas el cambio va al buffer (deshacible, sin guardar); los ficheros cerrados se reescriben con guardado atómico conservando codificación, BOM y saltos de línea; se saltan los de solo lectura o codificación inexacta; resumen al final.
+15. Cierre: mediciones (Ctrl+P con 50.000 ficheros, recorrido, velocidad de búsqueda en carpeta, RAM y arranque con proyecto), documentación, CHANGELOG y etiqueta local `v0.2.0`.
+
+Dependencias previstas, cada una medida antes de entrar: `ignore` y `grep-searcher` + `grep-regex` (Unlicense OR MIT) y `trash` (MIT). El emparejador difuso es propio, para no añadir otra licencia (`nucleo-matcher` es MPL-2.0); si no cumpliera el presupuesto, se mediría `nucleo-matcher`.
 
 ## Mejoras futuras sin fase asignada
 

@@ -47,7 +47,7 @@ Measured, not assumed. If a budget cannot be met, it is reported with data and a
 - **Buffer:** ropey. Multiple selections from the start. Custom transactional undo/redo (a multi-cursor edit or a bulk replace is one step).
 - **Highlighting:** syntect with the `default-fancy` feature (no C dependencies), `.sublime-syntax`/`.tmLanguage` grammars.
 - **Symbols:** tree-sitter for C#, CSS, JSON and XML. T-SQL through regex rules (CREATE/ALTER of PROCEDURE, FUNCTION, VIEW, TABLE, TRIGGER; `GO` as separator). Razor in three layers: TextMate highlighting; directive symbols (`@page`, `@inject`, `@using`, `@inherits`) and `@code` blocks passed to the C# extractor; navigation from `<MyComponent />` to `MyComponent.razor` by file name.
-- **Projects and search:** ignore, regex + grep-searcher, nucleo-matcher.
+- **Projects and search:** ignore, regex + grep-searcher, our own fuzzy matcher, trash (Recycle Bin).
 - **Other:** notify, similar, encoding_rs + chardetng, toml_edit (configuration: keeps comments when saving and reads key by key; replaces serde + toml since Phase 1), anyhow + thiserror + tracing, crossbeam-channel.
 - **Distribution:** winreg, winresource or embed-resource, ureq, semver, sha2 + ed25519-dalek, self-replace, zip. Inno Setup installer. Publishing with GitHub Actions on a Windows runner.
 - **Testing:** cargo test, proptest, criterion.
@@ -152,6 +152,28 @@ Approved on 2026-10-15 and completed on 2026-10-18 (0.1.0, local `v0.1.0` tag). 
 17. Wrap-up: measurements against the budgets (including RAM with 10 tabs), CHANGELOG, README and documentation, and a local `v0.1.0` tag.
 
 Defaults: new files in UTF-8 without BOM with CRLF; tab width 4. Both configurable.
+
+### Phase 2 in detail
+
+Approved on 2026-10-18. Steps ordered by dependencies; each one builds, has tests and gets its own commit.
+
+1. Cancellation and generations: a cancellation token and generation number shared in `bracket-core` for long tasks (walking, index, searches).
+2. Open a folder as a project: menu, command line (`bracket <folder>`), dropping a folder and single instance. The session remembers the project and the title shows the folder.
+3. Recent items: files and folders in File → Recent, persistent, without the ones that no longer exist.
+4. Project walking in `bracket-index` with `ignore` (`.gitignore`, `.ignore`, hidden files and `[project] exclude`), on threads and cancellable. A generator for a synthetic 50,000-file project and benchmarks.
+5. Side panel with the tree: lazy loading per folder on a thread, resizable, Ctrl+B to hide it, keyboard, language badge; width, visibility and open folders in the session.
+6. Preview tab: a click opens a provisional tab (italic) that the next click replaces; a double click or an edit keeps it.
+7. Project watching: recursive `notify` on the root updates the tree and the index incrementally, debounced.
+8. Tree actions: new file, new folder, rename, delete to the Recycle Bin (`trash`), copy path and reveal in Explorer.
+9. Ctrl+P: our own fuzzy search over the index, on a thread, with the matching letters highlighted, recent files for an empty query, `file:line` and `:line`. Benchmark against the budget (< 50 ms per keystroke with 50,000 files).
+10. Command registry and palette (Ctrl+Shift+P): commands with an id, translated label, shortcut and availability; menus and shortcuts use the registry; fuzzy search; Go to line (Ctrl+G).
+11. Find in the file (Ctrl+F): match case, whole word and regex, highlighted matches, a counter, F3/Shift+F3; on a thread for large files.
+12. Replace in the file (Ctrl+H): one by one or all (a single undo step), `$1` captures, keeping line endings.
+13. Find in the folder (Ctrl+Shift+F): query, options and include/exclude filters; results streamed per file with the context line; click to open at the match; cancellable; binaries and huge files are skipped; each file's encoding is respected.
+14. Replace in the folder: a preview with checkboxes; in open tabs the change goes into the buffer (undoable, not saved); closed files are rewritten with atomic saving, keeping encoding, BOM and line endings; read-only or inexactly encoded files are skipped; a summary at the end.
+15. Wrap-up: measurements (Ctrl+P with 50,000 files, walking, folder search speed, RAM and startup with a project), documentation, CHANGELOG and a local `v0.2.0` tag.
+
+Planned dependencies, each measured before it goes in: `ignore` and `grep-searcher` + `grep-regex` (Unlicense OR MIT) and `trash` (MIT). The fuzzy matcher is our own, so as not to add another license (`nucleo-matcher` is MPL-2.0); if it missed the budget, `nucleo-matcher` would be measured.
 
 ## Future improvements without an assigned phase
 

@@ -4,7 +4,7 @@ Editor de código nativo para Windows 10/11 x64, escrito en Rust. Intermedio ent
 
 ## Estado
 
-Fases 0 y 1 completadas (0.1.0, etiqueta local `v0.1.0`, sin publicar). La Fase 2 necesita aprobación. Versión del workspace: 0.1.0. Detalle en `docs/es/plan.md`.
+Fases 0 y 1 completadas (0.1.0, etiqueta local `v0.1.0`). Fase 2 (proyectos, 0.2.0) en curso, aprobada el 2026-10-18. Versión del workspace: 0.1.0. Detalle en `docs/es/plan.md`.
 
 ## Comandos
 
