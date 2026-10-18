@@ -14,6 +14,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - Recientes: Archivo → Recientes lista los últimos ficheros (15) y carpetas (10) abiertos, sin los que ya no existen, y permite borrar la lista. Se guardan en `recent.toml`.
 - Recorrido del proyecto (`bracket-index`): lista los ficheros de una carpeta respetando `.gitignore` (también fuera de un repositorio Git), `.ignore` y la nueva clave `[project] exclude` de `config.toml`; incluye los ficheros ocultos y nunca `.git`, `.svn` ni `.hg`. Va en varios hilos y se puede cancelar: 110 ms con 50.000 ficheros.
 - Panel del proyecto: árbol de carpetas a la izquierda con las mismas reglas de exclusión. Cada carpeta se lista en un hilo al abrirla; insignia de lenguaje en los ficheros; redimensionable; Ctrl+B lo oculta y Ctrl+Mayús+E lleva el teclado al árbol (flechas, Inicio/Fin, RePág/AvPág, Intro, Esc). La sesión recuerda su ancho, si está visible y las carpetas abiertas.
+- Pestaña de vista previa: un clic en un fichero del árbol lo abre en una pestaña provisional, con el título en cursiva, que el siguiente fichero que se mire reemplaza. Editarla, hacer doble clic en ella o en el fichero, o abrirlo con Intro la convierte en una pestaña normal. La sesión la recuerda.
 
 ## [0.1.0] - 2026-10-18
 

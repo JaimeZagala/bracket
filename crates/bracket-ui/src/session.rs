@@ -233,7 +233,7 @@ impl SessionKeeper {
             if index == active {
                 session.active = session.tabs.len();
             }
-            let entry = match (&tab.loading, &tab.unloaded) {
+            let mut entry = match (&tab.loading, &tab.unloaded) {
                 // Not loaded yet: keep what is known (a restored entry keeps its backup).
                 (Some(loading), _) => loading.restore.clone().unwrap_or_else(|| SessionTab {
                     path: loading.path.clone(),
@@ -273,9 +273,11 @@ impl SessionKeeper {
                         language: tab
                             .language_chosen
                             .then(|| tab.language.clone().unwrap_or_default()),
+                        preview: tab.preview,
                     }
                 }
             };
+            entry.preview = tab.preview;
             session.tabs.push(entry);
         }
         session.active = session.active.min(session.tabs.len().saturating_sub(1));
@@ -300,6 +302,7 @@ fn signature(tabs: &[Tab], active: usize, project: Option<&Path>, sidebar: &Side
         tab.loading.is_some().hash(&mut hasher);
         tab.unloaded.is_some().hash(&mut hasher);
         (tab.language_chosen, &tab.language).hash(&mut hasher);
+        tab.preview.hash(&mut hasher);
         tab.read_encoding.map(|e| e.code()).hash(&mut hasher);
         let doc = &tab.doc;
         doc.is_dirty().hash(&mut hasher);
@@ -451,6 +454,28 @@ mod tests {
         let keeper = SessionKeeper::new(files.clone(), &Session::default());
         let (snapshot, _) = keeper.snapshot(&[waiting], 0);
         assert_eq!(snapshot.session.tabs, [entry]);
+        fs::remove_dir_all(files.file.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn preview_tabs_are_kept_as_previews_until_kept() {
+        let files = temp_files("preview");
+        let entry = SessionTab {
+            path: Some(PathBuf::from(r"C:\src\Old.cs")),
+            preview: true,
+            ..SessionTab::default()
+        };
+        let mut waiting = tab(5, Document::new_empty(LineEnding::CrLf, TextEncoding::UTF8));
+        waiting.unloaded = Some(entry);
+        waiting.preview = true;
+        let keeper = SessionKeeper::new(files.clone(), &Session::default());
+        let (snapshot, _) = keeper.snapshot(std::slice::from_ref(&waiting), 0);
+        assert!(snapshot.session.tabs[0].preview);
+
+        // Double-clicked before it was ever activated: no longer a preview.
+        waiting.preview = false;
+        let (snapshot, _) = keeper.snapshot(&[waiting], 0);
+        assert!(!snapshot.session.tabs[0].preview);
         fs::remove_dir_all(files.file.parent().unwrap()).unwrap();
     }
 

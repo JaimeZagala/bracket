@@ -18,10 +18,10 @@ Una carpeta se abre como proyecto con **Archivo → Abrir carpeta**, con `bracke
 
 **Archivo → Recientes** muestra los últimos ficheros (hasta 15) y carpetas (hasta 10) que se abrieron, los más recientes primero; los que ya no existen no aparecen. Una carpeta reciente se abre como proyecto. «Borrar la lista» la vacía. La lista se guarda en `recent.toml`, junto a `config.toml`.
 
-Con un proyecto abierto, el **panel del proyecto** muestra a la izquierda el árbol de carpetas: primero las carpetas y después los ficheros, por nombre, con la insignia de lenguaje en los ficheros que la tienen. Un clic en una carpeta la abre o la cierra; un clic en un fichero lo abre. El borde derecho se arrastra para cambiar el ancho.
+Con un proyecto abierto, el **panel del proyecto** muestra a la izquierda el árbol de carpetas: primero las carpetas y después los ficheros, por nombre, con la insignia de lenguaje en los ficheros que la tienen. Un clic en una carpeta la abre o la cierra. Un clic en un fichero lo muestra en la **pestaña de vista previa**, con el título en cursiva: el siguiente fichero que se mire así ocupa su lugar, para no llenar la barra de pestañas. La pestaña pasa a ser normal al editar el documento, al hacer doble clic en ella o al hacer doble clic en el fichero del árbol. El borde derecho se arrastra para cambiar el ancho.
 
 - **Ctrl+B** oculta o muestra el panel (también en **Ver → Panel del proyecto**).
-- **Ctrl+Mayús+E** lleva el teclado al árbol: ↑ y ↓ mueven la selección (también Inicio, Fin, RePág y AvPág), → abre la carpeta o entra en ella, ← la cierra o sube a la carpeta que la contiene, Intro abre el fichero o abre y cierra la carpeta, y Esc vuelve al editor.
+- **Ctrl+Mayús+E** lleva el teclado al árbol: ↑ y ↓ mueven la selección (también Inicio, Fin, RePág y AvPág), → abre la carpeta o entra en ella, ← la cierra o sube a la carpeta que la contiene, Intro abre el fichero en una pestaña normal (o abre y cierra la carpeta), Espacio lo muestra en la vista previa sin salir del árbol, y Esc vuelve al editor.
 - La sesión recuerda el ancho, si el panel está visible y qué carpetas estaban abiertas.
 
 Ctrl+P y la búsqueda en el proyecto llegan en los próximos pasos de la Fase 2.

@@ -386,6 +386,7 @@ impl BracketApp {
         for (position, entry) in previous.tabs.into_iter().enumerate() {
             let doc = self.empty_document();
             let index = self.add_tab(doc);
+            self.tabs[index].preview = entry.preview;
             if position == previous.active || entry.unsaved.is_some() {
                 self.start_restoring(ctx, index, entry);
             } else {
@@ -665,24 +666,48 @@ impl BracketApp {
         self.activate(ctx, active);
     }
 
-    /// Opens a file in a tab: the one already showing it, the active one if it is blank, or a
-    /// new one.
+    /// Opens a file in a normal tab: see [`Self::open_file_as`].
     fn open_file(&mut self, ctx: &egui::Context, path: PathBuf) {
+        self.open_file_as(ctx, path, false);
+    }
+
+    /// Opens a file in a tab: the one already showing it, the active one if it is blank, the
+    /// preview tab when previewing, or a new one. Opening a previewed file normally keeps its
+    /// tab.
+    fn open_file_as(&mut self, ctx: &egui::Context, path: PathBuf, preview: bool) {
         let open = self.tabs.iter().position(|tab| {
             tab.path()
                 .is_some_and(|tab_path| tabs::same_file(tab_path, &path))
         });
         if let Some(index) = open {
+            if !preview {
+                self.tabs[index].preview = false;
+            }
             self.activate(ctx, index);
             return;
         }
+        let replaced = preview
+            .then(|| {
+                self.tabs
+                    .iter()
+                    .position(|t| t.preview && !t.doc.is_dirty())
+            })
+            .flatten();
         let (index, new_tab) = if self.active_tab().is_blank() {
             (self.active, false)
+        } else if let Some(index) = replaced {
+            // A new tab in the preview tab's place.
+            let doc = self.empty_document();
+            self.add_tab(doc);
+            let tab = self.tabs.pop().expect("just added");
+            self.tabs[index] = tab;
+            (index, true)
         } else {
             let doc = self.empty_document();
             (self.add_tab(doc), true)
         };
         self.start_loading(ctx, index, path, None, new_tab);
+        self.tabs[index].preview = preview;
         self.activate(ctx, index);
     }
 
@@ -954,6 +979,7 @@ impl BracketApp {
                 recent.update(|r| r.add_file(&path));
             }
             let tab = &mut self.tabs[index];
+            tab.preview = false;
             tab.doc.set_path(path);
             tab.refresh_language(&self.languages);
             // The language may have changed: highlighting starts again on the next frame.
@@ -1070,6 +1096,7 @@ impl BracketApp {
                 recent.update(|r| r.add_file(&path));
             }
             let tab = &mut self.tabs[index];
+            tab.preview = false;
             tab.doc.set_path(path);
             tab.refresh_language(&self.languages);
             // The language may have changed: highlighting starts again on the next frame.
@@ -1692,6 +1719,10 @@ impl eframe::App for BracketApp {
             self.status = Some(self.texts.project_bad_exclude(&bad.pattern, &bad.error));
         }
         self.poll_loading(ctx);
+        // Editing a preview tab keeps it.
+        for tab in &mut self.tabs {
+            tab.preview &= !tab.doc.is_dirty();
+        }
         self.poll_saving();
         self.poll_config_saving();
         self.poll_fallbacks(ctx);
@@ -1736,12 +1767,19 @@ impl eframe::App for BracketApp {
                 self.open_file(&ctx, path);
                 self.focus_editor(&ctx);
             }
+            Some(TreeAction::Preview(path)) => {
+                self.open_file_as(&ctx, path, true);
+                if let Some(tree) = &mut self.tree {
+                    tree.focus(&ctx);
+                }
+            }
             Some(TreeAction::Leave) => self.focus_editor(&ctx),
             None => {}
         }
         match self.tab_bar(ui) {
             Some(TabAction::Activate(index)) => self.activate(&ctx, index),
             Some(TabAction::Close(index)) => self.close_tab(&ctx, index),
+            Some(TabAction::Keep(index)) => self.tabs[index].preview = false,
             None => {}
         }
         let mut missing_glyph = None;

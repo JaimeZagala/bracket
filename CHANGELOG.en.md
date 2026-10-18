@@ -14,6 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Recent items: File → Recent lists the last files (15) and folders (10) opened, without the ones that no longer exist, and can clear the list. They are kept in `recent.toml`.
 - Project walk (`bracket-index`): lists the files of a folder following `.gitignore` (also outside a Git repository), `.ignore` and the new `[project] exclude` key in `config.toml`; hidden files are included and `.git`, `.svn` and `.hg` never are. It runs on several threads and can be cancelled: 110 ms with 50,000 files.
 - Project panel: a folder tree on the left with the same exclusion rules. Each folder is listed on a thread when it is opened; language badge on files; resizable; Ctrl+B hides it and Ctrl+Shift+E moves the keyboard to the tree (arrows, Home/End, PgUp/PgDn, Enter, Esc). The session remembers its width, whether it is shown and the open folders.
+- Preview tab: clicking a file in the tree opens it in a provisional tab, with its title in italics, that the next file looked at replaces. Editing it, double-clicking it or the file, or opening the file with Enter turns it into a normal tab. The session remembers it.
 
 ## [0.1.0] - 2026-10-18
 

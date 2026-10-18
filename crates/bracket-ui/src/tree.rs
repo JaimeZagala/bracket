@@ -27,7 +27,10 @@ const GAP: f32 = 5.0;
 /// What the user did in the tree that the app has to carry out.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TreeAction {
+    /// Open the file in a normal tab and move the keyboard to it.
     Open(PathBuf),
+    /// Show the file in the preview tab; the keyboard stays in the tree.
+    Preview(PathBuf),
     /// Escape: give the keyboard back to the editor.
     Leave,
 }
@@ -324,6 +327,11 @@ impl ProjectTree {
             } else {
                 return Some(TreeAction::Open(row.path.clone()));
             }
+        } else if pressed(Key::Space) {
+            let row = &self.rows[index];
+            if !row.is_dir {
+                return Some(TreeAction::Preview(row.path.clone()));
+            }
         } else if pressed(Key::Escape) {
             return Some(TreeAction::Leave);
         }
@@ -400,6 +408,7 @@ impl ProjectTree {
             }
         }
         self.reveal_selected = false;
+        // The row clicked, and whether it was a double click.
         let mut clicked = None;
         let output = scroll.show_rows(ui, ROW_HEIGHT, self.rows.len(), |ui, range| {
             ui.spacing_mut().item_spacing.y = 0.0;
@@ -407,22 +416,25 @@ impl ProjectTree {
                 let row = &self.rows[index];
                 let selected = self.selected.as_ref() == Some(&row.path);
                 let expanded = row.is_dir && self.expanded.contains(&row.path);
-                if row_widget(ui, row, selected, focused, expanded, registry).clicked() {
-                    clicked = Some(index);
+                let response = row_widget(ui, row, selected, focused, expanded, registry);
+                if response.clicked() || response.double_clicked() {
+                    clicked = Some((index, response.double_clicked()));
                 }
             }
         });
         self.scroll = (output.state.offset.y, output.inner_rect.height());
 
-        if let Some(index) = clicked {
+        if let Some((index, double)) = clicked {
             ui.memory_mut(|m| m.request_focus(id));
             self.select(index);
             let row = &self.rows[index];
             if row.is_dir {
                 let (path, open) = (row.path.clone(), !self.expanded.contains(&row.path));
                 self.set_expanded(&path, open);
-            } else {
+            } else if double {
                 action = Some(TreeAction::Open(row.path.clone()));
+            } else {
+                action = Some(TreeAction::Preview(row.path.clone()));
             }
         }
         action

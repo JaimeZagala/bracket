@@ -14,7 +14,9 @@ use bracket_session::SessionTab;
 use bracket_syntax::{Badge, HighlightWorker, Highlights, LanguageRegistry};
 use eframe::egui::{
     self, Color32, FontId, Galley, Painter, Pos2, Rect, Sense, Stroke, StrokeKind, TextStyle, Ui,
-    Vec2, WidgetInfo, WidgetType, pos2, vec2,
+    Vec2, WidgetInfo, WidgetType, pos2,
+    text::{LayoutJob, TextFormat},
+    vec2,
 };
 
 use crate::disk::DiskWatch;
@@ -59,6 +61,9 @@ pub struct Tab {
     pub language: Option<String>,
     /// The language was picked in the status bar (kept in the session).
     pub language_chosen: bool,
+    /// A preview tab (title in italics): the next file previewed replaces it. Editing the
+    /// document or double-clicking the tab keeps it.
+    pub preview: bool,
     /// Number shown in "Untitled N" while the document has no path.
     pub untitled: u32,
     /// Encoding picked with "reopen with encoding"; the session reopens the file with it.
@@ -82,6 +87,7 @@ impl Tab {
             view,
             language: None,
             language_chosen: false,
+            preview: false,
             untitled,
             read_encoding: None,
             loading: None,
@@ -201,6 +207,8 @@ pub fn same_file(a: &Path, b: &Path) -> bool {
 pub enum TabAction {
     Activate(usize),
     Close(usize),
+    /// Double click: a preview tab becomes a normal one.
+    Keep(usize),
 }
 
 const TAB_HEIGHT: f32 = 30.0;
@@ -236,6 +244,8 @@ pub fn tab_bar(
                     }
                     if picked.close {
                         action = Some(TabAction::Close(index));
+                    } else if picked.keep {
+                        action = Some(TabAction::Keep(index));
                     } else if picked.activate {
                         action = Some(TabAction::Activate(index));
                     }
@@ -284,6 +294,7 @@ pub fn paint_badge(painter: &Painter, badge: &Badge, font: FontId, left_center: 
 struct TabResponse {
     response: egui::Response,
     activate: bool,
+    keep: bool,
     close: bool,
 }
 
@@ -305,7 +316,15 @@ fn tab_widget(
     let title_font = TextStyle::Button.resolve(ui.style());
     let badge_font = FontId::proportional((title_font.size * 0.8).round());
     let painter = ui.painter().clone();
-    let title_galley = painter.layout_no_wrap(title.clone(), title_font, text_color);
+    let title_galley = painter.layout_job(LayoutJob::single_section(
+        title.clone(),
+        TextFormat {
+            font_id: title_font,
+            color: text_color,
+            italics: tab.preview,
+            ..TextFormat::default()
+        },
+    ));
     let badge = badge.map(|b| BadgeLayout::new(&painter, b, badge_font));
     let width = PADDING
         + badge.as_ref().map_or(0.0, |b| b.size.x + GAP)
@@ -394,6 +413,7 @@ fn tab_widget(
     }
 
     let activate = response.clicked();
+    let keep = response.double_clicked();
     let close_clicked = close.clicked() || response.middle_clicked();
     let response = match tab.path() {
         Some(path) => response.on_hover_text(path.display().to_string()),
@@ -402,6 +422,7 @@ fn tab_widget(
     TabResponse {
         response,
         activate,
+        keep,
         close: close_clicked,
     }
 }
