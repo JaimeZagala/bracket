@@ -96,6 +96,16 @@ Bracket vigila los ficheros abiertos. Si otro programa los cambia mientras está
 - **Con cambios sin guardar:** aparece un aviso encima del texto. «Recargar del disco» sustituye tu texto por el del disco (Deshacer lo recupera); «Mantener mis cambios» lo deja como está y el siguiente guardado sobrescribe el fichero.
 - **Borrado o movido:** un aviso lo indica y la pestaña queda como modificada, así que el texto no se pierde: al guardar se vuelve a crear el fichero. Si el fichero vuelve con el mismo contenido, la pestaña deja de estar modificada.
 
+## Barra de estado
+
+De izquierda a derecha:
+
+- **Mensajes:** el resultado de la última acción (guardado, recarga...), avisos de configuración o de paquetes de lenguaje, o una pista para abrir ficheros.
+- **Posición:** `Lín 12, Col 5` (la columna cuenta las tabulaciones hasta su tope). Con texto seleccionado añade cuántos caracteres (`(25 seleccionados)`), y con varias selecciones muestra cuántas hay (`3 selecciones`).
+- **Salto de línea** y **codificación:** ver abajo. «Solo lectura» aparece junto a la codificación cuando el fichero no se puede guardar sin alterar sus bytes.
+- **Lenguaje del documento:** el detectado por la extensión. Pulsando se elige otro para esta pestaña, o «Texto sin formato»; la elección se recuerda en la sesión. Guardar con otro nombre vuelve a detectarlo por la extensión.
+- **Idioma de la interfaz.**
+
 ## Codificación y saltos de línea
 
 La barra de estado muestra la codificación (por ejemplo `UTF-8`, `UTF-8 BOM`, `UTF-16 LE BOM` o `windows-1252`) y el salto de línea (`CRLF`, `LF` o `CR`). Pulsando sobre ellos:

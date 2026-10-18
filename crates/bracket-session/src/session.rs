@@ -57,6 +57,9 @@ pub struct SessionTab {
     /// First visible line.
     pub top_line: usize,
     pub unsaved: Option<Unsaved>,
+    /// Language picked by hand in the status bar (an empty id is plain text); `None` to
+    /// detect it from the extension.
+    pub language: Option<String>,
 }
 
 /// Where the unsaved text of a tab is kept and how it will be saved.
@@ -198,6 +201,10 @@ fn parse_tab(table: &Table) -> Option<SessionTab> {
         head: position("head"),
         top_line: position("top_line"),
         unsaved,
+        language: table
+            .get("language")
+            .and_then(Item::as_str)
+            .map(str::to_owned),
     })
 }
 
@@ -227,6 +234,9 @@ pub fn to_toml(session: &Session) -> String {
         table.insert("anchor", value(tab.anchor as i64));
         table.insert("head", value(tab.head as i64));
         table.insert("top_line", value(tab.top_line as i64));
+        if let Some(language) = &tab.language {
+            table.insert("language", value(language.as_str()));
+        }
         if let Some(unsaved) = &tab.unsaved {
             table.insert("backup", value(unsaved.backup.as_str()));
             table.insert("encoding", value(unsaved.encoding.code()));
@@ -302,6 +312,7 @@ mod tests {
                     head: 14,
                     top_line: 3,
                     unsaved: None,
+                    language: Some("razor".to_owned()),
                 },
                 SessionTab {
                     path: Some(PathBuf::from(r"C:\src\legacy.txt")),
@@ -314,6 +325,7 @@ mod tests {
                         encoding: TextEncoding::UTF8_BOM,
                         line_ending: LineEnding::Lf,
                     }),
+                    language: Some(String::new()),
                 },
                 SessionTab {
                     unsaved: Some(Unsaved {

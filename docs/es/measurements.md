@@ -128,6 +128,7 @@ Conclusiones:
 | Paso 12: resaltado con syntect | 8.043.520 B | +1.988 KB | Paquete de gramáticas (344 KB comprimidos) y código: motor de regex en Rust puro (`fancy-regex`, `regex-automata` con tablas Unicode), analizador de syntect, descompresión y deserialización. Arranque intercalado frente al paso 11 (15 rondas): 122,1 frente a 125,1 ms (las gramáticas se cargan en el hilo del resaltador) |
 | Paso 13: paquetes de lenguaje | 8.300.544 B | +257 KB | Lector YAML de syntect (`yaml-load`) para las gramáticas de los paquetes, y el cargador. Arranque intercalado frente al paso 12 (15 rondas, equipo cargado): 165,5 frente a 164,3 ms |
 | Paso 14: temas | 8.369.664 B | +69 KB | Menú Ver, apariencia y colores del editor (los temas ya iban en el exe). Arranque intercalado frente al paso 13 (15 rondas): 139,5 frente a 142,2 ms |
+| Paso 15: barra de estado completa | 8.400.896 B | +31 KB | Lenguaje del documento, selecciones y nueva disposición. Arranque intercalado frente al paso 14 (15 rondas): 135,4 frente a 141,9 ms |
 
 Paso 5, arranque intercalado frente al paso 4 (15 rondas): 144,9 ms frente a 148,6 ms, dentro del ruido. Ese día las medianas absolutas rondaron 145–149 ms con el equipo cargado: el margen frente a los 150 ms es mínimo.
 

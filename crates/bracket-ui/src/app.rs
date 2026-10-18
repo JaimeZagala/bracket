@@ -46,9 +46,11 @@ pub struct WindowStart {
 pub const WINDOW_KEY: &str = "window";
 
 /// Something picked in a status bar menu.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum StatusAction {
-    Language(Language),
+    InterfaceLanguage(Language),
+    /// `None` for plain text.
+    DocumentLanguage(Option<String>),
     ConvertLineEndings(LineEnding),
     ReopenWith(TextEncoding),
     SaveWith(TextEncoding),
@@ -712,6 +714,10 @@ impl BracketApp {
             let read_encoding = loading.read_encoding;
             let top_line = loading.restore.as_ref().map(|entry| entry.top_line);
             let goto = loading.goto;
+            let chosen_language = loading
+                .restore
+                .as_ref()
+                .and_then(|entry| entry.language.clone());
             match loading.rx.try_recv() {
                 Ok(Ok(Loaded { doc, stamp })) => {
                     tab.doc = doc;
@@ -727,6 +733,13 @@ impl BracketApp {
                         go_to(tab, position);
                     }
                     tab.refresh_language(&self.languages);
+                    if let Some(id) = chosen_language {
+                        // Picked by hand last time; an empty id is plain text.
+                        if id.is_empty() || self.languages.get(&id).is_some() {
+                            tab.language = (!id.is_empty()).then_some(id);
+                            tab.language_chosen = true;
+                        }
+                    }
                     if let Some(width) = tab
                         .language
                         .as_deref()
@@ -1037,33 +1050,62 @@ impl BracketApp {
     }
 
     /// Draws the status bar. Returns what was picked in one of its menus, if anything.
+    /// Draws the status bar. Returns what was picked in one of its menus, if anything.
+    ///
+    /// Right to left: interface language, document language, encoding, line ending, position
+    /// and selections. The message (status, warnings or a hint) takes the space left.
     fn status_bar(&self, ui: &mut egui::Ui) -> Option<StatusAction> {
         let mut picked = None;
-        let doc = &self.active_tab().doc;
+        let tab = self.active_tab();
+        let doc = &tab.doc;
         egui::Panel::bottom("status").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                let text = doc.buffer.text();
-                let head = doc.buffer.selections().primary().head;
-                let line = movement::line_of(text, head) + 1;
-                let column = movement::visual_column(text, head, doc.buffer.tab_width()) + 1;
-                ui.label(self.texts.position(line, column));
-                ui.separator();
-                let current_line_ending = doc.line_ending();
-                ui.menu_button(current_line_ending.label(), |ui| {
-                    for line_ending in LineEnding::ALL {
-                        let label = self.texts.convert_line_endings(line_ending.label());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.menu_button(self.texts.language_name(), |ui| {
+                    for language in LANGUAGES {
+                        let name = i18n::texts(language).language_name();
                         if ui
-                            .selectable_label(line_ending == current_line_ending, label)
+                            .selectable_label(language == self.config.language, name)
                             .clicked()
                         {
-                            picked = Some(StatusAction::ConvertLineEndings(line_ending));
+                            picked = Some(StatusAction::InterfaceLanguage(language));
                             ui.close();
                         }
                     }
                 })
                 .response
-                .on_hover_text(self.texts.line_ending_tooltip());
+                .on_hover_text(self.texts.language_tooltip());
                 ui.separator();
+
+                let current = tab.language.as_deref();
+                let current_name = current
+                    .and_then(|id| self.languages.get(id))
+                    .map_or(self.texts.plain_text(), |l| l.name.as_str());
+                ui.menu_button(current_name, |ui| {
+                    egui::ScrollArea::vertical()
+                        .max_height(400.0)
+                        .show(ui, |ui| {
+                            if ui
+                                .selectable_label(current.is_none(), self.texts.plain_text())
+                                .clicked()
+                            {
+                                picked = Some(StatusAction::DocumentLanguage(None));
+                                ui.close();
+                            }
+                            for language in self.languages.languages() {
+                                let selected = current == Some(language.id.as_str());
+                                if ui.selectable_label(selected, &language.name).clicked() {
+                                    picked = Some(StatusAction::DocumentLanguage(Some(
+                                        language.id.clone(),
+                                    )));
+                                    ui.close();
+                                }
+                            }
+                        });
+                })
+                .response
+                .on_hover_text(self.texts.document_language_tooltip());
+                ui.separator();
+
                 let current_encoding = doc.encoding();
                 ui.menu_button(current_encoding.label(), |ui| {
                     ui.menu_button(self.texts.reopen_with_encoding(), |ui| {
@@ -1089,10 +1131,31 @@ impl BracketApp {
                 .response
                 .on_hover_text(self.texts.encoding_tooltip());
                 if doc.is_read_only() {
-                    ui.separator();
-                    ui.label(self.texts.read_only());
+                    ui.label(self.texts.read_only_short())
+                        .on_hover_text(self.texts.read_only());
                 }
                 ui.separator();
+
+                let current_line_ending = doc.line_ending();
+                ui.menu_button(current_line_ending.label(), |ui| {
+                    for line_ending in LineEnding::ALL {
+                        let label = self.texts.convert_line_endings(line_ending.label());
+                        if ui
+                            .selectable_label(line_ending == current_line_ending, label)
+                            .clicked()
+                        {
+                            picked = Some(StatusAction::ConvertLineEndings(line_ending));
+                            ui.close();
+                        }
+                    }
+                })
+                .response
+                .on_hover_text(self.texts.line_ending_tooltip());
+                ui.separator();
+
+                ui.label(position_text(self.texts, doc));
+                ui.separator();
+
                 let warnings: Vec<String> = self
                     .config_warnings
                     .iter()
@@ -1107,27 +1170,23 @@ impl BracketApp {
                     let (family, used) = self.missing_font.as_ref()?;
                     Some(self.texts.font_missing(family, used))
                 });
-                match self.status.as_ref().or(notice.as_ref()) {
-                    Some(message) => ui.label(message.as_str()),
-                    None if doc.path().is_none() => ui.weak(self.texts.drop_hint()),
-                    None => ui.label(""),
-                };
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.menu_button(self.texts.language_name(), |ui| {
-                        for language in LANGUAGES {
-                            let name = i18n::texts(language).language_name();
-                            if ui
-                                .selectable_label(language == self.config.language, name)
-                                .clicked()
-                            {
-                                picked = Some(StatusAction::Language(language));
-                                ui.close();
-                            }
+                ui.with_layout(
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| match self.status.as_ref().or(notice.as_ref()) {
+                        Some(message) => {
+                            ui.add(egui::Label::new(message.as_str()).truncate());
                         }
-                    })
-                    .response
-                    .on_hover_text(self.texts.language_tooltip());
-                });
+                        None if doc.path().is_none() => {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(self.texts.drop_hint()).weak(),
+                                )
+                                .truncate(),
+                            );
+                        }
+                        None => {}
+                    },
+                );
             });
         });
         picked
@@ -1135,9 +1194,18 @@ impl BracketApp {
 
     fn run_status_action(&mut self, ctx: &egui::Context, action: StatusAction) {
         let index = self.active;
+        if let StatusAction::DocumentLanguage(id) = action {
+            let tab = &mut self.tabs[index];
+            tab.language = id;
+            tab.language_chosen = true;
+            // Highlighting starts again with the new language's grammar.
+            tab.highlight = None;
+            return;
+        }
         let doc = &mut self.tabs[index].doc;
         match action {
-            StatusAction::Language(language) => self.set_language(ctx, language),
+            StatusAction::InterfaceLanguage(language) => self.set_language(ctx, language),
+            StatusAction::DocumentLanguage(_) => {} // handled above
             StatusAction::ConvertLineEndings(line_ending) => {
                 if !doc.is_read_only() {
                     doc.convert_line_endings(line_ending);
@@ -1614,6 +1682,25 @@ fn save_error_text(texts: &Texts, err: &SaveError) -> String {
     }
 }
 
+/// "Ln 3, Col 7", with the number of selections and of selected characters when there are.
+fn position_text(texts: &Texts, doc: &Document) -> String {
+    let text = doc.buffer.text();
+    let selections = doc.buffer.selections();
+    let head = selections.primary().head;
+    let line = movement::line_of(text, head) + 1;
+    let column = movement::visual_column(text, head, doc.buffer.tab_width()) + 1;
+    let selected: usize = selections.iter().map(|s| s.len()).sum();
+    let base = match selections.len() {
+        1 => texts.position(line, column),
+        count => texts.selections(count),
+    };
+    if selected == 0 {
+        base
+    } else {
+        format!("{base} {}", texts.selected_chars(selected))
+    }
+}
+
 /// The first warning plus how many more there are.
 fn warnings_summary(texts: &Texts, warnings: &[String]) -> Option<String> {
     let first = warnings.first()?;
@@ -1621,4 +1708,43 @@ fn warnings_summary(texts: &Texts, warnings: &[String]) -> Option<String> {
         0 => first.clone(),
         more => format!("{first} {}", texts.more_warnings(more)),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bracket_core::{Selection, Selections};
+
+    fn doc(text: &str, selections: Vec<Selection>) -> Document {
+        let mut doc = Document::new_empty(LineEnding::Lf, TextEncoding::UTF8);
+        doc.buffer.insert(text);
+        doc.buffer.set_selections(Selections::new(selections, 0));
+        doc
+    }
+
+    #[test]
+    fn the_position_shows_selections_and_selected_characters() {
+        let texts = i18n::texts(Language::English);
+        let text = "one\ntwo\tx\n";
+        assert_eq!(
+            position_text(texts, &doc(text, vec![Selection::caret(6)])),
+            "Ln 2, Col 3"
+        );
+        assert_eq!(
+            position_text(texts, &doc(text, vec![Selection::caret(9)])),
+            "Ln 2, Col 6",
+            "columns count tab stops"
+        );
+        assert_eq!(
+            position_text(texts, &doc(text, vec![Selection::new(0, 3)])),
+            "Ln 1, Col 4 (3 selected)"
+        );
+        assert_eq!(
+            position_text(
+                texts,
+                &doc(text, vec![Selection::caret(0), Selection::new(4, 7)])
+            ),
+            "2 selections (3 selected)"
+        );
+    }
 }

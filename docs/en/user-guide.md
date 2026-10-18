@@ -96,6 +96,16 @@ Bracket watches open files. If another program changes them while they are open:
 - **Unsaved changes:** a notice appears above the text. "Reload from disk" replaces your text with the one on disk (Undo brings it back); "Keep my changes" leaves it as it is and the next save overwrites the file.
 - **Deleted or moved:** a notice says so and the tab stays modified, so the text is not lost: saving creates the file again. If the file comes back with the same contents, the tab is no longer modified.
 
+## Status bar
+
+From left to right:
+
+- **Messages:** the result of the last action (saved, reloaded...), configuration or language package warnings, or a hint for opening files.
+- **Position:** `Ln 12, Col 5` (the column counts tabs up to their stop). With selected text it adds how many characters (`(25 selected)`), and with several selections it shows how many (`3 selections`).
+- **Line ending** and **encoding:** see below. "Read-only" appears next to the encoding when the file cannot be saved without altering its bytes.
+- **Document language:** the one detected from the extension. Click it to pick another one for this tab, or "Plain Text"; the session remembers the choice. Saving under another name detects it from the extension again.
+- **Interface language.**
+
 ## Encoding and line endings
 
 The status bar shows the encoding (for example `UTF-8`, `UTF-8 BOM`, `UTF-16 LE BOM` or `windows-1252`) and the line ending (`CRLF`, `LF` or `CR`). Click them to:

@@ -101,6 +101,26 @@ impl Texts {
         self.fill("position", &[("line", &line), ("column", &column)])
     }
 
+    pub fn selections(&self, count: usize) -> String {
+        self.fill("selections", &[("count", &count)])
+    }
+
+    pub fn selected_chars(&self, count: usize) -> String {
+        self.fill("selected_chars", &[("count", &count)])
+    }
+
+    pub fn plain_text(&self) -> &str {
+        self.get("plain_text")
+    }
+
+    pub fn document_language_tooltip(&self) -> &str {
+        self.get("document_language_tooltip")
+    }
+
+    pub fn read_only_short(&self) -> &str {
+        self.get("read_only_short")
+    }
+
     pub fn menu_file(&self) -> &str {
         self.get("menu_file")
     }
@@ -423,6 +443,14 @@ mod tests {
                 ("read_only", t.read_only().to_owned()),
                 ("drop_hint", t.drop_hint().to_owned()),
                 ("position", t.position(1, 2)),
+                ("selections", t.selections(3)),
+                ("selected_chars", t.selected_chars(12)),
+                ("plain_text", t.plain_text().to_owned()),
+                (
+                    "document_language_tooltip",
+                    t.document_language_tooltip().to_owned(),
+                ),
+                ("read_only_short", t.read_only_short().to_owned()),
                 ("menu_file", t.menu_file().to_owned()),
                 ("menu_new", t.menu_new().to_owned()),
                 ("menu_open", t.menu_open().to_owned()),

@@ -54,8 +54,10 @@ pub struct Tab {
     pub id: u64,
     pub doc: Document,
     pub view: EditorView,
-    /// Language id in the registry, from the file extension.
+    /// Language id in the registry, from the file extension or picked by hand.
     pub language: Option<String>,
+    /// The language was picked in the status bar (kept in the session).
+    pub language_chosen: bool,
     /// Number shown in "Untitled N" while the document has no path.
     pub untitled: u32,
     /// Encoding picked with "reopen with encoding"; the session reopens the file with it.
@@ -78,6 +80,7 @@ impl Tab {
             doc,
             view,
             language: None,
+            language_chosen: false,
             untitled,
             read_encoding: None,
             loading: None,
@@ -118,6 +121,7 @@ impl Tab {
 
     /// Looks the language up again after the path changed.
     pub fn refresh_language(&mut self, registry: &LanguageRegistry) {
+        self.language_chosen = false;
         self.language = self
             .path()
             .and_then(|path| registry.for_path(path))

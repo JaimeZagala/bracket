@@ -251,6 +251,9 @@ impl SessionKeeper {
                         head: selection.head,
                         top_line: tab.view.top_line(),
                         unsaved,
+                        language: tab
+                            .language_chosen
+                            .then(|| tab.language.clone().unwrap_or_default()),
                     }
                 }
             };
@@ -275,6 +278,7 @@ fn signature(tabs: &[Tab], active: usize) -> u64 {
         tab.path().hash(&mut hasher);
         tab.loading.is_some().hash(&mut hasher);
         tab.unloaded.is_some().hash(&mut hasher);
+        (tab.language_chosen, &tab.language).hash(&mut hasher);
         tab.read_encoding.map(|e| e.code()).hash(&mut hasher);
         let doc = &tab.doc;
         doc.is_dirty().hash(&mut hasher);
