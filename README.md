@@ -4,7 +4,7 @@
 
 Editor de código nativo y ligero para Windows 10/11 (x64), escrito en Rust. Pensado para quien quiere algo más que Notepad++ (proyecto, símbolos, búsqueda en carpeta) sin el peso de VS Code, y sigue usando un IDE completo para el trabajo de fondo.
 
-> **Estado: Fase 1 (editor base) en curso.** Todavía no hay ninguna versión publicada ni nada que instalar. Este README describe el objetivo; la sección [Hoja de ruta](#hoja-de-ruta) dice qué existe ya.
+> **Estado: Fase 1 (editor base, 0.1.0) completada; sin publicar.** Todavía no hay nada que instalar: se compila desde el código. Este README describe el objetivo; la sección [Hoja de ruta](#hoja-de-ruta) dice qué existe ya y la [guía de usuario](docs/es/user-guide.md) cómo se usa.
 
 **No es Brackets.** Bracket (en singular) no tiene relación con Brackets, el editor de Adobe ya descontinuado, ni con sus sucesores Brackets Continued y Phoenix Code.
 
@@ -26,15 +26,15 @@ Desarrolladores en Windows que abren muchos ficheros sueltos y carpetas de proye
 
 ## Objetivos de rendimiento
 
-Son objetivos, no resultados: se medirán y publicarán con el método, la versión y el equipo de prueba.
+Resultados de la 0.1.0 en un portátil Intel Core i7-13620H con gráfica integrada y Windows 11 (método y detalle en [mediciones](docs/es/measurements.md)).
 
-| Medida | Objetivo |
-|---|---|
-| Tamaño del ejecutable | < 15 MB |
-| Arranque en frío hasta poder escribir | < 150 ms |
-| RAM en reposo con 10 pestañas | < 80 MB |
-| Fichero de 100 MB | visible en < 1 s sin bloquear la interfaz |
-| Ctrl+P en un proyecto de 50.000 ficheros | < 50 ms por pulsación |
+| Medida | Objetivo | 0.1.0 |
+|---|---|---|
+| Tamaño del ejecutable | < 15 MB | 8,1 MB |
+| Arranque hasta poder escribir | < 150 ms | 126 ms (en caliente; la primera ejecución tras compilar incluye el análisis de Windows Defender) |
+| RAM en reposo con 10 pestañas | < 80 MB | 34–49 MB |
+| Fichero de 100 MB | visible en < 1 s sin bloquear la interfaz | 0,33 s |
+| Ctrl+P en un proyecto de 50.000 ficheros | < 50 ms por pulsación | Fase 2 |
 
 Límites conocidos: sin sistema de extensiones y sin LSP de serie (LSP opcional previsto para la 1.1.0).
 
@@ -55,7 +55,7 @@ cargo build --release -p bracket-app
 | Fase | Versión | Contenido | Estado |
 |---|---|---|---|
 | 0 | — | Cimientos y prototipo del editor | Completada |
-| 1 | 0.1.0 | Editor base: pestañas, sesión, codificaciones, resaltado, temas, configuración, idiomas | En curso |
+| 1 | 0.1.0 | Editor base: pestañas, sesión, codificaciones, resaltado, temas, configuración, idiomas | Completada (sin publicar) |
 | 2 | 0.2.0 | Proyectos: árbol de carpetas, Ctrl+P, paleta, buscar y reemplazar en carpeta | Pendiente |
 | 3 | 0.3.0 | Símbolos y navegación | Pendiente |
 | 4 | 0.4.0 | Edición avanzada: multicursor, plegado, diff, ficheros grandes | Pendiente |

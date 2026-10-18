@@ -2,7 +2,7 @@
 
 # User guide
 
-Bracket is under development (Phase 1). This guide describes what already works and grows with each phase.
+Bracket 0.1.0 (Phase 1, base editor). This guide describes what already works and grows with each phase.
 
 ## Opening and saving
 

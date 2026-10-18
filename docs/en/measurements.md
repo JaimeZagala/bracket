@@ -158,3 +158,18 @@ Painting benchmarks after the font change (Consolas instead of Hack): steady fra
 | Page at line 5,000 already highlighted (from the nearest checkpoint) | 6.8 ms |
 
 The cost per line is that of the pure Rust regex engine; since what is visible is highlighted first, a file's first screen is coloured in about 15 ms.
+
+## Phase 1 — closing, 0.1.0 (2026-10-18, machine A)
+
+`./scripts/measure.ps1` (from a temporary portable copy, without the user's session). Budgets from the plan:
+
+| Measure | Budget | 0.1.0 | How |
+|---|---|---|---|
+| Executable size | < 15 MB | 8,454,144 B (8.06 MB) | Release with LTO |
+| Startup until the first frame | < 150 ms | 126.1 ms (warm median of 11; minimum 119.7) | `-Runs 12`, no file |
+| Idle memory, no files | — | 30.4 MB | Private working set after 3 s |
+| Memory with 10 tabs | < 80 MB | 33.6 MB (active: highlighted JSON); 49.2 MB if the active one loads the symbol font | 10 files (93 KB): C#, Razor, T-SQL, JSON, XML, CSS, Markdown, TOML and Rust; after 5 s |
+| 100 MB file visible | < 1 s | 334 ms (warm median of 5) | `target\large-2m.txt`; 200 MB of memory |
+| Ctrl+P with 50,000 files | < 50 ms | — | Phase 2 |
+
+The first run of each measurement (1.2–1.5 s) is that of a freshly copied exe: it includes Windows Defender's scan and does not represent normal use.

@@ -11,6 +11,10 @@
 #
 # The first run after a reboot approximates a cold start; later runs are warm (files cached).
 #
+# Every run uses a copy of the executable in a temporary folder with portable.toml next to it, so
+# the user's configuration, session and window position are neither read nor changed, and an
+# open Bracket (single instance) does not take the files instead.
+#
 # Usage:
 #   ./scripts/measure.ps1 -Exe target/release/bracket.exe [-Runs 10] [-Arguments 'file.txt']
 #       [-Maximized] [-Scroll [-ScrollRuns 5]] [-MaxStartupMs 150]
@@ -34,6 +38,15 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $exePath = (Resolve-Path -LiteralPath $Exe).Path
+$work = Join-Path ([System.IO.Path]::GetTempPath()) ('bracket-measure-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $work | Out-Null
+$runExe = Join-Path $work (Split-Path -Leaf $exePath)
+Copy-Item -LiteralPath $exePath -Destination $runExe
+New-Item -ItemType File -Path (Join-Path $work 'portable.toml') | Out-Null
+
+function Remove-Work {
+    Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+}
 
 # GetSystemTimePreciseAsFileTime gives sub-microsecond wall-clock time, the same clock that
 # Rust's SystemTime uses on Windows.
@@ -63,7 +76,7 @@ function Get-Median([double[]]$values) {
 
 function Start-Target([hashtable]$extraEnv) {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = $exePath
+    $psi.FileName = $runExe
     $psi.Arguments = $Arguments
     $psi.UseShellExecute = $false
     foreach ($k in $extraEnv.Keys) { $psi.EnvironmentVariables[$k] = $extraEnv[$k] }
@@ -170,7 +183,10 @@ if ($MaxStartupMs -gt 0) {
     $median = Get-Median $warmFrame
     if ($median -gt $MaxStartupMs) {
         Write-Host ("Startup budget exceeded: warm median {0:N1} ms > {1:N0} ms" -f $median, $MaxStartupMs) -ForegroundColor Red
+        Remove-Work
         exit 1
     }
     Write-Host ("Startup budget OK: warm median {0:N1} ms <= {1:N0} ms" -f $median, $MaxStartupMs) -ForegroundColor Green
 }
+
+Remove-Work

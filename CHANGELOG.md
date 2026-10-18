@@ -8,6 +8,10 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-18
+
+Primera versión del editor base (Fase 1). Sin publicar: solo existe la etiqueta local `v0.1.0`.
+
 ### Added
 
 - Workspace de Cargo con ocho crates (`bracket-core`, `bracket-syntax`, `bracket-index`, `bracket-search`, `bracket-session`, `bracket-update`, `bracket-ui`, `bracket-app`), toolchain fijado y perfil de release optimizado.

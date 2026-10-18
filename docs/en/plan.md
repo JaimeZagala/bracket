@@ -131,7 +131,7 @@ Every phase ends with a usable version. Exit criteria: tests and clippy green, n
 
 ### Phase 1 in detail
 
-Approved on 2026-10-15. Steps ordered by dependencies; each one builds, has tests and gets its own commit.
+Approved on 2026-10-15 and completed on 2026-10-18 (0.1.0, local `v0.1.0` tag). Steps ordered by dependencies; each one builds, has tests and gets its own commit.
 
 1. Startup: profile eframe (window, OpenGL context, fonts, first frame), try `NativeOptions` settings measuring each change, and add a startup budget check.
 2. TOML configuration and portable mode (`bracket-session`): `portable.toml` next to the exe or `%APPDATA%\Bracket`.

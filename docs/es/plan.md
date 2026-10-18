@@ -131,7 +131,7 @@ Cada fase termina con una versión usable. Criterios de cierre: tests y clippy e
 
 ### Fase 1 en detalle
 
-Aprobada el 2026-10-15. Pasos ordenados por dependencias; cada uno compila, tiene tests y lleva su propio commit.
+Aprobada el 2026-10-15 y completada el 2026-10-18 (0.1.0, etiqueta local `v0.1.0`). Pasos ordenados por dependencias; cada uno compila, tiene tests y lleva su propio commit.
 
 1. Arranque: perfilar eframe (ventana, contexto OpenGL, fuentes, primer frame), probar opciones de `NativeOptions` midiendo cada cambio y añadir un control del presupuesto de arranque.
 2. Configuración en TOML y modo portable (`bracket-session`): `portable.toml` junto al exe o `%APPDATA%\Bracket`.

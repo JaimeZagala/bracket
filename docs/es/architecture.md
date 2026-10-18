@@ -2,13 +2,13 @@
 
 # Arquitectura
 
-Estado: Fase 0. Este documento describe la estructura acordada; cada sección indica qué está implementado.
+Estado: Fase 1 completada (0.1.0). Este documento describe la estructura acordada; cada sección indica qué está implementado.
 
 ## Crates del workspace
 
 | Crate | Responsabilidad | Depende de (workspace) | Estado |
 |---|---|---|---|
-| `bracket-core` | Buffer (ropey), selecciones múltiples, deshacer/rehacer por transacciones, movimiento de cursor, codificación, saltos de línea, modelo de documento. Sin UI ni APIs de Windows. | — | Fase 0: buffer, selecciones, transacciones, historial, movimiento y documento UTF-8 |
+| `bracket-core` | Buffer (ropey), selecciones múltiples, deshacer/rehacer por transacciones, movimiento de cursor, codificación, saltos de línea, modelo de documento. Sin UI ni APIs de Windows. | — | Fase 1: buffer, selecciones, historial con estado guardado exacto, movimiento, codificaciones, saltos de línea, documento con guardado atómico, recarga y sellos de disco |
 | `bracket-syntax` | Carga de lenguajes integrados y externos, resaltado incremental por líneas con caché, temas. | `bracket-core` | Fase 1: registro de lenguajes (los seis integrados, extensiones, insignia y gramática) y resaltado con syntect |
 | `bracket-index` | Recorrido de proyecto, extracción de símbolos (tree-sitter y regex), índice incremental, búsqueda difusa, referencias por nombre. | `bracket-core` (previsto) | Vacía |
 | `bracket-search` | Buscar y reemplazar con regex en fichero y carpeta, cancelable, con resultados en streaming. | `bracket-core` (previsto) | Vacía |
@@ -140,11 +140,14 @@ Pendiente de resolver; cada punto indica la fase prevista.
 
 - **Memoria de las fuentes de respaldo:** egui ocupa unas dos veces el tamaño de cada fuente cargada; con texto japonés o chino en pantalla, Microsoft YaHei añade unos 42 MB. Alternativa si molesta: una fuente CJK más pequeña con menos cobertura (MS Gothic, 9 MB).
 - **Sin fuentes del sistema:** si no se encontrara ninguna fuente (Consolas y Segoe UI vienen con Windows), la aplicación termina sin mostrar ningún mensaje.
-- **Arranque (todas las fases):** 123–133 ms sin carga; unos 60 ms son la inicialización de OpenGL en Windows y ninguna opción de eframe lo reduce (ver [measurements.md](measurements.md)). Quedan unos 20 ms de margen: lo nuevo debe ir fuera del camino del primer frame, y `check.ps1 -Perf` vigila las regresiones.
+- **Arranque (todas las fases):** 120–135 ms sin carga en la 0.1.0; unos 60 ms son la inicialización de OpenGL en Windows y ninguna opción de eframe lo reduce (ver [measurements.md](measurements.md)). Quedan unos 15–25 ms de margen: lo nuevo debe ir fuera del camino del primer frame, y `check.ps1 -Perf` vigila las regresiones.
 - **Licencias en la distribución (Fase 5):** el aviso BSD-3-Clause de encoding_rs (y los de las demás dependencias) debe acompañar al instalador y al zip.
 - **Guardado desde el diálogo de cambios sin guardar:** se hace en el hilo de interfaz y la bloquea mientras dura (normalmente milisegundos). Los hard links del fichero original no se conservan al guardar (es inherente al guardado atómico).
 - **Unidades de texto (Fase 4):** los clústeres de grafemas no se tratan como unidad y los caracteres anchos (CJK) cuentan como una columna.
-- **Ficheros grandes (Fase 4):** las líneas muy largas se maquetan enteras, y el `ScrollArea` de egui pierde precisión en `f32` por encima de ~1M de líneas (hará falta un scroll propio basado en líneas).
+- **Ficheros grandes (Fase 4):** las líneas muy largas se maquetan enteras, y el `ScrollArea` de egui pierde precisión en `f32` por encima de ~1M de líneas (hará falta un scroll propio basado en líneas). Un fichero de 100 MB ocupa unos 200 MB de memoria.
+- **Velocidad del resaltado:** unos 110 µs por línea con el motor de regex en Rust puro; se colorea primero lo visible, pero recorrer de golpe un fichero largo de arriba abajo deja colores pendientes unos instantes.
+- **Paquete de gramáticas:** se incluye el paquete completo de syntect (344 KB comprimidos) porque sus gramáticas no se pueden separar; copiar al repositorio solo las fuentes necesarias ahorraría unos 300 KB.
+- **Razor:** el HTML dentro de los bloques de código (`@{ <p>…</p> }`) no se reconoce y los bloques de `@if` se muestran como texto.
 
 ## Decisiones
 

@@ -2,13 +2,13 @@
 
 # Architecture
 
-Status: Phase 0. This document describes the agreed structure; each section states what is implemented.
+Status: Phase 1 complete (0.1.0). This document describes the agreed structure; each section states what is implemented.
 
 ## Workspace crates
 
 | Crate | Responsibility | Depends on (workspace) | Status |
 |---|---|---|---|
-| `bracket-core` | Buffer (ropey), multiple selections, transactional undo/redo, cursor movement, encoding, line endings, document model. No UI and no Windows APIs. | — | Phase 0: buffer, selections, transactions, history, movement and UTF-8 document |
+| `bracket-core` | Buffer (ropey), multiple selections, transactional undo/redo, cursor movement, encoding, line endings, document model. No UI and no Windows APIs. | — | Phase 1: buffer, selections, history with exact saved state, movement, encodings, line endings, document with atomic saving, reloading and disk stamps |
 | `bracket-syntax` | Loading of built-in and external languages, incremental line-based highlighting with cache, themes. | `bracket-core` | Phase 1: language registry (the six built-in languages, extensions, badge and grammar) and highlighting with syntect |
 | `bracket-index` | Project walking, symbol extraction (tree-sitter and regex), incremental index, fuzzy search, references by name. | `bracket-core` (planned) | Empty |
 | `bracket-search` | Cancellable regex find and replace in a file and across a folder, with streamed results. | `bracket-core` (planned) | Empty |
@@ -140,11 +140,14 @@ Still to be solved; each item states the planned phase.
 
 - **Fallback font memory:** egui takes about twice the size of each loaded font; with Japanese or Chinese text on screen, Microsoft YaHei adds about 42 MB. Alternative if it matters: a smaller CJK font with less coverage (MS Gothic, 9 MB).
 - **No system fonts:** if no font at all were found (Consolas and Segoe UI ship with Windows), the application would exit without any message.
-- **Startup (all phases):** 123–133 ms without load; about 60 ms are OpenGL initialization on Windows and no eframe setting reduces it (see [measurements.md](measurements.md)). About 20 ms of margin remain: new work must stay off the first frame's path, and `check.ps1 -Perf` watches for regressions.
+- **Startup (all phases):** 120–135 ms without load in 0.1.0; about 60 ms are OpenGL initialization on Windows and no eframe setting reduces it (see [measurements.md](measurements.md)). About 15–25 ms of margin remain: new work must stay off the first frame's path, and `check.ps1 -Perf` watches for regressions.
 - **Licenses in the distribution (Phase 5):** the BSD-3-Clause notice of encoding_rs (and those of the other dependencies) must ship with the installer and the zip.
 - **Saving from the unsaved-changes dialog:** it runs on the UI thread and blocks it while it lasts (usually milliseconds). Hard links to the original file are not kept when saving (inherent to atomic saving).
 - **Text units (Phase 4):** grapheme clusters are not treated as a unit and wide (CJK) characters count as one column.
-- **Large files (Phase 4):** very long lines are laid out whole, and egui's `ScrollArea` loses `f32` precision beyond ~1M lines (a custom line-based scroll will be needed).
+- **Large files (Phase 4):** very long lines are laid out whole, and egui's `ScrollArea` loses `f32` precision beyond ~1M lines (a custom line-based scroll will be needed). A 100 MB file takes about 200 MB of memory.
+- **Highlighting speed:** about 110 µs per line with the pure Rust regex engine; what is visible is coloured first, but racing through a long file top to bottom leaves colours pending for a moment.
+- **Grammar bundle:** syntect's whole bundle is included (344 KB compressed) because its grammars cannot be separated; copying only the needed sources into the repository would save about 300 KB.
+- **Razor:** HTML inside code blocks (`@{ <p>…</p> }`) is not recognised and `@if` blocks are shown as text.
 
 ## Decisions
 

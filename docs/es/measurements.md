@@ -158,3 +158,18 @@ Benchmarks de pintado tras el cambio de fuente (Consolas en lugar de Hack): fram
 | Página en la línea 5.000 ya resaltada (desde el punto de control más cercano) | 6,8 ms |
 
 El coste por línea es el del motor de regex en Rust puro; como se resalta primero lo visible, la primera pantalla de un fichero se colorea en unos 15 ms.
+
+## Fase 1 — cierre, 0.1.0 (2026-10-18, equipo A)
+
+`./scripts/measure.ps1` (desde una copia portable temporal, sin la sesión del usuario). Presupuestos del plan:
+
+| Medida | Presupuesto | 0.1.0 | Cómo |
+|---|---|---|---|
+| Tamaño del ejecutable | < 15 MB | 8.454.144 B (8,06 MB) | Release con LTO |
+| Arranque hasta el primer fotograma | < 150 ms | 126,1 ms (mediana en caliente de 11; mínimo 119,7) | `-Runs 12`, sin fichero |
+| Memoria en reposo, sin ficheros | — | 30,4 MB | Conjunto de trabajo privado a los 3 s |
+| Memoria con 10 pestañas | < 80 MB | 33,6 MB (activa: JSON resaltado); 49,2 MB si la activa carga la fuente de símbolos | 10 ficheros (93 KB): C#, Razor, T-SQL, JSON, XML, CSS, Markdown, TOML y Rust; a los 5 s |
+| Fichero de 100 MB visible | < 1 s | 334 ms (mediana en caliente de 5) | `target\large-2m.txt`; 200 MB de memoria |
+| Ctrl+P con 50.000 ficheros | < 50 ms | — | Fase 2 |
+
+La primera ejecución de cada medición (1,2–1,5 s) es la de un exe recién copiado: incluye el análisis de Windows Defender y no representa el uso normal.
