@@ -59,12 +59,12 @@ The crate structure is described in [architecture.md](architecture.md).
 C#, Razor, CSS, T-SQL, JSON and XML are built into the executable. An optional `languages/` folder adds languages or overrides a built-in one. Lookup order: `%APPDATA%\Bracket\languages`, `languages/` next to the `.exe`, then built-in. In portable mode only the folder next to the `.exe` counts.
 
 ```text
-languages/<id>/language.toml          format_version, name, extensions, comments, indentation, pairs
-languages/<id>/syntax.sublime-syntax  (or .tmLanguage)
-languages/<id>/symbols.toml           optional: regex symbol rules (name, pattern, kind)
+languages/<id>/language.toml          format_version, name, extensions, badge, comments, indentation, pairs
+languages/<id>/syntax.sublime-syntax  optional; or `scope` in language.toml to use an included grammar
+languages/<id>/symbols.toml           optional (Phase 2): regex symbol rules (name, pattern, kind)
 ```
 
-`format_version` lets the editor reject an incompatible package with a clear message. `.xsig`, `.xml`, `.xsd`, `.config` and `.csproj` map to XML. Origin and license of every grammar go in `THIRD_PARTY.en.md`.
+`format_version` lets the editor reject an incompatible package with a clear message. Grammars are `.sublime-syntax` version 1: syntect does not load `.tmLanguage` files or Sublime Text 4 grammars with `extends`. `.xsig`, `.xml`, `.xsd`, `.config` and `.csproj` map to XML. Origin and license of every grammar go in `THIRD_PARTY.en.md`.
 
 ## Versioning and releases
 

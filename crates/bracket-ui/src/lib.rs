@@ -40,6 +40,8 @@ pub struct Launch {
     /// Where eframe keeps the window position and size. `None` while measuring, so every
     /// measurement starts with the default window.
     pub window_file: Option<PathBuf>,
+    /// Language packages found at startup.
+    pub languages: bracket_syntax::Packages,
 }
 
 /// The session left by the previous run.

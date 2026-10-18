@@ -126,6 +126,7 @@ Conclusions:
 | Step 11: single instance and command line | 6,055,424 B | +61 KB | Arguments, help in the catalogs, `rfd` message, lock and inbox. Interleaved startup against step 10 (15 rounds): 133.1 versus 131.0 ms (noise). Handing files to the open instance: the second one exits in 110–230 ms |
 | Step 11: lazy session loading | — | — | Session with one small active tab and two inactive ones of 100 and 52 MB, private memory after 3 s: 226 MB before, 47 MB with lazy loading (221 MB after activating the 100 MB one) |
 | Step 12: highlighting with syntect | 8,043,520 B | +1,988 KB | Grammar bundle (344 KB compressed) and code: pure Rust regex engine (`fancy-regex`, `regex-automata` with Unicode tables), syntect parser, decompression and deserialisation. Interleaved startup against step 11 (15 rounds): 122.1 versus 125.1 ms (the grammars load on the highlighter thread) |
+| Step 13: language packages | 8,300,544 B | +257 KB | syntect's YAML reader (`yaml-load`) for package grammars, and the loader. Interleaved startup against step 12 (15 rounds, busy machine): 165.5 versus 164.3 ms |
 
 Step 5, interleaved startup against step 4 (15 rounds): 144.9 ms versus 148.6 ms, within the noise. That day absolute medians were around 145–149 ms with a busy machine: the margin against 150 ms is minimal.
 

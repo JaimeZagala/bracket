@@ -12,8 +12,11 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::OnceLock;
 
+use std::path::Path;
+
 use bracket_session::ConfigWarning;
 pub use bracket_session::Language;
+use bracket_syntax::PackageWarning;
 
 const SPANISH_CATALOG: &str = include_str!("../locales/es.toml");
 const ENGLISH_CATALOG: &str = include_str!("../locales/en.toml");
@@ -24,6 +27,14 @@ pub const LANGUAGES: [Language; 2] = [Language::Spanish, Language::English];
 /// The texts of one language.
 pub struct Texts {
     strings: HashMap<String, String>,
+}
+
+/// The package a file belongs to: the name of the folder that contains it.
+fn package_of(path: &Path) -> String {
+    path.parent()
+        .and_then(Path::file_name)
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 /// Texts for `language`. Each catalog is parsed once and kept for the rest of the run.
@@ -267,6 +278,39 @@ impl Texts {
         }
     }
 
+    /// Translated text for a language package problem. The package is named by its folder.
+    pub fn package_warning(&self, warning: &PackageWarning) -> String {
+        match warning {
+            PackageWarning::Unreadable { path, error } => self.fill(
+                "package_unreadable",
+                &[("package", &package_of(path)), ("error", error)],
+            ),
+            PackageWarning::Syntax { path, error } => self.fill(
+                "package_syntax",
+                &[("package", &package_of(path)), ("error", error)],
+            ),
+            PackageWarning::MissingKey { path, key } => self.fill(
+                "package_missing_key",
+                &[("package", &package_of(path)), ("key", key)],
+            ),
+            PackageWarning::InvalidValue { path, key } => self.fill(
+                "package_invalid_value",
+                &[("package", &package_of(path)), ("key", key)],
+            ),
+            PackageWarning::UnsupportedVersion { path, found } => self.fill(
+                "package_version",
+                &[("package", &package_of(path)), ("found", found)],
+            ),
+            PackageWarning::GrammarWithoutScope { path } => {
+                self.fill("package_grammar_scope", &[("package", &package_of(path))])
+            }
+            PackageWarning::Grammar { path, error } => self.fill(
+                "package_grammar",
+                &[("package", &package_of(path)), ("error", error)],
+            ),
+        }
+    }
+
     /// "(and N more warnings)", with the singular form for one.
     pub fn more_warnings(&self, count: usize) -> String {
         match count {
@@ -280,6 +324,7 @@ impl Texts {
 mod tests {
     use super::*;
     use std::collections::BTreeSet;
+    use std::path::PathBuf;
 
     /// `{name}` placeholders in a text.
     fn placeholders(text: &str) -> BTreeSet<String> {
@@ -328,6 +373,22 @@ mod tests {
     #[test]
     fn every_method_finds_its_key() {
         let warning = ConfigWarning::UnknownKey { key: "k".into() };
+        let pw = |kind: usize| {
+            let path = PathBuf::from(r"x\language.toml");
+            let (error, key) = ("e".to_owned(), "k".to_owned());
+            match kind {
+                0 => PackageWarning::Unreadable { path, error },
+                1 => PackageWarning::Syntax { path, error },
+                2 => PackageWarning::MissingKey { path, key },
+                3 => PackageWarning::InvalidValue { path, key },
+                4 => PackageWarning::UnsupportedVersion {
+                    path,
+                    found: "2".into(),
+                },
+                5 => PackageWarning::GrammarWithoutScope { path },
+                _ => PackageWarning::Grammar { path, error },
+            }
+        };
         for language in LANGUAGES {
             let t = texts(language);
             let pairs = [
@@ -380,6 +441,13 @@ mod tests {
                 ("disk_dismiss", t.disk_dismiss().to_owned()),
                 ("disk_reloaded", t.disk_reloaded("a.txt")),
                 ("cli_help", t.cli_help("1.0.0")),
+                ("package_unreadable", t.package_warning(&pw(0))),
+                ("package_syntax", t.package_warning(&pw(1))),
+                ("package_missing_key", t.package_warning(&pw(2))),
+                ("package_invalid_value", t.package_warning(&pw(3))),
+                ("package_version", t.package_warning(&pw(4))),
+                ("package_grammar_scope", t.package_warning(&pw(5))),
+                ("package_grammar", t.package_warning(&pw(6))),
                 ("cli_unknown_option", t.cli_unknown_option("-x")),
             ];
             for (key, text) in pairs {
@@ -391,6 +459,18 @@ mod tests {
                 assert!(!text.contains('{'), "unfilled placeholder in `{text}`");
             }
         }
+    }
+
+    #[test]
+    fn package_warnings_name_the_package_folder() {
+        let warning = PackageWarning::MissingKey {
+            path: PathBuf::from(r"C:\Bracket\languages\python\language.toml"),
+            key: "name".into(),
+        };
+        assert_eq!(
+            texts(Language::English).package_warning(&warning),
+            "Language package “python”: “name” is missing in language.toml"
+        );
     }
 
     #[test]

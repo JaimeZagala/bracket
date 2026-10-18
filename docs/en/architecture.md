@@ -15,7 +15,7 @@ Status: Phase 0. This document describes the agreed structure; each section stat
 | `bracket-session` | TOML configuration, portable mode, recoverable session, recent files, file watching, command registry. | `bracket-core` | Phase 1: paths (portable mode or `%APPDATA%`), TOML configuration, recoverable session and file watching |
 | `bracket-update` | Release channel checks, download, checksum and signature verification, apply and rollback. | — | Empty |
 | `bracket-ui` | egui interface: editor view, tabs, project tree, palette, status bar. | `bracket-core`, `bracket-session`, `bracket-syntax` | Phase 1: tabs, File menu, status bar, system fonts, text catalogs |
-| `bracket-app` | `bracket.exe` binary: startup, single instance, arguments, Windows manifest, HKCU registration. | `bracket-ui`, `bracket-session`, `bracket-update` | Phase 0: startup and file argument. Phase 1: resolves paths and loads the configuration |
+| `bracket-app` | `bracket.exe` binary: startup, single instance, arguments, Windows manifest, HKCU registration. | `bracket-ui`, `bracket-session`, `bracket-syntax`, `bracket-update` | Phase 0: startup and file argument. Phase 1: resolves paths, loads the configuration and language packages, single instance and command line |
 
 ## Dependency rules
 
@@ -94,6 +94,13 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 - Engine (`highlight.rs`, no egui): it keeps the parser state every 128 lines. After an edit, the checkpoints above the first changed line remain right. If the number of lines did not change, the ones below are kept: when parsing reaches one with the same state (and below the last changed line), everything below is right again.
 - Each highlighted tab has its own thread (`HighlightWorker`). The UI asks for the visible lines plus a page above and below. The thread only serves the newest request, gives up a long one if another arrives (keeping the work done) and returns colour spans per line. Until the new result arrives, lines whose text did not change use the previous one.
 - The view builds one egui `LayoutJob` per line with those colours (egui caches the galleys).
+
+## Language packages (Phase 1)
+
+- `bracket-syntax` (`packages.rs`) reads `languages/<id>/language.toml` in the folders of `Paths::language_dirs` (priority: `%APPDATA%\Bracket\languages`, `languages` next to the exe; in portable mode only the latter). The first folder with an id wins; a package with a built-in language's id replaces it, and for extensions packages come before built-in languages.
+- The manifests are read in `main` before the window is created (they are few and small), so tabs have a language from the first frame. Of the grammar, only its top-level `scope:` is read.
+- External grammars are parsed on the highlighter thread the first time something is highlighted, together with the built-in ones (`into_builder` + `build`), so they can include or replace built-in grammars (for one scope, the last one added wins). An `include` of a grammar that does not exist stays as plain text. Errors are collected and the interface adds them to its warnings.
+- No package problem stops Bracket from starting: the package is skipped with a translated warning (`PackageWarning`).
 
 ## Changes on disk (Phase 1)
 

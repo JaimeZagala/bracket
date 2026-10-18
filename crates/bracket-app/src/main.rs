@@ -97,6 +97,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     });
     let window_file = probe.is_none().then(|| paths.window_file());
 
+    // A few small manifests: read now, so tabs know their language from the first frame.
+    // Their grammars are parsed later, on the highlighter thread.
+    let languages = bracket_syntax::packages::load(&paths.language_dirs);
+
     let launch = bracket_ui::Launch {
         files,
         requests_dir,
@@ -106,6 +110,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         replacer: Arc::new(WindowsReplacer),
         session,
         window_file,
+        languages,
     };
     bracket_ui::run(launch, probe)?;
     Ok(())

@@ -59,12 +59,12 @@ La estructura de crates está en [architecture.md](architecture.md).
 C#, Razor, CSS, T-SQL, JSON y XML van dentro del ejecutable. Una carpeta `languages/` opcional añade lenguajes o sustituye uno integrado. Orden de búsqueda: `%APPDATA%\Bracket\languages`, `languages/` junto al `.exe` y, por último, lo integrado. En modo portable solo cuenta la carpeta junto al `.exe`.
 
 ```text
-languages/<id>/language.toml          format_version, nombre, extensiones, comentarios, tabulación, pares
-languages/<id>/syntax.sublime-syntax  (o .tmLanguage)
-languages/<id>/symbols.toml           opcional: reglas regex de símbolos (nombre, patrón, tipo)
+languages/<id>/language.toml          format_version, nombre, extensiones, insignia, comentarios, tabulación, pares
+languages/<id>/syntax.sublime-syntax  opcional; o `scope` en language.toml para usar una gramática incluida
+languages/<id>/symbols.toml           opcional (Fase 2): reglas regex de símbolos (nombre, patrón, tipo)
 ```
 
-`format_version` permite rechazar con un mensaje claro un paquete incompatible. `.xsig`, `.xml`, `.xsd`, `.config` y `.csproj` se asocian a XML. Origen y licencia de cada gramática en `THIRD_PARTY.md`.
+`format_version` permite rechazar con un mensaje claro un paquete incompatible. Las gramáticas son `.sublime-syntax` versión 1: syntect no carga `.tmLanguage` ni las gramáticas de Sublime Text 4 con `extends`. `.xsig`, `.xml`, `.xsd`, `.config` y `.csproj` se asocian a XML. Origen y licencia de cada gramática en `THIRD_PARTY.md`.
 
 ## Versionado y publicación
 

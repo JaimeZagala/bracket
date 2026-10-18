@@ -15,7 +15,7 @@ Estado: Fase 0. Este documento describe la estructura acordada; cada sección in
 | `bracket-session` | Configuración TOML, modo portable, sesión recuperable, recientes, vigilancia de ficheros, registro de comandos. | `bracket-core` | Fase 1: rutas (modo portable o `%APPDATA%`), configuración TOML, sesión recuperable y vigilancia de ficheros |
 | `bracket-update` | Comprobación de versiones por canal, descarga, verificación de suma y firma, aplicación y vuelta atrás. | — | Vacía |
 | `bracket-ui` | Interfaz egui: vista del editor, pestañas, árbol de proyecto, paleta, barra de estado. | `bracket-core`, `bracket-session`, `bracket-syntax` | Fase 1: pestañas, menú Archivo, barra de estado, fuentes del sistema, catálogos de textos |
-| `bracket-app` | Binario `bracket.exe`: arranque, instancia única, argumentos, manifiesto de Windows, registro en HKCU. | `bracket-ui`, `bracket-session`, `bracket-update` | Fase 0: arranque y fichero por argumento. Fase 1: resuelve rutas y carga la configuración |
+| `bracket-app` | Binario `bracket.exe`: arranque, instancia única, argumentos, manifiesto de Windows, registro en HKCU. | `bracket-ui`, `bracket-session`, `bracket-syntax`, `bracket-update` | Fase 0: arranque y fichero por argumento. Fase 1: resuelve rutas, carga la configuración y los paquetes de lenguaje, instancia única y línea de comandos |
 
 ## Reglas de dependencias
 
@@ -94,6 +94,13 @@ En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync
 - Motor (`highlight.rs`, sin egui): guarda el estado del analizador cada 128 líneas. Tras una edición, los puntos de control por encima de la primera línea cambiada siguen valiendo. Si el número de líneas no cambió, los de debajo se conservan: cuando el análisis llega a uno con el mismo estado (y por debajo de la última línea cambiada), todo lo de debajo vuelve a valer.
 - Cada pestaña resaltada tiene su hilo (`HighlightWorker`). La interfaz pide las líneas visibles más una página por arriba y otra por abajo. El hilo atiende solo la petición más reciente, abandona una larga si llega otra (conservando el trabajo hecho) y devuelve tramos de color por línea. Mientras llega el resultado nuevo, las líneas cuyo texto no cambió usan el anterior.
 - La vista construye un `LayoutJob` de egui por línea con esos colores (egui guarda en caché las galeradas).
+
+## Paquetes de lenguaje (Fase 1)
+
+- `bracket-syntax` (`packages.rs`) lee `languages/<id>/language.toml` en las carpetas de `Paths::language_dirs` (prioridad: `%APPDATA%\Bracket\languages`, `languages` junto al exe; en portable solo esta). La primera carpeta con un id gana; un paquete con el id de un lenguaje integrado lo sustituye, y en las extensiones los paquetes van antes que los integrados.
+- Los manifiestos se leen en `main` antes de crear la ventana (son pocos y pequeños), así que las pestañas tienen lenguaje desde el primer fotograma. De la gramática solo se lee su `scope:` de primer nivel.
+- Las gramáticas externas se analizan en el hilo del resaltador la primera vez que se resalta algo, junto con las integradas (`into_builder` + `build`), así que pueden incluir o sustituir gramáticas integradas (para un scope gana la última añadida). Un `include` a una gramática que no existe se queda en texto sin color. Los errores se recogen y la interfaz los añade a sus avisos.
+- Ningún problema de un paquete impide arrancar: el paquete se ignora con un aviso traducido (`PackageWarning`).
 
 ## Cambios en disco (Fase 1)
 

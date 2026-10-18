@@ -62,6 +62,14 @@ disk_missing = "“{name}” is no longer on disk. Save it to create it again."
 disk_dismiss = "Got it"
 disk_reloaded = "“{name}” was reloaded because it changed on disk"
 
+package_unreadable = "Language package “{package}”: could not be read: {error}"
+package_syntax = "Language package “{package}”: syntax error in language.toml: {error}"
+package_missing_key = "Language package “{package}”: “{key}” is missing in language.toml"
+package_invalid_value = "Language package “{package}”: invalid value for “{key}”"
+package_version = "Language package “{package}”: format_version {found} is not supported (this Bracket supports 1)"
+package_grammar_scope = "Language package “{package}”: the grammar has no “scope”"
+package_grammar = "Language package “{package}”: the grammar is not valid: {error}"
+
 cli_help = """
 Bracket {version}: a lightweight code editor for Windows.
 

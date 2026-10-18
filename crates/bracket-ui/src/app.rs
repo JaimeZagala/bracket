@@ -18,8 +18,8 @@ use bracket_session::{
     Config, ConfigWarning, FileWatcher, Language, LoadedConfig, OpenRequest, SessionTab, config,
     requests,
 };
-use bracket_syntax::LanguageRegistry;
 use bracket_syntax::highlight::MAX_HIGHLIGHT_BYTES;
+use bracket_syntax::{LanguageRegistry, PackageWarning};
 use eframe::egui::{self, Id, Key, KeyboardShortcut, Modifiers, ViewportCommand};
 
 use crate::dialogs;
@@ -134,6 +134,9 @@ pub struct BracketApp {
     status: Option<String>,
     /// Configuration warnings, shown (translated) while there is no other status message.
     config_warnings: Vec<ConfigWarning>,
+    /// Problems with language packages; grammar problems are added once they are compiled.
+    package_warnings: Vec<PackageWarning>,
+    grammar_warnings_seen: bool,
     config_path: PathBuf,
     config_saving: Option<Receiver<Result<(), String>>>,
     pending: Option<PendingAction>,
@@ -188,7 +191,14 @@ impl BracketApp {
             replacer,
             session,
             window_file: _,
+            languages,
         } = launch;
+        let bracket_syntax::Packages {
+            languages: package_languages,
+            grammars,
+            warnings: package_warnings,
+        } = languages;
+        bracket_syntax::highlight::set_external_grammars(grammars);
         let LoadedConfig { config, warnings } = settings;
 
         // The font thread started at the beginning of main() and has normally finished by now.
@@ -225,7 +235,9 @@ impl BracketApp {
             tabs: Vec::new(),
             active: 0,
             next_tab_id: 0,
-            languages: LanguageRegistry::builtin(),
+            languages: LanguageRegistry::with_packages(package_languages),
+            package_warnings,
+            grammar_warnings_seen: false,
             reveal_active_tab: false,
             status: None,
             config_warnings: warnings,
@@ -688,6 +700,14 @@ impl BracketApp {
                         go_to(tab, position);
                     }
                     tab.refresh_language(&self.languages);
+                    if let Some(width) = tab
+                        .language
+                        .as_deref()
+                        .and_then(|id| self.languages.get(id))
+                        .and_then(|language| language.tab_width)
+                    {
+                        tab.doc.buffer.set_tab_width(width);
+                    }
                     self.status = None;
                     loaded_active |= index == self.active;
                 }
@@ -1014,7 +1034,17 @@ impl BracketApp {
                     ui.label(self.texts.read_only());
                 }
                 ui.separator();
-                let notice = warnings_summary(self.texts, &self.config_warnings).or_else(|| {
+                let warnings: Vec<String> = self
+                    .config_warnings
+                    .iter()
+                    .map(|w| self.texts.config_warning(w))
+                    .chain(
+                        self.package_warnings
+                            .iter()
+                            .map(|w| self.texts.package_warning(w)),
+                    )
+                    .collect();
+                let notice = warnings_summary(self.texts, &warnings).or_else(|| {
                     let (family, used) = self.missing_font.as_ref()?;
                     Some(self.texts.font_missing(family, used))
                 });
@@ -1253,6 +1283,12 @@ impl eframe::App for BracketApp {
         self.poll_fallbacks(ctx);
         self.poll_inbox(ctx);
         self.follow_disk(ctx);
+        if !self.grammar_warnings_seen
+            && let Some(warnings) = bracket_syntax::highlight::external_grammar_warnings()
+        {
+            self.package_warnings.extend_from_slice(warnings);
+            self.grammar_warnings_seen = true;
+        }
         self.handle_window_events(ctx);
         self.keep_session(ctx);
     }
@@ -1439,11 +1475,11 @@ fn save_error_text(texts: &Texts, err: &SaveError) -> String {
     }
 }
 
-/// The first configuration warning, translated, plus how many more there are.
-fn warnings_summary(texts: &Texts, warnings: &[ConfigWarning]) -> Option<String> {
-    let first = texts.config_warning(warnings.first()?);
+/// The first warning plus how many more there are.
+fn warnings_summary(texts: &Texts, warnings: &[String]) -> Option<String> {
+    let first = warnings.first()?;
     Some(match warnings.len() - 1 {
-        0 => first,
+        0 => first.clone(),
         more => format!("{first} {}", texts.more_warnings(more)),
     })
 }

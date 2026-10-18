@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 bracket-core.workspace = true
 bracket-session.workspace = true
+bracket-syntax.workspace = true
 bracket-ui.workspace = true
 bracket-update.workspace = true
 winreg.workspace = true

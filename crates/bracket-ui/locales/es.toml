@@ -62,6 +62,14 @@ disk_missing = "«{name}» ya no está en el disco. Guárdalo para volver a crea
 disk_dismiss = "Entendido"
 disk_reloaded = "«{name}» se ha recargado porque cambió en disco"
 
+package_unreadable = "Paquete de lenguaje «{package}»: no se pudo leer: {error}"
+package_syntax = "Paquete de lenguaje «{package}»: error de sintaxis en language.toml: {error}"
+package_missing_key = "Paquete de lenguaje «{package}»: falta «{key}» en language.toml"
+package_invalid_value = "Paquete de lenguaje «{package}»: valor no válido en «{key}»"
+package_version = "Paquete de lenguaje «{package}»: format_version {found} no compatible (esta versión de Bracket admite 1)"
+package_grammar_scope = "Paquete de lenguaje «{package}»: la gramática no indica su «scope»"
+package_grammar = "Paquete de lenguaje «{package}»: la gramática no es válida: {error}"
+
 cli_help = """
 Bracket {version}: editor de código ligero para Windows.
 

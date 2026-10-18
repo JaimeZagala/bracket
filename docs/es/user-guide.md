@@ -52,6 +52,33 @@ Los ficheros de C#, Razor (`.razor`, `.cshtml`), CSS, T-SQL (`.sql`), JSON y XML
 - En Razor se colorean las directivas (`@page`, `@using`...), los comentarios `@* *@`, las expresiones (`@Model.Nombre`, `@(a + b)`) y el C# de `@{ }` y `@code { }`. El HTML dentro de los bloques de código todavía no se reconoce.
 - Por ahora el tema de colores es fijo (claro); los temas llegan en un paso posterior.
 
+## Lenguajes externos
+
+Se pueden añadir lenguajes, o sustituir uno de los integrados, con una carpeta por lenguaje dentro de `languages`:
+
+- **Instalado:** `%APPDATA%\Bracket\languages\` y, con menos prioridad, `languages\` junto a `bracket.exe`.
+- **Portable:** solo `languages\` junto a `bracket.exe`.
+
+El nombre de la carpeta es el identificador del lenguaje; si coincide con uno integrado (`csharp`, `razor`, `css`, `tsql`, `json`, `xml`), lo sustituye. Dentro va `language.toml`:
+
+```toml
+format_version = 1             # obligatorio: versión del formato
+name = "Python"                # obligatorio
+extensions = ["py", "pyw"]     # obligatorio
+scope = "source.python"        # gramática que ya incluye Bracket (opcional)
+tab_width = 4                  # tabulación para este lenguaje (opcional)
+line_comment = "#"             # opcional, para funciones futuras
+block_comment = ['"""', '"""'] # opcional, para funciones futuras
+pairs = [["(", ")"], ["[", "]"]] # opcional, para funciones futuras
+
+[badge]                        # opcional: por defecto, las dos primeras letras en gris
+text = "Py"                    # de 1 a 3 caracteres
+color = "#3776AB"
+```
+
+- **Gramática:** un `syntax.sublime-syntax` en la misma carpeta (formato de Sublime Text, versión 1; las gramáticas que usan `extends` de Sublime Text 4 y los `.tmLanguage` no son compatibles). Si no hay fichero, `scope` permite usar cualquiera de las gramáticas incluidas, que son las del paquete de syntect: Python, Rust, Go, Java, JavaScript, HTML, Markdown, YAML, Shell, Batch... (unas 75). Sin gramática, el lenguaje se reconoce y lleva insignia, pero sin colores.
+- Si un paquete tiene un problema (falta una clave, `format_version` de otra versión, gramática con errores), se ignora y la barra de estado lo indica. Los cambios en los paquetes se aplican al reiniciar Bracket.
+
 ## Cambios en disco
 
 Bracket vigila los ficheros abiertos. Si otro programa los cambia mientras están abiertos:

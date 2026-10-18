@@ -52,6 +52,33 @@ C#, Razor (`.razor`, `.cshtml`), CSS, T-SQL (`.sql`), JSON and XML files (also `
 - In Razor, directives (`@page`, `@using`...), `@* *@` comments, expressions (`@Model.Name`, `@(a + b)`) and the C# in `@{ }` and `@code { }` are coloured. HTML inside code blocks is not recognised yet.
 - The colour theme is fixed (light) for now; themes come in a later step.
 
+## External languages
+
+Languages can be added, or a built-in one replaced, with one folder per language inside `languages`:
+
+- **Installed:** `%APPDATA%\Bracket\languages\` and, with lower priority, `languages\` next to `bracket.exe`.
+- **Portable:** only `languages\` next to `bracket.exe`.
+
+The folder name is the language id; if it matches a built-in one (`csharp`, `razor`, `css`, `tsql`, `json`, `xml`), it replaces it. Inside goes `language.toml`:
+
+```toml
+format_version = 1             # required: format version
+name = "Python"                # required
+extensions = ["py", "pyw"]     # required
+scope = "source.python"        # a grammar Bracket already includes (optional)
+tab_width = 4                  # tab width for this language (optional)
+line_comment = "#"             # optional, for future features
+block_comment = ['"""', '"""'] # optional, for future features
+pairs = [["(", ")"], ["[", "]"]] # optional, for future features
+
+[badge]                        # optional: by default the first two letters on grey
+text = "Py"                    # 1 to 3 characters
+color = "#3776AB"
+```
+
+- **Grammar:** a `syntax.sublime-syntax` in the same folder (Sublime Text format, version 1; grammars using Sublime Text 4's `extends` and `.tmLanguage` files are not supported). Without a file, `scope` can use any of the included grammars, which are syntect's bundle: Python, Rust, Go, Java, JavaScript, HTML, Markdown, YAML, Shell, Batch... (about 75). Without a grammar, the language is recognised and has a badge, but no colours.
+- If a package has a problem (a missing key, a `format_version` from another version, a grammar with errors), it is skipped and the status bar says so. Changes to packages apply when Bracket restarts.
+
 ## Changes on disk
 
 Bracket watches open files. If another program changes them while they are open:
