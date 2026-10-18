@@ -30,6 +30,9 @@ pub struct FileIndex {
     pub root: PathBuf,
     /// Sorted, with `\\` separators.
     pub files: Vec<String>,
+    /// The project's folders (not the root), relative to it. Changes in folders that are not
+    /// here (ignored ones, like `target\`) are left out of the index.
+    pub dirs: HashSet<String>,
 }
 
 /// A folder or file in a listing.
@@ -93,27 +96,31 @@ pub fn walk(
     options: &WalkOptions,
     cancel: &CancelToken,
 ) -> Result<Result<FileIndex, Cancelled>, BadPattern> {
-    let Some(mut files) = files_under(root, root, options, cancel)? else {
+    let Some((mut files, dirs)) = entries_under(root, root, options, cancel)? else {
         return Ok(Err(Cancelled));
     };
     files.sort_unstable_by_key(|f| f.to_lowercase());
     Ok(Ok(FileIndex {
         root: root.to_path_buf(),
         files,
+        dirs: dirs.into_iter().collect(),
     }))
 }
 
-/// The files under `start` (a folder of the project at `root`), relative to `root`, unsorted.
-/// `None` if cancelled.
-fn files_under(
+/// Files and folders found by a walk, relative to the project root.
+type Walked = (Vec<String>, Vec<String>);
+
+/// The files and folders under `start` (a folder of the project at `root`, included in the
+/// folders unless it is the root), relative to `root`, unsorted. `None` if cancelled.
+fn entries_under(
     root: &Path,
     start: &Path,
     options: &WalkOptions,
     cancel: &CancelToken,
-) -> Result<Option<Vec<String>>, BadPattern> {
-    let files = Mutex::new(Vec::new());
+) -> Result<Option<Walked>, BadPattern> {
+    let found = Mutex::new((Vec::new(), Vec::new()));
     builder(root, start, options)?.build_parallel().run(|| {
-        let files = &files;
+        let found = &found;
         Box::new(move |entry| {
             if cancel.is_cancelled() {
                 return WalkState::Quit;
@@ -121,14 +128,20 @@ fn files_under(
             let Ok(entry) = entry else {
                 return WalkState::Continue; // unreadable: skipped
             };
-            if entry.file_type().is_some_and(|t| t.is_file())
-                && let Ok(relative) = entry.path().strip_prefix(root)
+            let Some(kind) = entry.file_type() else {
+                return WalkState::Continue;
+            };
+            if let Ok(relative) = entry.path().strip_prefix(root)
+                && !relative.as_os_str().is_empty()
+                && (kind.is_file() || kind.is_dir())
             {
                 let relative = relative.to_string_lossy().into_owned();
-                files
-                    .lock()
-                    .expect("no panics while holding it")
-                    .push(relative);
+                let mut found = found.lock().expect("no panics while holding it");
+                if kind.is_file() {
+                    found.0.push(relative);
+                } else {
+                    found.1.push(relative);
+                }
             }
             WalkState::Continue
         })
@@ -137,7 +150,7 @@ fn files_under(
         return Ok(None);
     }
     Ok(Some(
-        files.into_inner().expect("no panics while holding it"),
+        found.into_inner().expect("no panics while holding it"),
     ))
 }
 
@@ -146,13 +159,18 @@ impl FileIndex {
     /// folder created, deleted or renamed there): the files directly in it are compared with
     /// a new listing, subfolders that appeared are walked and the files of subfolders that
     /// disappeared are removed. Subfolders that are still there are left alone; changes inside
-    /// them come with their own folder.
+    /// them come with their own folder. A folder the index does not know (an ignored one, or
+    /// one outside the project) is left alone: a new folder is found from its parent.
     pub fn resync_dir(&mut self, dir: &Path, options: &WalkOptions) -> Result<(), BadPattern> {
         let Ok(relative) = dir.strip_prefix(&self.root) else {
             return Ok(()); // outside the project
         };
-        let prefix = match relative.to_string_lossy() {
-            r if r.is_empty() => String::new(),
+        let relative = relative.to_string_lossy().into_owned();
+        if !relative.is_empty() && !self.dirs.contains(&relative) {
+            return Ok(());
+        }
+        let prefix = match relative.as_str() {
+            "" => String::new(),
             r => format!("{r}\\"),
         };
         let listing = list_dir(&self.root, dir, options)?;
@@ -173,7 +191,6 @@ impl FileIndex {
         let end =
             start + self.files[start..].partition_point(|f| f.to_lowercase().starts_with(&lower));
         let mut known_files = HashSet::new();
-        let mut known_folders = HashSet::new();
         let mut block: Vec<String> = Vec::with_capacity(end - start);
         for path in &self.files[start..end] {
             // The same folder written with different case: left as it is.
@@ -186,10 +203,7 @@ impl FileIndex {
                     known_files.insert(rest.to_owned());
                     files.contains(rest)
                 }
-                Some((folder, _)) => {
-                    known_folders.insert(folder.to_owned());
-                    folders.contains(folder)
-                }
+                Some((folder, _)) => folders.contains(folder),
             };
             if keep {
                 block.push(path.clone());
@@ -198,10 +212,31 @@ impl FileIndex {
         for name in files.iter().filter(|n| !known_files.contains(**n)) {
             block.push(format!("{prefix}{name}"));
         }
+        // Subfolders that are gone take their folders with them; new ones are walked.
+        let gone: Vec<String> = self
+            .dirs
+            .iter()
+            .filter_map(|d| d.strip_prefix(prefix.as_str()))
+            .filter(|rest| !rest.contains('\\') && !folders.contains(rest))
+            .map(|rest| format!("{prefix}{rest}"))
+            .collect();
+        for folder in gone {
+            let inside = format!("{folder}\\");
+            self.dirs
+                .retain(|d| *d != folder && !d.starts_with(&inside));
+        }
         let cancel = CancelToken::new();
-        for name in folders.iter().filter(|n| !known_folders.contains(**n)) {
-            let new = files_under(&self.root, &dir.join(name), options, &cancel)?;
-            block.extend(new.unwrap_or_default());
+        for name in folders {
+            let folder = format!("{prefix}{name}");
+            if self.dirs.contains(&folder) {
+                continue;
+            }
+            if let Some((files, dirs)) =
+                entries_under(&self.root, &dir.join(name), options, &cancel)?
+            {
+                block.extend(files);
+                self.dirs.extend(dirs);
+            }
         }
         block.sort_unstable_by_key(|f| f.to_lowercase());
         self.files.splice(start..end, block);
@@ -341,6 +376,17 @@ mod tests {
         index.resync_dir(&root, &options).unwrap();
         let fresh = walk(&root, &options, &CancelToken::new()).unwrap().unwrap();
         assert_eq!(index.files, fresh.files);
+
+        assert_eq!(index.dirs, fresh.dirs);
+        assert!(index.dirs.contains("Documentation"));
+        assert!(!index.dirs.contains("docs"));
+
+        // Changes inside an ignored folder stay out of the index.
+        fs::write(root.join(r"bin\Debug\new.dll"), "x").unwrap();
+        index
+            .resync_dir(&root.join(r"bin\Debug"), &options)
+            .unwrap();
+        assert!(!index.files.iter().any(|f| f.starts_with("bin")));
 
         // A folder that is gone entirely, and one outside the project.
         fs::remove_dir_all(root.join(r"src\Models")).unwrap();

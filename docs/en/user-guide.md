@@ -28,7 +28,17 @@ With a project open, the **project panel** on the left shows the folder tree: fo
 - The name is typed in the tree itself: Enter or a click elsewhere confirms it and Esc cancels it. When renaming, the name is selected without its extension, as in File Explorer. A name Windows does not allow (with `<>:"/\|?*`, ending with a dot or a space, or reserved like `CON` or `NUL`) is reported in the status bar. If something with that name already exists, it is not replaced.
 - **Delete** moves the entry to the Recycle Bin, after confirming, so it can be recovered. A new file opens in a tab; tabs of a renamed file or folder move to the new name.
 
-Ctrl+P and project search come in the next steps of Phase 2.
+### Go to file (Ctrl+P)
+
+**Ctrl+P** (or **File → Go to file…**) opens a box at the top to go to a file by typing part of its path:
+
+- A few letters in order are enough, they need not be together: `prgcs` finds `src\Program.cs`. Letters at the start of a word, letters in a row and letters in the file name weigh more. Folders can be included with `\` or `/` (`models/user`); spaces do not count.
+- The matching letters are highlighted. ↑ and ↓ choose (also PgUp and PgDn), Enter opens and Esc closes.
+- With no text it shows the recently opened files.
+- `Program.cs:42` opens the file at line 42 and `Program.cs:42:7` also at column 7. `:120` goes to line 120 of the active document.
+- It searches the project's files, with the same exclusions as the tree. The index is prepared when the folder opens (a tenth of a second with 50,000 files) and updates by itself. Without a project, it searches the recent files.
+
+Text search in the project comes in the next steps of Phase 2.
 
 ## Tabs
 

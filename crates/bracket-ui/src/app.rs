@@ -32,6 +32,7 @@ use crate::file_ops::{FileOp, FileOps, OpError};
 use crate::fonts::{self, Fallback, FontSource, LoadedFallback};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
+use crate::quick_open::{IndexEvent, IndexWorker, PaletteAction, QuickOpen};
 use crate::session::{self, SessionKeeper};
 use crate::tabs::{self, Loaded, Loading, Tab, TabAction, TabHighlight};
 use crate::tree::{self, ProjectTree, TreeAction};
@@ -143,11 +144,12 @@ enum Command {
     PreviousTab,
     ToggleSidebar,
     FocusTree,
+    QuickOpen,
     Exit,
 }
 
 impl Command {
-    const SHORTCUTS: [(Self, KeyboardShortcut); 11] = [
+    const SHORTCUTS: [(Self, KeyboardShortcut); 12] = [
         // Shortcuts with Shift go first: Ctrl+S would also match Ctrl+Shift+S.
         (
             Self::FocusTree,
@@ -190,6 +192,10 @@ impl Command {
             Self::ToggleSidebar,
             KeyboardShortcut::new(Modifiers::COMMAND, Key::B),
         ),
+        (
+            Self::QuickOpen,
+            KeyboardShortcut::new(Modifiers::COMMAND, Key::P),
+        ),
     ];
 
     /// The first shortcut bound to the command, as shown in menus.
@@ -210,6 +216,11 @@ pub struct BracketApp {
     tree: Option<ProjectTree>,
     /// Reports what is created, deleted or renamed in the project folder.
     project_watch: Option<ProjectWatch>,
+    /// The project's file index, on its own thread, and how many files it holds once built.
+    index: Option<IndexWorker>,
+    indexed: Option<usize>,
+    /// The Ctrl+P palette, while it is open.
+    quick_open: Option<QuickOpen>,
     /// Creating, renaming and deleting from the tree, on worker threads.
     file_ops: FileOps,
     /// An entry waiting for the user to confirm it goes to the Recycle Bin.
@@ -348,6 +359,9 @@ impl BracketApp {
             project: None,
             tree: None,
             project_watch: None,
+            index: None,
+            indexed: None,
+            quick_open: None,
             file_ops: FileOps::new(),
             pending_trash: None,
             sidebar: Sidebar::default(),
@@ -1073,6 +1087,15 @@ impl BracketApp {
                     return;
                 }
             }
+            Command::QuickOpen => {
+                let recent = self
+                    .recent
+                    .as_ref()
+                    .map(|r| r.list.files.clone())
+                    .unwrap_or_default();
+                self.quick_open = Some(QuickOpen::new(recent));
+                return;
+            }
             // Closing goes through the unsaved-changes check in handle_window_events.
             Command::Exit => ctx.send_viewport_cmd(ViewportCommand::Close),
         }
@@ -1082,13 +1105,18 @@ impl BracketApp {
     /// Opens `folder` as the project, or closes the project with `None`. Open tabs stay.
     fn set_project(&mut self, ctx: &egui::Context, folder: Option<PathBuf>) {
         let folder = folder.map(|f| std::path::absolute(&f).unwrap_or(f));
+        let options = WalkOptions {
+            exclude: self.config.project_exclude.clone(),
+        };
         self.tree = folder.as_ref().map(|root| {
-            let options = WalkOptions {
-                exclude: self.config.project_exclude.clone(),
-            };
             let ctx = ctx.clone();
-            ProjectTree::new(root.clone(), options, move || ctx.request_repaint())
+            ProjectTree::new(root.clone(), options.clone(), move || ctx.request_repaint())
         });
+        self.index = folder.as_ref().map(|root| {
+            let ctx = ctx.clone();
+            IndexWorker::start(root.clone(), options.clone(), move || ctx.request_repaint())
+        });
+        self.indexed = None;
         self.project_watch = folder
             .as_ref()
             .and_then(|root| ProjectWatch::start(ctx, root));
@@ -1153,6 +1181,7 @@ impl BracketApp {
         let mut items = vec![
             (Command::New, self.texts.menu_new()),
             (Command::Open, self.texts.menu_open()),
+            (Command::QuickOpen, self.texts.menu_quick_open()),
             (Command::OpenFolder, self.texts.menu_open_folder()),
             (Command::Save, self.texts.menu_save()),
             (Command::SaveAs, self.texts.menu_save_as()),
@@ -1672,6 +1701,43 @@ impl BracketApp {
         self.finish_pending(ctx, action);
     }
 
+    /// Draws the Ctrl+P palette, if open, and carries out what is picked in it.
+    fn quick_open_palette(&mut self, ctx: &egui::Context) {
+        let Some(palette) = &mut self.quick_open else {
+            return;
+        };
+        let action = palette.show(
+            ctx,
+            self.project.as_deref(),
+            self.index.as_ref(),
+            self.indexed,
+            &self.languages,
+            self.texts,
+        );
+        let Some(action) = action else { return };
+        self.quick_open = None;
+        match action {
+            PaletteAction::Open { path, line } => {
+                self.open_request(
+                    ctx,
+                    OpenRequest {
+                        path,
+                        line: line.map(|(line, _)| line),
+                        column: line.and_then(|(_, column)| column),
+                    },
+                );
+            }
+            PaletteAction::GoToLine((line, column)) => {
+                let tab = &mut self.tabs[self.active];
+                if tab.loading.is_none() {
+                    go_to(tab, (line, column.unwrap_or(1)));
+                }
+            }
+            PaletteAction::Close => {}
+        }
+        self.focus_editor(ctx);
+    }
+
     /// Asks before moving an entry of the tree to the Recycle Bin.
     fn trash_dialog(&mut self, ctx: &egui::Context) {
         let Some(path) = &self.pending_trash else {
@@ -1850,9 +1916,26 @@ impl eframe::App for BracketApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.minimized = ctx.input(|i| i.viewport().minimized.unwrap_or(false));
         self.follow_theme(ctx);
-        if let (Some(watch), Some(tree)) = (&self.project_watch, &mut self.tree) {
+        if let Some(watch) = &self.project_watch {
             while let Ok(changes) = watch.changes.try_recv() {
-                tree.apply_changes(&changes);
+                if let Some(tree) = &mut self.tree {
+                    tree.apply_changes(&changes);
+                }
+                if let Some(index) = &self.index {
+                    index.changes(changes);
+                }
+            }
+        }
+        if let Some(index) = &self.index {
+            for event in index.events() {
+                match event {
+                    IndexEvent::Ready(files) => self.indexed = Some(files),
+                    IndexEvent::Results { generation, found } => {
+                        if let Some(palette) = &mut self.quick_open {
+                            palette.results(generation, found);
+                        }
+                    }
+                }
             }
         }
         self.finish_file_ops(ctx);
@@ -1971,6 +2054,7 @@ impl eframe::App for BracketApp {
         if let Some(c) = missing_glyph {
             self.request_fallback(&ctx, c);
         }
+        self.quick_open_palette(&ctx);
         self.unsaved_dialog(&ctx, frame);
         self.trash_dialog(&ctx);
         self.update_title(&ctx);

@@ -209,3 +209,21 @@ El árbol solo pinta las filas visibles (`ScrollArea::show_rows`) y reconstruye 
 |---|---|---|---|
 | Tamaño del ejecutable | 8.837.632 B | 9.058.816 B | +216 KB: `trash` (con las interfaces COM de la crate `windows`) y las acciones |
 | Arranque (`compare-startup.ps1`, 15 rondas intercaladas, mediana) | 117,1 ms | 121,8 ms | Ruido (±8 ms entre variantes idénticas) |
+
+## Fase 2, paso 9 — Ctrl+P (2026-10-19, equipo A)
+
+`cargo bench -p bracket-index --bench fuzzy`: una consulta sobre los 50.000 ficheros de `target/project-50k`, 200 resultados con posiciones. Presupuesto: 50 ms por pulsación.
+
+| Consulta | Un hilo | Hasta 8 hilos |
+|---|---|---|
+| `f` (casi todo coincide) | 20,8 ms | 6,2 ms |
+| `file` | 24,6 ms | 6,8 ms |
+| `fl12cs` | 2,1 ms | 0,90 ms |
+| `src07/module03/file12` | 1,95 ms | 0,73 ms |
+| `zzz` (nada coincide) | 1,88 ms | 0,72 ms |
+
+| Medida | Paso 8 | Paso 9 | Cambio |
+|---|---|---|---|
+| Tamaño del ejecutable | 9.058.816 B | 9.251.328 B | +188 KB: el recorrido en paralelo de `ignore` (ya no solo el listado de una carpeta), el emparejador y la paleta |
+| Arranque (15 rondas intercaladas, mediana) | 118,9 ms | 122,6 ms | Ruido |
+| Bytes privados a los 6 s con `target/project-50k` abierto | 47,1 MB | 54,3 MB | +7,2 MB: el índice de 50.000 rutas |

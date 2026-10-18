@@ -28,7 +28,17 @@ Con un proyecto abierto, el **panel del proyecto** muestra a la izquierda el ár
 - El nombre se escribe en el propio árbol: Intro o un clic fuera lo confirma y Esc lo cancela. Al cambiar el nombre queda seleccionado sin la extensión, como en el Explorador. Un nombre no válido para Windows (con `<>:"/\|?*`, terminado en punto o espacio, o reservado como `CON` o `NUL`) se avisa en la barra de estado. Si ya existe algo con ese nombre, no se sustituye.
 - **Eliminar** mueve la entrada a la Papelera de reciclaje, después de confirmar, así que se puede recuperar. Un fichero nuevo se abre en una pestaña; las pestañas de un fichero o una carpeta renombrados pasan al nuevo nombre.
 
-Ctrl+P y la búsqueda en el proyecto llegan en los próximos pasos de la Fase 2.
+### Ir a fichero (Ctrl+P)
+
+**Ctrl+P** (o **Archivo → Ir a fichero…**) abre un cuadro arriba para ir a un fichero escribiendo parte de su ruta:
+
+- Basta con escribir algunas letras en orden, sin que vayan juntas: `prgcs` encuentra `src\Program.cs`. Pesan más las letras al principio de una palabra, las seguidas y las del nombre del fichero. Se pueden incluir carpetas con `\` o `/` (`models/user`); los espacios no cuentan.
+- Las letras que coinciden se resaltan. ↑ y ↓ eligen (también RePág y AvPág), Intro abre y Esc cierra.
+- Sin texto muestra los ficheros abiertos recientemente.
+- `Program.cs:42` abre el fichero en la línea 42 y `Program.cs:42:7`, también en la columna 7. `:120` va a la línea 120 del documento activo.
+- Busca en los ficheros del proyecto, con las mismas exclusiones que el árbol. El índice se prepara al abrir la carpeta (con 50.000 ficheros, una décima de segundo) y se actualiza solo. Sin proyecto, busca entre los recientes.
+
+La búsqueda de texto en el proyecto llega en los próximos pasos de la Fase 2.
 
 ## Pestañas
 

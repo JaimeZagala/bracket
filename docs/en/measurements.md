@@ -209,3 +209,21 @@ The tree paints only the visible rows (`ScrollArea::show_rows`) and rebuilds the
 |---|---|---|---|
 | Executable size | 8,837,632 B | 9,058,816 B | +216 KB: `trash` (with the `windows` crate's COM interfaces) and the actions |
 | Startup (`compare-startup.ps1`, 15 interleaved rounds, median) | 117.1 ms | 121.8 ms | Noise (±8 ms between identical variants) |
+
+## Phase 2, step 9 — Ctrl+P (2026-10-19, machine A)
+
+`cargo bench -p bracket-index --bench fuzzy`: one query over the 50,000 files of `target/project-50k`, 200 results with positions. Budget: 50 ms per keystroke.
+
+| Query | One thread | Up to 8 threads |
+|---|---|---|
+| `f` (almost everything matches) | 20.8 ms | 6.2 ms |
+| `file` | 24.6 ms | 6.8 ms |
+| `fl12cs` | 2.1 ms | 0.90 ms |
+| `src07/module03/file12` | 1.95 ms | 0.73 ms |
+| `zzz` (nothing matches) | 1.88 ms | 0.72 ms |
+
+| Measure | Step 8 | Step 9 | Change |
+|---|---|---|---|
+| Executable size | 9,058,816 B | 9,251,328 B | +188 KB: `ignore`'s parallel walk (no longer only listing one folder), the matcher and the palette |
+| Startup (15 interleaved rounds, median) | 118.9 ms | 122.6 ms | Noise |
+| Private bytes after 6 s with `target/project-50k` open | 47.1 MB | 54.3 MB | +7.2 MB: the index of 50,000 paths |

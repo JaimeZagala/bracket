@@ -8,6 +8,7 @@ mod file_ops;
 pub mod fonts;
 mod i18n;
 mod measure;
+mod quick_open;
 mod session;
 mod tabs;
 mod tree;

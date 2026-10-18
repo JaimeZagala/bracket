@@ -141,6 +141,30 @@ impl Texts {
         self.get("menu_close_folder")
     }
 
+    pub fn menu_quick_open(&self) -> &str {
+        self.get("menu_quick_open")
+    }
+
+    pub fn quick_open_hint(&self) -> &str {
+        self.get("quick_open_hint")
+    }
+
+    pub fn quick_open_indexing(&self) -> &str {
+        self.get("quick_open_indexing")
+    }
+
+    pub fn quick_open_no_results(&self) -> &str {
+        self.get("quick_open_no_results")
+    }
+
+    pub fn quick_open_go_to_line(&self, line: &str) -> String {
+        self.fill("quick_open_go_to_line", &[("line", &line)])
+    }
+
+    pub fn quick_open_count(&self, count: &str) -> String {
+        self.fill("quick_open_count", &[("count", &count)])
+    }
+
     pub fn menu_recent(&self) -> &str {
         self.get("menu_recent")
     }
@@ -576,6 +600,15 @@ mod tests {
                     t.dialog_open_folder_title().to_owned(),
                 ),
                 ("menu_recent", t.menu_recent().to_owned()),
+                ("menu_quick_open", t.menu_quick_open().to_owned()),
+                ("quick_open_hint", t.quick_open_hint().to_owned()),
+                ("quick_open_indexing", t.quick_open_indexing().to_owned()),
+                (
+                    "quick_open_no_results",
+                    t.quick_open_no_results().to_owned(),
+                ),
+                ("quick_open_go_to_line", t.quick_open_go_to_line("1")),
+                ("quick_open_count", t.quick_open_count("1")),
                 ("menu_recent_clear", t.menu_recent_clear().to_owned()),
                 ("recent_empty", t.recent_empty().to_owned()),
                 ("menu_save", t.menu_save().to_owned()),

@@ -19,5 +19,9 @@ criterion.workspace = true
 name = "walk"
 harness = false
 
+[[bench]]
+name = "fuzzy"
+harness = false
+
 [lints]
 workspace = true
