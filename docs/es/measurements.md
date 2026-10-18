@@ -202,3 +202,10 @@ El árbol solo pinta las filas visibles (`ScrollArea::show_rows`) y reconstruye 
 | `walk/resync_deep_folder`: tras un cambio en `src07\module03` | 0,66 ms |
 | Árbol al día tras crear una carpeta y dos ficheros, renombrar uno y borrar otro desde fuera | < 1,5 s (antirrebote de 200 ms) |
 | Tamaño del ejecutable | 8.837.632 B (+37,5 KB frente al paso 6, con Rust incluido: Rust no añade nada) |
+
+## Fase 2, paso 8 — acciones del árbol (2026-10-19, equipo A)
+
+| Medida | Paso 7 | Paso 8 | Cambio |
+|---|---|---|---|
+| Tamaño del ejecutable | 8.837.632 B | 9.058.816 B | +216 KB: `trash` (con las interfaces COM de la crate `windows`) y las acciones |
+| Arranque (`compare-startup.ps1`, 15 rondas intercaladas, mediana) | 117,1 ms | 121,8 ms | Ruido (±8 ms entre variantes idénticas) |

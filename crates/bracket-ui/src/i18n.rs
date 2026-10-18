@@ -221,6 +221,78 @@ impl Texts {
         self.get("menu_focus_tree")
     }
 
+    pub fn tree_new_file(&self) -> &str {
+        self.get("tree_new_file")
+    }
+
+    pub fn tree_new_folder(&self) -> &str {
+        self.get("tree_new_folder")
+    }
+
+    pub fn tree_rename(&self) -> &str {
+        self.get("tree_rename")
+    }
+
+    pub fn tree_delete(&self) -> &str {
+        self.get("tree_delete")
+    }
+
+    pub fn tree_copy_path(&self) -> &str {
+        self.get("tree_copy_path")
+    }
+
+    pub fn tree_copy_relative_path(&self) -> &str {
+        self.get("tree_copy_relative_path")
+    }
+
+    pub fn tree_reveal(&self) -> &str {
+        self.get("tree_reveal")
+    }
+
+    pub fn name_empty(&self) -> &str {
+        self.get("name_empty")
+    }
+
+    pub fn name_bad_ending(&self) -> &str {
+        self.get("name_bad_ending")
+    }
+
+    pub fn trash_title(&self) -> &str {
+        self.get("trash_title")
+    }
+
+    pub fn trash_confirm(&self) -> &str {
+        self.get("trash_confirm")
+    }
+
+    pub fn name_forbidden(&self, chars: &str) -> String {
+        self.fill("name_forbidden", &[("chars", &chars)])
+    }
+
+    pub fn name_reserved(&self, name: &str) -> String {
+        self.fill("name_reserved", &[("name", &name)])
+    }
+
+    pub fn name_exists(&self, name: &str) -> String {
+        self.fill("name_exists", &[("name", &name)])
+    }
+
+    pub fn file_op_failed(&self, name: &str, error: &str) -> String {
+        self.fill("file_op_failed", &[("name", &name), ("error", &error)])
+    }
+
+    pub fn trashed(&self, name: &str) -> String {
+        self.fill("trashed", &[("name", &name)])
+    }
+
+    pub fn trash_file_message(&self, name: &str) -> String {
+        self.fill("trash_file_message", &[("name", &name)])
+    }
+
+    pub fn trash_folder_message(&self, name: &str) -> String {
+        self.fill("trash_folder_message", &[("name", &name)])
+    }
+
     pub fn tree_empty(&self) -> &str {
         self.get("tree_empty")
     }
@@ -530,6 +602,27 @@ mod tests {
                 ("menu_sidebar", t.menu_sidebar().to_owned()),
                 ("menu_focus_tree", t.menu_focus_tree().to_owned()),
                 ("tree_empty", t.tree_empty().to_owned()),
+                ("tree_new_file", t.tree_new_file().to_owned()),
+                ("tree_new_folder", t.tree_new_folder().to_owned()),
+                ("tree_rename", t.tree_rename().to_owned()),
+                ("tree_delete", t.tree_delete().to_owned()),
+                ("tree_copy_path", t.tree_copy_path().to_owned()),
+                (
+                    "tree_copy_relative_path",
+                    t.tree_copy_relative_path().to_owned(),
+                ),
+                ("tree_reveal", t.tree_reveal().to_owned()),
+                ("name_empty", t.name_empty().to_owned()),
+                ("name_bad_ending", t.name_bad_ending().to_owned()),
+                ("trash_title", t.trash_title().to_owned()),
+                ("trash_confirm", t.trash_confirm().to_owned()),
+                ("name_forbidden", t.name_forbidden("x")),
+                ("name_reserved", t.name_reserved("x")),
+                ("name_exists", t.name_exists("x")),
+                ("file_op_failed", t.file_op_failed("x", "x")),
+                ("trashed", t.trashed("x")),
+                ("trash_file_message", t.trash_file_message("x")),
+                ("trash_folder_message", t.trash_folder_message("x")),
                 ("project_bad_exclude", t.project_bad_exclude("p", "e")),
                 ("open_failed", t.open_failed("e")),
                 ("save_failed", t.save_failed("e")),

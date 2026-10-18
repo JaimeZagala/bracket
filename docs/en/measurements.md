@@ -202,3 +202,10 @@ The tree paints only the visible rows (`ScrollArea::show_rows`) and rebuilds the
 | `walk/resync_deep_folder`: after a change in `src07\module03` | 0.66 ms |
 | Tree up to date after creating a folder and two files, renaming one and deleting another from outside | < 1.5 s (200 ms debounce) |
 | Executable size | 8,837,632 B (+37.5 KB against step 6, Rust included: Rust adds nothing) |
+
+## Phase 2, step 8 — tree actions (2026-10-19, machine A)
+
+| Measure | Step 7 | Step 8 | Change |
+|---|---|---|---|
+| Executable size | 8,837,632 B | 9,058,816 B | +216 KB: `trash` (with the `windows` crate's COM interfaces) and the actions |
+| Startup (`compare-startup.ps1`, 15 interleaved rounds, median) | 117.1 ms | 121.8 ms | Noise (±8 ms between identical variants) |

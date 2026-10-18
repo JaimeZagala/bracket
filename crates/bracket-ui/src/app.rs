@@ -28,12 +28,13 @@ use eframe::egui::{self, Id, Key, KeyboardShortcut, Modifiers, ViewportCommand};
 use crate::dialogs;
 use crate::disk::{self, DiskNotice, DiskState, DiskWatch, NoticeAction};
 use crate::editor_view::{EditorStyle, EditorView};
+use crate::file_ops::{FileOp, FileOps, OpError};
 use crate::fonts::{self, Fallback, FontSource, LoadedFallback};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
 use crate::session::{self, SessionKeeper};
 use crate::tabs::{self, Loaded, Loading, Tab, TabAction, TabHighlight};
-use crate::tree::{ProjectTree, TreeAction};
+use crate::tree::{self, ProjectTree, TreeAction};
 use crate::{Launch, RestoredSession};
 
 /// How the window starts.
@@ -209,6 +210,10 @@ pub struct BracketApp {
     tree: Option<ProjectTree>,
     /// Reports what is created, deleted or renamed in the project folder.
     project_watch: Option<ProjectWatch>,
+    /// Creating, renaming and deleting from the tree, on worker threads.
+    file_ops: FileOps,
+    /// An entry waiting for the user to confirm it goes to the Recycle Bin.
+    pending_trash: Option<PathBuf>,
     /// The side panel's visibility and width (its open folders live in `tree`).
     sidebar: Sidebar,
     /// `None` while measuring: recent items are neither read nor written.
@@ -343,6 +348,8 @@ impl BracketApp {
             project: None,
             tree: None,
             project_watch: None,
+            file_ops: FileOps::new(),
+            pending_trash: None,
             sidebar: Sidebar::default(),
             recent: recent_file.map(RecentList::start),
             tabs: Vec::new(),
@@ -1665,6 +1672,103 @@ impl BracketApp {
         self.finish_pending(ctx, action);
     }
 
+    /// Asks before moving an entry of the tree to the Recycle Bin.
+    fn trash_dialog(&mut self, ctx: &egui::Context) {
+        let Some(path) = &self.pending_trash else {
+            return;
+        };
+        let texts = self.texts;
+        let name = tree::display_name(path);
+        let message = if path.is_dir() {
+            texts.trash_folder_message(&name)
+        } else {
+            texts.trash_file_message(&name)
+        };
+        let mut choice = None;
+        let modal = egui::Modal::new(Id::new("trash-confirm")).show(ctx, |ui| {
+            ui.heading(texts.trash_title());
+            ui.label(message);
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui.button(texts.trash_confirm()).clicked() {
+                    choice = Some(true);
+                }
+                if ui.button(texts.cancel()).clicked() {
+                    choice = Some(false);
+                }
+            });
+        });
+        if modal.should_close() && choice.is_none() {
+            choice = Some(false);
+        }
+        let Some(confirmed) = choice else { return };
+        let path = self.pending_trash.take().expect("checked above");
+        if confirmed {
+            self.file_ops.start(ctx, FileOp::Trash(path));
+        }
+        if let Some(tree) = &mut self.tree {
+            tree.focus(ctx);
+        }
+    }
+
+    /// Deals with the tree's file operations that have finished.
+    fn finish_file_ops(&mut self, ctx: &egui::Context) {
+        for (op, result) in self.file_ops.finished() {
+            let subject = op.result_path().unwrap_or(op.subject()).to_path_buf();
+            let name = tree::display_name(&subject);
+            match result {
+                Err(OpError::Exists) => self.status = Some(self.texts.name_exists(&name)),
+                Err(OpError::Other(error)) => {
+                    let name = tree::display_name(op.subject());
+                    self.status = Some(self.texts.file_op_failed(&name, &error));
+                }
+                Ok(()) => {
+                    if let Some(tree) = &mut self.tree {
+                        tree.refresh_parent_of(op.subject());
+                        if let Some(path) = op.result_path() {
+                            tree.refresh_parent_of(path);
+                            tree.select_path(path.to_path_buf());
+                        }
+                    }
+                    match &op {
+                        FileOp::CreateFile(path) => self.open_file(ctx, path.clone()),
+                        FileOp::Rename { from, to } => self.follow_rename(from, to),
+                        FileOp::Trash(path) => {
+                            self.status = Some(self.texts.trashed(&tree::display_name(path)));
+                        }
+                        FileOp::CreateFolder(_) => {}
+                    }
+                }
+            }
+        }
+    }
+
+    /// Tabs showing a renamed file, or a file inside a renamed folder, follow it.
+    fn follow_rename(&mut self, from: &std::path::Path, to: &std::path::Path) {
+        for tab in &mut self.tabs {
+            if let Some(loading) = &mut tab.loading
+                && let Some(path) = &mut loading.path
+                && let Some(moved) = moved_path(path, from, to)
+            {
+                *path = moved;
+            }
+            if let Some(entry) = &mut tab.unloaded
+                && let Some(path) = &mut entry.path
+                && let Some(moved) = moved_path(path, from, to)
+            {
+                *path = moved;
+            }
+            if let Some(moved) = tab.doc.path().and_then(|p| moved_path(p, from, to)) {
+                tab.doc.set_path(moved);
+            } else if tab.loading.is_none() && tab.unloaded.is_none() {
+                continue;
+            }
+            tab.refresh_language(&self.languages);
+            // The language may have changed: highlighting starts again on the next frame.
+            tab.highlight = None;
+        }
+    }
+
     fn finish_pending(&mut self, ctx: &egui::Context, action: PendingAction) {
         match action {
             PendingAction::CloseTab(id) => {
@@ -1751,6 +1855,7 @@ impl eframe::App for BracketApp {
                 tree.apply_changes(&changes);
             }
         }
+        self.finish_file_ops(ctx);
         if let Some(tree) = &mut self.tree
             && let Some(bad) = tree.poll()
         {
@@ -1812,6 +1917,9 @@ impl eframe::App for BracketApp {
                 }
             }
             Some(TreeAction::Leave) => self.focus_editor(&ctx),
+            Some(TreeAction::Run(op)) => self.file_ops.start(&ctx, op),
+            Some(TreeAction::ConfirmTrash(path)) => self.pending_trash = Some(path),
+            Some(TreeAction::Status(message)) => self.status = Some(message),
             None => {}
         }
         match self.tab_bar(ui) {
@@ -1864,6 +1972,7 @@ impl eframe::App for BracketApp {
             self.request_fallback(&ctx, c);
         }
         self.unsaved_dialog(&ctx, frame);
+        self.trash_dialog(&ctx);
         self.update_title(&ctx);
         self.maximize_once_shown(&ctx);
 
@@ -1999,6 +2108,28 @@ fn save_error_text(texts: &Texts, err: &SaveError) -> String {
     }
 }
 
+/// Where `path` is after `from` was renamed to `to`: `to` itself, or the same place inside it.
+/// `None` if `path` is neither `from` nor inside it. Compared ignoring ASCII case, like Windows.
+fn moved_path(
+    path: &std::path::Path,
+    from: &std::path::Path,
+    to: &std::path::Path,
+) -> Option<PathBuf> {
+    let mut rest = path.components();
+    for part in from.components() {
+        let other = rest.next()?;
+        if !other.as_os_str().eq_ignore_ascii_case(part.as_os_str()) {
+            return None;
+        }
+    }
+    let rest = rest.as_path();
+    Some(if rest.as_os_str().is_empty() {
+        to.to_path_buf()
+    } else {
+        to.join(rest)
+    })
+}
+
 /// The Recent submenu: files, then folders; entries that no longer exist are hidden.
 fn recent_menu(ui: &mut egui::Ui, recent: &Recent, texts: &Texts) -> Option<MenuAction> {
     let mut picked = None;
@@ -2099,6 +2230,22 @@ mod tests {
             recent_label(std::path::Path::new(r"C:\src\Demo\Program.cs")),
             r"Program.cs  —  C:\src\Demo"
         );
+    }
+
+    #[test]
+    fn renamed_paths_follow_the_file_or_folder() {
+        let p = std::path::Path::new;
+        let (from, to) = (p(r"C:\src\Models"), p(r"C:\src\Entities"));
+        assert_eq!(
+            moved_path(p(r"C:\src\Models"), from, to),
+            Some(to.to_path_buf())
+        );
+        assert_eq!(
+            moved_path(p(r"c:\SRC\models\User.cs"), from, to),
+            Some(p(r"C:\src\Entities\User.cs").to_path_buf())
+        );
+        assert_eq!(moved_path(p(r"C:\src\ModelsOld\A.cs"), from, to), None);
+        assert_eq!(moved_path(p(r"C:\src"), from, to), None);
     }
 
     #[test]

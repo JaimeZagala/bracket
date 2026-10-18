@@ -4,6 +4,7 @@ mod app;
 mod dialogs;
 mod disk;
 mod editor_view;
+mod file_ops;
 pub mod fonts;
 mod i18n;
 mod measure;

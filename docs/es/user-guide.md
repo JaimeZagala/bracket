@@ -24,6 +24,9 @@ Con un proyecto abierto, el **panel del proyecto** muestra a la izquierda el ár
 - **Ctrl+Mayús+E** lleva el teclado al árbol: ↑ y ↓ mueven la selección (también Inicio, Fin, RePág y AvPág), → abre la carpeta o entra en ella, ← la cierra o sube a la carpeta que la contiene, Intro abre el fichero en una pestaña normal (o abre y cierra la carpeta), Espacio lo muestra en la vista previa sin salir del árbol, y Esc vuelve al editor.
 - La sesión recuerda el ancho, si el panel está visible y qué carpetas estaban abiertas.
 - El árbol se actualiza solo cuando otros programas crean, borran o renombran ficheros y carpetas del proyecto (un `git checkout`, una compilación, el Explorador), también si cambia `.gitignore`.
+- El **menú contextual** (clic derecho en una entrada, o en el nombre del proyecto arriba) tiene Nuevo fichero, Nueva carpeta, Cambiar nombre (F2), Eliminar (Supr), Copiar ruta, Copiar ruta relativa y Mostrar en el Explorador. Sobre un fichero, lo nuevo se crea en su carpeta.
+- El nombre se escribe en el propio árbol: Intro o un clic fuera lo confirma y Esc lo cancela. Al cambiar el nombre queda seleccionado sin la extensión, como en el Explorador. Un nombre no válido para Windows (con `<>:"/\|?*`, terminado en punto o espacio, o reservado como `CON` o `NUL`) se avisa en la barra de estado. Si ya existe algo con ese nombre, no se sustituye.
+- **Eliminar** mueve la entrada a la Papelera de reciclaje, después de confirmar, así que se puede recuperar. Un fichero nuevo se abre en una pestaña; las pestañas de un fichero o una carpeta renombrados pasan al nuevo nombre.
 
 Ctrl+P y la búsqueda en el proyecto llegan en los próximos pasos de la Fase 2.
 

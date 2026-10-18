@@ -16,6 +16,7 @@ bracket-syntax.workspace = true
 eframe.workspace = true
 rfd.workspace = true
 toml_edit.workspace = true
+trash.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

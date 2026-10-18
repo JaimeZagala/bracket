@@ -24,6 +24,9 @@ With a project open, the **project panel** on the left shows the folder tree: fo
 - **Ctrl+Shift+E** moves the keyboard to the tree: ↑ and ↓ move the selection (also Home, End, PgUp and PgDn), → opens the folder or goes into it, ← closes it or goes up to the folder that contains it, Enter opens the file in a normal tab (or opens and closes the folder), Space shows it in the preview without leaving the tree, and Esc goes back to the editor.
 - The session remembers the width, whether the panel is shown and which folders were open.
 - The tree updates by itself when other programs create, delete or rename files and folders in the project (a `git checkout`, a build, File Explorer), also when `.gitignore` changes.
+- The **context menu** (right click on an entry, or on the project name at the top) has New file, New folder, Rename (F2), Delete (Del), Copy path, Copy relative path and Show in File Explorer. On a file, new entries go in its folder.
+- The name is typed in the tree itself: Enter or a click elsewhere confirms it and Esc cancels it. When renaming, the name is selected without its extension, as in File Explorer. A name Windows does not allow (with `<>:"/\|?*`, ending with a dot or a space, or reserved like `CON` or `NUL`) is reported in the status bar. If something with that name already exists, it is not replaced.
+- **Delete** moves the entry to the Recycle Bin, after confirming, so it can be recovered. A new file opens in a tab; tabs of a renamed file or folder move to the new name.
 
 Ctrl+P and project search come in the next steps of Phase 2.
 
