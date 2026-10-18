@@ -184,3 +184,12 @@ La primera ejecución de cada medición (1,2–1,5 s) es la de un exe recién co
 | `walk/list_root`: listar la raíz para el árbol | 1,53 ms |
 
 En caliente (la caché de ficheros de Windows ya tiene las carpetas). Generar el proyecto tarda unos 26 s, casi todo por Windows Defender.
+
+## Fase 2, paso 5 — panel del proyecto (2026-10-19, equipo A)
+
+| Medida | Paso 4 | Paso 5 | Cambio |
+|---|---|---|---|
+| Tamaño del ejecutable | 8.521.216 B | 8.795.648 B | +268 KB: `ignore` (con globset y crossbeam) y el árbol |
+| Arranque (`compare-startup.ps1`, 15 rondas intercaladas, mediana) | 132,2 ms | 131,4 ms | Ruido |
+
+El árbol solo pinta las filas visibles (`ScrollArea::show_rows`) y reconstruye la lista de filas cuando cambia, así que el coste por frame no depende del tamaño del proyecto. Listar una carpeta cuesta lo mismo que `walk/list_root` del paso 4 (1,5 ms con 50 carpetas).

@@ -18,7 +18,13 @@ A folder opens as a project with **File → Open Folder**, with `bracket.exe C:\
 
 **File → Recent** shows the last files (up to 15) and folders (up to 10) that were opened, newest first; the ones that no longer exist are not shown. A recent folder opens as the project. "Clear the list" empties it. The list is kept in `recent.toml`, next to `config.toml`.
 
-The folder tree panel, Ctrl+P and project search come in the next steps of Phase 2.
+With a project open, the **project panel** on the left shows the folder tree: folders first and then files, by name, with the language badge on files that have one. Clicking a folder opens or closes it; clicking a file opens it. Drag the right edge to change the width.
+
+- **Ctrl+B** hides or shows the panel (also **View → Project panel**).
+- **Ctrl+Shift+E** moves the keyboard to the tree: ↑ and ↓ move the selection (also Home, End, PgUp and PgDn), → opens the folder or goes into it, ← closes it or goes up to the folder that contains it, Enter opens the file or opens and closes the folder, and Esc goes back to the editor.
+- The session remembers the width, whether the panel is shown and which folders were open.
+
+Ctrl+P and project search come in the next steps of Phase 2.
 
 ## Tabs
 

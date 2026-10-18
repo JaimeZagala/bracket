@@ -10,6 +10,11 @@
 //! active = 1
 //! project = 'C:\src\Demo'
 //!
+//! [sidebar]
+//! visible = true
+//! width = 260
+//! expanded = ['C:\src\Demo\src']
+//!
 //! [[tab]]
 //! path = 'C:\src\Program.cs'
 //! anchor = 120
@@ -46,6 +51,33 @@ pub struct Session {
     pub active: usize,
     /// Folder open as a project.
     pub project: Option<PathBuf>,
+    pub sidebar: Sidebar,
+}
+
+/// The side panel with the project tree.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Sidebar {
+    pub visible: bool,
+    /// Width in points.
+    pub width: u32,
+    /// Folders open in the tree.
+    pub expanded: Vec<PathBuf>,
+}
+
+impl Sidebar {
+    pub const DEFAULT_WIDTH: u32 = 260;
+    pub const MIN_WIDTH: u32 = 120;
+    pub const MAX_WIDTH: u32 = 1200;
+}
+
+impl Default for Sidebar {
+    fn default() -> Self {
+        Self {
+            visible: true,
+            width: Self::DEFAULT_WIDTH,
+            expanded: Vec::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -161,7 +193,40 @@ pub fn parse(text: &str) -> io::Result<Session> {
         .and_then(Item::as_str)
         .filter(|p| !p.is_empty())
         .map(PathBuf::from);
+    if let Some(table) = doc.get("sidebar").and_then(Item::as_table) {
+        session.sidebar = parse_sidebar(table);
+    }
     Ok(session)
+}
+
+/// Invalid values fall back to the defaults.
+fn parse_sidebar(table: &Table) -> Sidebar {
+    let defaults = Sidebar::default();
+    Sidebar {
+        visible: table
+            .get("visible")
+            .and_then(Item::as_bool)
+            .unwrap_or(defaults.visible),
+        width: table
+            .get("width")
+            .and_then(Item::as_integer)
+            .and_then(|v| u32::try_from(v).ok())
+            .map_or(defaults.width, |w| {
+                w.clamp(Sidebar::MIN_WIDTH, Sidebar::MAX_WIDTH)
+            }),
+        expanded: table
+            .get("expanded")
+            .and_then(Item::as_array)
+            .map(|paths| {
+                paths
+                    .iter()
+                    .filter_map(|p| p.as_str())
+                    .filter(|p| !p.is_empty())
+                    .map(PathBuf::from)
+                    .collect()
+            })
+            .unwrap_or_default(),
+    }
 }
 
 fn parse_tab(table: &Table) -> Option<SessionTab> {
@@ -233,6 +298,17 @@ pub fn to_toml(session: &Session) -> String {
     if let Some(project) = &session.project {
         doc.insert("project", value(project.to_string_lossy().as_ref()));
     }
+    let mut sidebar = Table::new();
+    sidebar.insert("visible", value(session.sidebar.visible));
+    sidebar.insert("width", value(i64::from(session.sidebar.width)));
+    let expanded: toml_edit::Array = session
+        .sidebar
+        .expanded
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    sidebar.insert("expanded", value(expanded));
+    doc.insert("sidebar", Item::Table(sidebar));
     let mut tabs = ArrayOfTables::new();
     for tab in &session.tabs {
         let mut table = Table::new();
@@ -349,6 +425,14 @@ mod tests {
             ],
             active: 1,
             project: Some(PathBuf::from(r"C:\src\Demo")),
+            sidebar: Sidebar {
+                visible: false,
+                width: 300,
+                expanded: vec![
+                    PathBuf::from(r"C:\src\Demo\src"),
+                    PathBuf::from(r"C:\src\Demo\src\Models"),
+                ],
+            },
         }
     }
 
@@ -356,6 +440,24 @@ mod tests {
     fn a_session_survives_a_round_trip() {
         let session = sample();
         assert_eq!(parse(&to_toml(&session)).unwrap(), session);
+    }
+
+    #[test]
+    fn sidebar_values_out_of_range_fall_back() {
+        let text = r#"
+format_version = 1
+
+[sidebar]
+visible = "yes"
+width = 5
+expanded = ['C:\src\Demo', 3, '']
+"#;
+        let sidebar = parse(text).unwrap().sidebar;
+        assert!(sidebar.visible);
+        assert_eq!(sidebar.width, Sidebar::MIN_WIDTH);
+        assert_eq!(sidebar.expanded, [PathBuf::from(r"C:\src\Demo")]);
+        let missing = parse("format_version = 1").unwrap().sidebar;
+        assert_eq!(missing, Sidebar::default());
     }
 
     #[test]

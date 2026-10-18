@@ -14,10 +14,11 @@ use bracket_core::Selections;
 use bracket_core::document::{self, DiskStamp, Document, FileReplacer, LineEnding, SaveError};
 use bracket_core::encoding::{self, TextEncoding};
 use bracket_core::movement::{self, Motion};
+use bracket_index::WalkOptions;
 use bracket_session::config::AUTO_THEME;
 use bracket_session::{
     Appearance, Config, ConfigWarning, FileWatcher, Language, LoadedConfig, OpenRequest, Recent,
-    SessionTab, config, requests,
+    SessionTab, Sidebar, config, requests,
 };
 use bracket_syntax::ThemeColors;
 use bracket_syntax::highlight::{self, MAX_HIGHLIGHT_BYTES};
@@ -32,6 +33,7 @@ use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
 use crate::session::{self, SessionKeeper};
 use crate::tabs::{self, Loaded, Loading, Tab, TabAction, TabHighlight};
+use crate::tree::{ProjectTree, TreeAction};
 use crate::{Launch, RestoredSession};
 
 /// How the window starts.
@@ -114,12 +116,18 @@ enum Command {
     CloseTab,
     NextTab,
     PreviousTab,
+    ToggleSidebar,
+    FocusTree,
     Exit,
 }
 
 impl Command {
-    const SHORTCUTS: [(Self, KeyboardShortcut); 9] = [
+    const SHORTCUTS: [(Self, KeyboardShortcut); 11] = [
         // Shortcuts with Shift go first: Ctrl+S would also match Ctrl+Shift+S.
+        (
+            Self::FocusTree,
+            KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::E),
+        ),
         (
             Self::SaveAs,
             KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S),
@@ -153,6 +161,10 @@ impl Command {
             Self::NextTab,
             KeyboardShortcut::new(Modifiers::COMMAND, Key::PageDown),
         ),
+        (
+            Self::ToggleSidebar,
+            KeyboardShortcut::new(Modifiers::COMMAND, Key::B),
+        ),
     ];
 
     /// The first shortcut bound to the command, as shown in menus.
@@ -169,6 +181,10 @@ pub struct BracketApp {
     config: Config,
     /// Folder open as a project.
     project: Option<PathBuf>,
+    /// The tree of the project folder, in the side panel.
+    tree: Option<ProjectTree>,
+    /// The side panel's visibility and width (its open folders live in `tree`).
+    sidebar: Sidebar,
     /// `None` while measuring: recent items are neither read nor written.
     recent: Option<RecentList>,
     /// Never empty: closing the last tab opens an untitled one.
@@ -299,6 +315,8 @@ impl BracketApp {
             texts: i18n::texts(config.language),
             config,
             project: None,
+            tree: None,
+            sidebar: Sidebar::default(),
             recent: recent_file.map(RecentList::start),
             tabs: Vec::new(),
             active: 0,
@@ -380,9 +398,22 @@ impl BracketApp {
             self.active = previous.active.min(self.tabs.len() - 1);
             self.reveal_active_tab = true;
         }
+        let Sidebar {
+            visible,
+            width,
+            expanded,
+        } = previous.sidebar;
+        self.sidebar = Sidebar {
+            visible,
+            width,
+            expanded: Vec::new(),
+        };
         // A project folder that was deleted or moved is simply not reopened.
         if let Some(project) = previous.project.filter(|p| p.is_dir()) {
-            self.set_project(Some(project));
+            self.set_project(ctx, Some(project));
+            if let Some(tree) = &mut self.tree {
+                tree.expand(expanded);
+            }
         }
     }
 
@@ -406,6 +437,14 @@ impl BracketApp {
         let Some(keeper) = &mut self.session else {
             return;
         };
+        keeper.set_sidebar(Sidebar {
+            expanded: self
+                .tree
+                .as_ref()
+                .map(ProjectTree::expanded_for_session)
+                .unwrap_or_default(),
+            ..self.sidebar.clone()
+        });
         if let Some(error) = keeper.tick(ctx, &self.tabs, self.active) {
             self.status = Some(self.texts.session_save_failed(&error));
         }
@@ -430,7 +469,7 @@ impl BracketApp {
     fn open_request(&mut self, ctx: &egui::Context, request: OpenRequest) {
         let OpenRequest { path, line, column } = request;
         if path.is_dir() {
-            self.set_project(Some(path));
+            self.set_project(ctx, Some(path));
             return;
         }
         self.open_file(ctx, path);
@@ -951,8 +990,8 @@ impl BracketApp {
                 self.status = None;
             }
             Command::Open => self.open_with_dialog(ctx, frame),
-            Command::OpenFolder => self.open_folder_with_dialog(frame),
-            Command::CloseFolder => self.set_project(None),
+            Command::OpenFolder => self.open_folder_with_dialog(ctx, frame),
+            Command::CloseFolder => self.set_project(ctx, None),
             // Nothing to save until the file has loaded.
             Command::Save | Command::SaveAs if loading => {}
             Command::Save if self.active_tab().doc.path().is_none() => {
@@ -966,6 +1005,14 @@ impl BracketApp {
                 let count = self.tabs.len();
                 self.activate(ctx, (index + count - 1) % count);
             }
+            Command::ToggleSidebar => self.sidebar.visible = !self.sidebar.visible,
+            Command::FocusTree => {
+                if let Some(tree) = &mut self.tree {
+                    self.sidebar.visible = true;
+                    tree.focus(ctx);
+                    return;
+                }
+            }
             // Closing goes through the unsaved-changes check in handle_window_events.
             Command::Exit => ctx.send_viewport_cmd(ViewportCommand::Close),
         }
@@ -973,8 +1020,15 @@ impl BracketApp {
     }
 
     /// Opens `folder` as the project, or closes the project with `None`. Open tabs stay.
-    fn set_project(&mut self, folder: Option<PathBuf>) {
+    fn set_project(&mut self, ctx: &egui::Context, folder: Option<PathBuf>) {
         let folder = folder.map(|f| std::path::absolute(&f).unwrap_or(f));
+        self.tree = folder.as_ref().map(|root| {
+            let options = WalkOptions {
+                exclude: self.config.project_exclude.clone(),
+            };
+            let ctx = ctx.clone();
+            ProjectTree::new(root.clone(), options, move || ctx.request_repaint())
+        });
         if let Some(keeper) = &mut self.session {
             keeper.set_project(folder.clone());
         }
@@ -984,10 +1038,10 @@ impl BracketApp {
         self.project = folder;
     }
 
-    fn open_folder_with_dialog(&mut self, frame: &eframe::Frame) {
+    fn open_folder_with_dialog(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
         let title = self.texts.dialog_open_folder_title();
         if let Some(folder) = dialogs::pick_folder(frame, title, self.project.as_deref()) {
-            self.set_project(Some(folder));
+            self.set_project(ctx, Some(folder));
         }
     }
 
@@ -1070,6 +1124,25 @@ impl BracketApp {
                     }
                 });
                 ui.menu_button(self.texts.menu_view(), |ui| {
+                    let has_project = self.project.is_some();
+                    for (command, label, selected) in [
+                        (
+                            Command::ToggleSidebar,
+                            self.texts.menu_sidebar(),
+                            has_project && self.sidebar.visible,
+                        ),
+                        (Command::FocusTree, self.texts.menu_focus_tree(), false),
+                    ] {
+                        let mut button = egui::Button::new(label).selected(selected);
+                        if let Some(shortcut) = command.shortcut() {
+                            button = button.shortcut_text(ui.ctx().format_shortcut(&shortcut));
+                        }
+                        if ui.add_enabled(has_project, button).clicked() {
+                            picked = Some(command);
+                            ui.close();
+                        }
+                    }
+                    ui.separator();
                     ui.menu_button(self.texts.menu_appearance(), |ui| {
                         for appearance in Appearance::ALL {
                             let label = self.texts.appearance(appearance);
@@ -1102,6 +1175,25 @@ impl BracketApp {
             });
         });
         (picked, menu_pick)
+    }
+
+    /// Draws the side panel with the project tree, if there is a project and the panel is not
+    /// hidden. Remembers its width.
+    fn side_panel(&mut self, ui: &mut egui::Ui) -> Option<TreeAction> {
+        if !self.sidebar.visible {
+            return None;
+        }
+        let tree = self.tree.as_mut()?;
+        let frame =
+            egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(0, 6));
+        let panel = egui::Panel::left("project-panel")
+            .resizable(true)
+            .frame(frame)
+            .default_size(self.sidebar.width as f32)
+            .size_range(Sidebar::MIN_WIDTH as f32..=Sidebar::MAX_WIDTH as f32)
+            .show(ui, |ui| tree.show(ui, &self.languages, self.texts));
+        self.sidebar.width = panel.response.rect.width().round() as u32;
+        panel.inner
     }
 
     /// Draws the tab bar. Returns what was done with the mouse, if anything.
@@ -1146,7 +1238,7 @@ impl BracketApp {
         });
         for path in dropped {
             if path.is_dir() {
-                self.set_project(Some(path));
+                self.set_project(ctx, Some(path));
             } else {
                 self.open_file(ctx, path);
             }
@@ -1363,7 +1455,7 @@ impl BracketApp {
             }
             MenuAction::OpenRecent(path) => {
                 if path.is_dir() {
-                    self.set_project(Some(path));
+                    self.set_project(ctx, Some(path));
                 } else {
                     self.open_file(ctx, path);
                 }
@@ -1594,6 +1686,11 @@ impl eframe::App for BracketApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.minimized = ctx.input(|i| i.viewport().minimized.unwrap_or(false));
         self.follow_theme(ctx);
+        if let Some(tree) = &mut self.tree
+            && let Some(bad) = tree.poll()
+        {
+            self.status = Some(self.texts.project_bad_exclude(&bad.pattern, &bad.error));
+        }
         self.poll_loading(ctx);
         self.poll_saving();
         self.poll_config_saving();
@@ -1627,15 +1724,25 @@ impl eframe::App for BracketApp {
             self.run_menu_action(&ctx, action);
             self.focus_editor(&ctx);
         }
-        match self.tab_bar(ui) {
-            Some(TabAction::Activate(index)) => self.activate(&ctx, index),
-            Some(TabAction::Close(index)) => self.close_tab(&ctx, index),
-            None => {}
-        }
+        // The status bar spans the whole width; the tab bar only the editor's, next to the
+        // side panel.
         if let Some(action) = self.status_bar(ui) {
             self.run_status_action(&ctx, action);
             // Give the keyboard back to the editor after using a menu.
             self.focus_editor(&ctx);
+        }
+        match self.side_panel(ui) {
+            Some(TreeAction::Open(path)) => {
+                self.open_file(&ctx, path);
+                self.focus_editor(&ctx);
+            }
+            Some(TreeAction::Leave) => self.focus_editor(&ctx),
+            None => {}
+        }
+        match self.tab_bar(ui) {
+            Some(TabAction::Activate(index)) => self.activate(&ctx, index),
+            Some(TabAction::Close(index)) => self.close_tab(&ctx, index),
+            None => {}
         }
         let mut missing_glyph = None;
         let mut notice_action = None;

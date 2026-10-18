@@ -213,6 +213,25 @@ impl Texts {
         self.get("save_read_only")
     }
 
+    pub fn menu_sidebar(&self) -> &str {
+        self.get("menu_sidebar")
+    }
+
+    pub fn menu_focus_tree(&self) -> &str {
+        self.get("menu_focus_tree")
+    }
+
+    pub fn tree_empty(&self) -> &str {
+        self.get("tree_empty")
+    }
+
+    pub fn project_bad_exclude(&self, pattern: &str, error: &str) -> String {
+        self.fill(
+            "project_bad_exclude",
+            &[("pattern", &pattern), ("error", &error)],
+        )
+    }
+
     pub fn open_failed(&self, error: &str) -> String {
         self.fill("open_failed", &[("error", &error)])
     }
@@ -508,6 +527,10 @@ mod tests {
                 ("dialog_save_as_title", t.dialog_save_as_title().to_owned()),
                 ("saved", t.saved().to_owned()),
                 ("save_read_only", t.save_read_only().to_owned()),
+                ("menu_sidebar", t.menu_sidebar().to_owned()),
+                ("menu_focus_tree", t.menu_focus_tree().to_owned()),
+                ("tree_empty", t.tree_empty().to_owned()),
+                ("project_bad_exclude", t.project_bad_exclude("p", "e")),
                 ("open_failed", t.open_failed("e")),
                 ("save_failed", t.save_failed("e")),
                 ("unsaved_title", t.unsaved_title().to_owned()),

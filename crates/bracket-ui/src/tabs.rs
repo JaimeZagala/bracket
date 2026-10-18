@@ -3,6 +3,7 @@
 use std::io;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
@@ -12,8 +13,8 @@ use bracket_core::encoding::TextEncoding;
 use bracket_session::SessionTab;
 use bracket_syntax::{Badge, HighlightWorker, Highlights, LanguageRegistry};
 use eframe::egui::{
-    self, Color32, FontId, Rect, Sense, Stroke, StrokeKind, TextStyle, Ui, WidgetInfo, WidgetType,
-    pos2, vec2,
+    self, Color32, FontId, Galley, Painter, Pos2, Rect, Sense, Stroke, StrokeKind, TextStyle, Ui,
+    Vec2, WidgetInfo, WidgetType, pos2, vec2,
 };
 
 use crate::disk::DiskWatch;
@@ -244,6 +245,42 @@ pub fn tab_bar(
     action
 }
 
+/// A language badge laid out: white text on the language's colour.
+struct BadgeLayout {
+    galley: Arc<Galley>,
+    size: Vec2,
+    color: Color32,
+}
+
+impl BadgeLayout {
+    fn new(painter: &Painter, badge: &Badge, font: FontId) -> Self {
+        let galley = painter.layout_no_wrap(badge.text.clone(), font, Color32::WHITE);
+        let [r, g, b] = badge.color;
+        Self {
+            size: vec2(galley.size().x + 8.0, galley.size().y),
+            galley,
+            color: Color32::from_rgb(r, g, b),
+        }
+    }
+
+    /// Paints it with its left edge centred on `left_center`. Returns its width.
+    fn paint(self, painter: &Painter, left_center: Pos2) -> f32 {
+        let rect = Rect::from_min_size(left_center - vec2(0.0, self.size.y / 2.0), self.size);
+        painter.rect_filled(rect, 3.0, self.color);
+        painter.galley(
+            rect.center() - self.galley.size() / 2.0,
+            self.galley,
+            Color32::WHITE,
+        );
+        self.size.x
+    }
+}
+
+/// Paints a language badge with its left edge centred on `left_center`. Returns its width.
+pub fn paint_badge(painter: &Painter, badge: &Badge, font: FontId, left_center: Pos2) -> f32 {
+    BadgeLayout::new(painter, badge, font).paint(painter, left_center)
+}
+
 struct TabResponse {
     response: egui::Response,
     activate: bool,
@@ -269,13 +306,9 @@ fn tab_widget(
     let badge_font = FontId::proportional((title_font.size * 0.8).round());
     let painter = ui.painter().clone();
     let title_galley = painter.layout_no_wrap(title.clone(), title_font, text_color);
-    let badge_galley =
-        badge.map(|b| painter.layout_no_wrap(b.text.clone(), badge_font, Color32::WHITE));
-    let badge_size = badge_galley
-        .as_ref()
-        .map(|g| vec2(g.size().x + 8.0, g.size().y));
+    let badge = badge.map(|b| BadgeLayout::new(&painter, b, badge_font));
     let width = PADDING
-        + badge_size.map_or(0.0, |size| size.x + GAP)
+        + badge.as_ref().map_or(0.0, |b| b.size.x + GAP)
         + title_galley.size().x
         + GAP
         + CLOSE_SIZE
@@ -313,16 +346,8 @@ fn tab_widget(
         }
 
         let mut x = rect.left() + PADDING;
-        if let (Some(badge), Some(galley), Some(size)) = (badge, badge_galley, badge_size) {
-            let [r, g, b] = badge.color;
-            let badge_rect = Rect::from_min_size(pos2(x, rect.center().y - size.y / 2.0), size);
-            painter.rect_filled(badge_rect, 3.0, Color32::from_rgb(r, g, b));
-            painter.galley(
-                badge_rect.center() - galley.size() / 2.0,
-                galley,
-                Color32::WHITE,
-            );
-            x += size.x + GAP;
+        if let Some(badge) = badge {
+            x += badge.paint(&painter, pos2(x, rect.center().y)) + GAP;
         }
         let title_pos = pos2(x, rect.center().y - title_galley.size().y / 2.0);
         painter.galley(title_pos, title_galley, text_color);

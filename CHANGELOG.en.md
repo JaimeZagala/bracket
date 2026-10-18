@@ -12,7 +12,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - Open a folder as a project: File → Open Folder, `bracket <folder>`, dropping the folder on the window or handing it to an open Bracket. The window title shows the project and the session remembers it; File → Close Folder closes it without touching the tabs.
 - Recent items: File → Recent lists the last files (15) and folders (10) opened, without the ones that no longer exist, and can clear the list. They are kept in `recent.toml`.
-- Project walk (`bracket-index`): lists the files of a folder following `.gitignore` (also outside a Git repository), `.ignore` and the new `[project] exclude` key in `config.toml`; hidden files are included and `.git`, `.svn` and `.hg` never are. It runs on several threads and can be cancelled: 110 ms with 50,000 files. Not visible in the interface yet (it comes with the tree and Ctrl+P).
+- Project walk (`bracket-index`): lists the files of a folder following `.gitignore` (also outside a Git repository), `.ignore` and the new `[project] exclude` key in `config.toml`; hidden files are included and `.git`, `.svn` and `.hg` never are. It runs on several threads and can be cancelled: 110 ms with 50,000 files.
+- Project panel: a folder tree on the left with the same exclusion rules. Each folder is listed on a thread when it is opened; language badge on files; resizable; Ctrl+B hides it and Ctrl+Shift+E moves the keyboard to the tree (arrows, Home/End, PgUp/PgDn, Enter, Esc). The session remembers its width, whether it is shown and the open folders.
 
 ## [0.1.0] - 2026-10-18
 

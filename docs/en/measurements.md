@@ -184,3 +184,12 @@ The first run of each measurement (1.2–1.5 s) is that of a freshly copied exe:
 | `walk/list_root`: listing the root for the tree | 1.53 ms |
 
 Warm (Windows' file cache already holds the folders). Generating the project takes about 26 s, mostly because of Windows Defender.
+
+## Phase 2, step 5 — project panel (2026-10-19, machine A)
+
+| Measure | Step 4 | Step 5 | Change |
+|---|---|---|---|
+| Executable size | 8,521,216 B | 8,795,648 B | +268 KB: `ignore` (with globset and crossbeam) and the tree |
+| Startup (`compare-startup.ps1`, 15 interleaved rounds, median) | 132.2 ms | 131.4 ms | Noise |
+
+The tree paints only the visible rows (`ScrollArea::show_rows`) and rebuilds the list of rows when it changes, so the cost per frame does not depend on the size of the project. Listing a folder costs the same as step 4's `walk/list_root` (1.5 ms with 50 folders).

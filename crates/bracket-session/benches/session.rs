@@ -28,6 +28,7 @@ fn ten_tabs() -> String {
         tabs,
         active: 3,
         project: Some(PathBuf::from(r"C:\src\Project")),
+        ..Session::default()
     })
 }
 

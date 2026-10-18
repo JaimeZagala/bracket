@@ -11,5 +11,5 @@ pub use config::{Appearance, Config, ConfigWarning, Language, LoadedConfig};
 pub use paths::{Mode, Paths};
 pub use recent::Recent;
 pub use requests::OpenRequest;
-pub use session::{Session, SessionFiles, SessionTab, Unsaved};
+pub use session::{Session, SessionFiles, SessionTab, Sidebar, Unsaved};
 pub use watch::FileWatcher;

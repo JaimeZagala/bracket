@@ -9,6 +9,7 @@ mod i18n;
 mod measure;
 mod session;
 mod tabs;
+mod tree;
 
 use std::path::PathBuf;
 use std::sync::Arc;
