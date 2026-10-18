@@ -9,6 +9,7 @@
 //! checkpoints below the first changed line are recomputed, and only as far as the visible
 //! lines.
 
+use std::collections::BTreeMap;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -31,8 +32,10 @@ pub const CHECKPOINT_EVERY: usize = 128;
 /// Longer lines (in bytes) are shown without colours: regex grammars get very slow on them (minified
 /// files), and the parser state carries over unchanged.
 pub const MAX_LINE_BYTES: usize = 20_000;
-/// The theme until themes can be chosen.
-const THEME: &str = "InspiredGitHub";
+/// Editor theme used with a light interface when no theme is chosen.
+pub const LIGHT_THEME: &str = "InspiredGitHub";
+/// Editor theme used with a dark interface when no theme is chosen.
+pub const DARK_THEME: &str = "base16-ocean.dark";
 
 static GRAMMARS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/grammars.packdump"));
 
@@ -78,14 +81,50 @@ pub fn grammars() -> &'static SyntaxSet {
     })
 }
 
-fn theme() -> &'static Theme {
-    static THEME_CELL: OnceLock<Theme> = OnceLock::new();
-    THEME_CELL.get_or_init(|| {
-        ThemeSet::load_defaults()
-            .themes
-            .remove(THEME)
-            .expect("syntect bundles the InspiredGitHub theme")
-    })
+/// The editor themes bundled with syntect, by name (loaded once; a few KB).
+fn themes() -> &'static BTreeMap<String, Theme> {
+    static THEMES: OnceLock<BTreeMap<String, Theme>> = OnceLock::new();
+    THEMES.get_or_init(|| ThemeSet::load_defaults().themes)
+}
+
+/// The theme called `name`, or the light default if there is none.
+fn theme(name: &str) -> &'static Theme {
+    let themes = themes();
+    themes
+        .get(name)
+        .or_else(|| themes.get(LIGHT_THEME))
+        .expect("syntect bundles the InspiredGitHub theme")
+}
+
+/// Names of the editor themes, sorted.
+pub fn theme_names() -> Vec<&'static str> {
+    themes().keys().map(String::as_str).collect()
+}
+
+/// Colours of the editor area in a theme, as RGBA. `None` where the theme leaves the
+/// interface's colour.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ThemeColors {
+    pub background: Option<[u8; 4]>,
+    pub foreground: Option<[u8; 4]>,
+    pub caret: Option<[u8; 4]>,
+    pub selection: Option<[u8; 4]>,
+    pub gutter: Option<[u8; 4]>,
+    pub gutter_foreground: Option<[u8; 4]>,
+}
+
+/// The editor-area colours of theme `name` (the light default if there is no such theme).
+pub fn theme_colors(name: &str) -> ThemeColors {
+    let settings = &theme(name).settings;
+    let rgba = |color: Option<Color>| color.map(|c| [c.r, c.g, c.b, c.a]);
+    ThemeColors {
+        background: rgba(settings.background),
+        foreground: rgba(settings.foreground),
+        caret: rgba(settings.caret),
+        selection: rgba(settings.selection),
+        gutter: rgba(settings.gutter),
+        gutter_foreground: rgba(settings.gutter_foreground),
+    }
 }
 
 /// A run of characters of one colour within a line (char offsets, end exclusive).
@@ -138,11 +177,16 @@ pub struct Engine {
 }
 
 impl Engine {
-    /// `None` if no grammar has this scope.
+    /// An engine with the light default theme. `None` if no grammar has this scope.
     pub fn new(scope: &str) -> Option<Self> {
+        Self::with_theme(scope, LIGHT_THEME)
+    }
+
+    /// An engine colouring with editor theme `theme_name`. `None` if no grammar has this scope.
+    pub fn with_theme(scope: &str, theme_name: &str) -> Option<Self> {
         let set = grammars();
         let syntax = set.find_syntax_by_scope(Scope::new(scope).ok()?)?;
-        let theme = theme();
+        let theme = theme(theme_name);
         let highlighter = Highlighter::new(theme);
         let initial = (
             ParseState::new(syntax),
@@ -312,11 +356,11 @@ pub struct HighlightWorker {
 
 impl HighlightWorker {
     /// `notify` runs on the worker thread after each result (to wake the UI).
-    pub fn start(scope: String, notify: impl Fn() + Send + 'static) -> Self {
+    pub fn start(scope: String, theme: String, notify: impl Fn() + Send + 'static) -> Self {
         let (requests, request_rx) = mpsc::channel::<Request>();
         let (result_tx, results) = mpsc::channel();
         thread::spawn(move || {
-            let Some(mut engine) = Engine::new(&scope) else {
+            let Some(mut engine) = Engine::with_theme(&scope, &theme) else {
                 return;
             };
             let mut pending = None;
@@ -422,6 +466,29 @@ mod tests {
             assert!(Engine::new(scope).is_some(), "no grammar for {scope}");
         }
         assert!(Engine::new("source.cobol").is_none());
+    }
+
+    #[test]
+    fn themes_give_different_colours() {
+        let names = theme_names();
+        assert!(names.contains(&LIGHT_THEME) && names.contains(&DARK_THEME));
+        let light = theme_colors(LIGHT_THEME);
+        let dark = theme_colors(DARK_THEME);
+        assert!(light.background.is_some() && dark.background.is_some());
+        assert_ne!(light.background, dark.background);
+        assert_eq!(
+            theme_colors("no such theme"),
+            light,
+            "unknown names fall back"
+        );
+
+        let text = Rope::from_str("public class Foo { }\n");
+        let spans = |theme| {
+            let mut engine = Engine::with_theme("source.cs", theme).unwrap();
+            engine.set_text(&text);
+            engine.highlight(0..1, || false).unwrap()
+        };
+        assert_ne!(spans(LIGHT_THEME), spans(DARK_THEME));
     }
 
     #[test]
@@ -536,7 +603,7 @@ mod tests {
 
     #[test]
     fn the_worker_answers_requests() {
-        let worker = HighlightWorker::start("source.json".to_owned(), || {});
+        let worker = HighlightWorker::start("source.json".to_owned(), DARK_THEME.to_owned(), || {});
         let text = Rope::from_str("{\"a\": 1}\n");
         worker.request(7, text, 0..1);
         let mut result = None;

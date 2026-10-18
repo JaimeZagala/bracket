@@ -8,9 +8,11 @@
 //! ```toml
 //! [interface]
 //! language = "es"      # "es" or "en"
+//! appearance = "system" # "system", "light" or "dark"
 //!
 //! [editor]
 //! font_family = "Consolas" # any installed font; falls back to Consolas
+//! theme = "auto"       # editor colours: "auto" (follows the appearance) or a theme name
 //! font_size = 14.0     # 8 to 48
 //! tab_width = 4        # 1 to 16
 //!
@@ -54,6 +56,36 @@ impl Language {
     }
 }
 
+/// Light or dark interface.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Appearance {
+    /// Follow Windows' setting.
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+impl Appearance {
+    pub const ALL: [Self; 3] = [Self::System, Self::Light, Self::Dark];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::System => "system",
+            Self::Light => "light",
+            Self::Dark => "dark",
+        }
+    }
+
+    fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|a| a.code() == code)
+    }
+}
+
+/// The editor theme that follows the appearance.
+pub const AUTO_THEME: &str = "auto";
+pub const THEME_NAME_MAX_LEN: usize = 100;
+
 pub const FONT_SIZE_MIN: f32 = 8.0;
 pub const FONT_SIZE_MAX: f32 = 48.0;
 pub const TAB_WIDTH_MAX: usize = 16;
@@ -62,6 +94,9 @@ pub const FONT_FAMILY_MAX_LEN: usize = 100;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Config {
     pub language: Language,
+    pub appearance: Appearance,
+    /// Editor colour theme: [`AUTO_THEME`] or a theme name (checked by the interface).
+    pub editor_theme: String,
     /// Editor font family, looked up among the installed fonts.
     pub font_family: String,
     pub font_size: f32,
@@ -76,6 +111,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             language: Language::Spanish,
+            appearance: Appearance::System,
+            editor_theme: AUTO_THEME.to_owned(),
             font_family: "Consolas".to_owned(),
             font_size: 14.0,
             tab_width: 4,
@@ -152,6 +189,15 @@ pub fn parse(text: &str) -> LoadedConfig {
                     .as_str()
                     .and_then(Language::from_code)
                     .map(|v| config.language = v),
+                ("interface", "appearance") => item
+                    .as_str()
+                    .and_then(Appearance::from_code)
+                    .map(|v| config.appearance = v),
+                ("editor", "theme") => item
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty() && v.len() <= THEME_NAME_MAX_LEN)
+                    .map(|v| config.editor_theme = v.to_owned()),
                 ("editor", "font_family") => item
                     .as_str()
                     .map(str::trim)
@@ -260,6 +306,18 @@ pub fn save(config: &Config, path: &Path) -> Result<(), SaveError> {
     );
     set(
         &mut doc,
+        "interface",
+        "appearance",
+        config.appearance.code().into(),
+    );
+    set(
+        &mut doc,
+        "editor",
+        "theme",
+        config.editor_theme.as_str().into(),
+    );
+    set(
+        &mut doc,
         "editor",
         "font_family",
         config.font_family.as_str().into(),
@@ -335,7 +393,8 @@ mod tests {
     #[test]
     fn valid_values_are_read() {
         let loaded = parse(
-            "[interface]\nlanguage = \"en\"\n[editor]\nfont_family = \" Fira Code \"\n\
+            "[interface]\nlanguage = \"en\"\nappearance = \"dark\"\n[editor]\n\
+             font_family = \" Fira Code \"\ntheme = \"Solarized (dark)\"\n\
              font_size = 16\ntab_width = 2\n[files]\nline_ending = \"lf\"\n",
         );
         assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
@@ -343,6 +402,8 @@ mod tests {
             loaded.config,
             Config {
                 language: Language::English,
+                appearance: Appearance::Dark,
+                editor_theme: "Solarized (dark)".into(),
                 font_family: "Fira Code".into(),
                 font_size: 16.0,
                 tab_width: 2,
@@ -413,6 +474,8 @@ mod tests {
         let path = dir.join("Bracket").join(CONFIG_FILE_FOR_TESTS);
         let config = Config {
             language: Language::English,
+            appearance: Appearance::Light,
+            editor_theme: "base16-ocean.light".into(),
             font_family: "Cascadia Mono".into(),
             font_size: 13.5,
             tab_width: 8,

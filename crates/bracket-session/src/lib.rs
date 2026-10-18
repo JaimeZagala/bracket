@@ -6,7 +6,7 @@ pub mod requests;
 pub mod session;
 pub mod watch;
 
-pub use config::{Config, ConfigWarning, Language, LoadedConfig};
+pub use config::{Appearance, Config, ConfigWarning, Language, LoadedConfig};
 pub use paths::{Mode, Paths};
 pub use requests::OpenRequest;
 pub use session::{Session, SessionFiles, SessionTab, Unsaved};
