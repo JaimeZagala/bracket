@@ -10,8 +10,10 @@ publish.workspace = true
 
 [dependencies]
 bracket-core.workspace = true
-# At run time only the parser, the pure Rust regex engine and loading the compiled grammars.
-syntect = { workspace = true, features = ["parsing", "regex-fancy", "dump-load", "default-themes"] }
+toml_edit.workspace = true
+# At run time: the parser, the pure Rust regex engine, loading the compiled grammars and reading
+# the `.sublime-syntax` grammars of language packages.
+syntect = { workspace = true, features = ["parsing", "regex-fancy", "dump-load", "default-themes", "yaml-load"] }
 
 [build-dependencies]
 # At build time: syntect's bundled grammars and loading `.sublime-syntax` files, to compile the

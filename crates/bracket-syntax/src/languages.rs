@@ -1,11 +1,11 @@
 //! The language registry: which languages Bracket knows, how files map to them and how each
 //! one is shown (its badge on tabs).
 //!
-//! Phase 1 starts with the six built-in languages. External language packages (a `languages/`
-//! folder with `language.toml` files) will add to or override these entries, so every field is
-//! owned data rather than a compile-time constant.
+//! Six languages are built in. External language packages (see `packages.rs`) add languages or
+//! replace built-in ones with the same id, so every field is owned data rather than a
+//! compile-time constant.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// A short label drawn on tabs to identify the language, like `C#` or `{}`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -24,95 +24,79 @@ pub struct Language {
     /// File extensions without the dot, lowercase.
     pub extensions: Vec<String>,
     pub badge: Badge,
-    /// Scope of the grammar that highlights it, e.g. `source.cs`.
+    /// Scope of the grammar that highlights it, e.g. `source.cs`. Empty for no highlighting.
     pub scope: String,
+    /// Tab width for this language, instead of the configured one.
+    pub tab_width: Option<usize>,
+    /// Comment tokens and bracket pairs, for commenting lines and closing pairs.
+    pub line_comment: Option<String>,
+    pub block_comment: Option<(String, String)>,
+    pub pairs: Vec<(String, String)>,
+    /// The package folder it comes from; `None` for a built-in language.
+    pub package: Option<PathBuf>,
 }
 
-impl Language {
-    fn builtin(
-        id: &str,
-        name: &str,
-        scope: &str,
-        extensions: &[&str],
-        badge: &str,
-        color: [u8; 3],
-    ) -> Self {
+/// Brackets and quotes closed in pairs, for the built-in languages.
+fn common_pairs() -> Vec<(String, String)> {
+    [("(", ")"), ("[", "]"), ("{", "}"), ("\"", "\""), ("'", "'")]
+        .iter()
+        .map(|(a, b)| ((*a).to_owned(), (*b).to_owned()))
+        .collect()
+}
+
+struct Builtin<'a> {
+    id: &'a str,
+    name: &'a str,
+    scope: &'a str,
+    extensions: &'a [&'a str],
+    badge: &'a str,
+    color: [u8; 3],
+    line_comment: Option<&'a str>,
+    block_comment: Option<(&'a str, &'a str)>,
+}
+
+impl From<Builtin<'_>> for Language {
+    fn from(b: Builtin<'_>) -> Self {
         Self {
-            id: id.to_owned(),
-            name: name.to_owned(),
-            extensions: extensions.iter().map(|e| (*e).to_owned()).collect(),
+            id: b.id.to_owned(),
+            name: b.name.to_owned(),
+            extensions: b.extensions.iter().map(|e| (*e).to_owned()).collect(),
             badge: Badge {
-                text: badge.to_owned(),
-                color,
+                text: b.badge.to_owned(),
+                color: b.color,
             },
-            scope: scope.to_owned(),
+            scope: b.scope.to_owned(),
+            tab_width: None,
+            line_comment: b.line_comment.map(str::to_owned),
+            block_comment: b.block_comment.map(|(a, z)| (a.to_owned(), z.to_owned())),
+            pairs: common_pairs(),
+            package: None,
         }
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct LanguageRegistry {
+    /// Packages first, so they win over built-in languages for an extension.
     languages: Vec<Language>,
 }
 
 impl LanguageRegistry {
     /// The languages built into the executable.
     pub fn builtin() -> Self {
-        Self {
-            languages: vec![
-                Language::builtin(
-                    "csharp",
-                    "C#",
-                    "source.cs",
-                    &["cs", "csx"],
-                    "C#",
-                    [0x68, 0x21, 0x7A],
-                ),
-                Language::builtin(
-                    "razor",
-                    "Razor",
-                    "text.html.razor",
-                    &["razor", "cshtml"],
-                    "@",
-                    [0x51, 0x2B, 0xD4],
-                ),
-                Language::builtin(
-                    "css",
-                    "CSS",
-                    "source.css",
-                    &["css"],
-                    "#",
-                    [0x26, 0x4D, 0xE4],
-                ),
-                Language::builtin(
-                    "tsql",
-                    "T-SQL",
-                    "source.tsql",
-                    &["sql"],
-                    "SQL",
-                    [0xCC, 0x29, 0x27],
-                ),
-                Language::builtin(
-                    "json",
-                    "JSON",
-                    "source.json",
-                    &["json", "jsonc"],
-                    "{}",
-                    [0xB0, 0x8A, 0x10],
-                ),
-                Language::builtin(
-                    "xml",
-                    "XML",
-                    "text.xml",
-                    &[
-                        "xml", "xsig", "xsd", "xsl", "xslt", "config", "csproj", "vbproj", "props",
-                        "targets", "resx", "nuspec", "xaml",
-                    ],
-                    "<>",
-                    [0xE3, 0x79, 0x33],
-                ),
-            ],
+        Self::with_packages(Vec::new())
+    }
+
+    /// The built-in languages plus `packages`, in priority order. A package with a built-in
+    /// language's id replaces it; when two languages claim an extension, the first one wins.
+    pub fn with_packages(packages: Vec<Language>) -> Self {
+        let mut languages = packages;
+        for language in builtin_languages() {
+            if !languages.iter().any(|l| l.id == language.id) {
+                languages.push(language);
+            }
         }
+        Self { languages }
     }
 
     pub fn languages(&self) -> &[Language] {
@@ -130,6 +114,81 @@ impl LanguageRegistry {
             .iter()
             .find(|l| l.extensions.contains(&extension))
     }
+}
+
+fn builtin_languages() -> Vec<Language> {
+    let c_comments = (Some("//"), Some(("/*", "*/")));
+    vec![
+        Builtin {
+            id: "csharp",
+            name: "C#",
+            scope: "source.cs",
+            extensions: &["cs", "csx"],
+            badge: "C#",
+            color: [0x68, 0x21, 0x7A],
+            line_comment: c_comments.0,
+            block_comment: c_comments.1,
+        }
+        .into(),
+        Builtin {
+            id: "razor",
+            name: "Razor",
+            scope: "text.html.razor",
+            extensions: &["razor", "cshtml"],
+            badge: "@",
+            color: [0x51, 0x2B, 0xD4],
+            line_comment: None,
+            block_comment: Some(("@*", "*@")),
+        }
+        .into(),
+        Builtin {
+            id: "css",
+            name: "CSS",
+            scope: "source.css",
+            extensions: &["css"],
+            badge: "#",
+            color: [0x26, 0x4D, 0xE4],
+            line_comment: None,
+            block_comment: c_comments.1,
+        }
+        .into(),
+        Builtin {
+            id: "tsql",
+            name: "T-SQL",
+            scope: "source.tsql",
+            extensions: &["sql"],
+            badge: "SQL",
+            color: [0xCC, 0x29, 0x27],
+            line_comment: Some("--"),
+            block_comment: c_comments.1,
+        }
+        .into(),
+        Builtin {
+            id: "json",
+            name: "JSON",
+            scope: "source.json",
+            extensions: &["json", "jsonc"],
+            badge: "{}",
+            color: [0xB0, 0x8A, 0x10],
+            line_comment: None,
+            block_comment: None,
+        }
+        .into(),
+        Builtin {
+            id: "xml",
+            name: "XML",
+            scope: "text.xml",
+            extensions: &[
+                "xml", "xsig", "xsd", "xsl", "xslt", "config", "csproj", "vbproj", "props",
+                "targets", "resx", "nuspec", "xaml",
+            ],
+            badge: "<>",
+            color: [0xE3, 0x79, 0x33],
+            line_comment: None,
+            block_comment: Some(("<!--", "-->")),
+        }
+        .into(),
+    ]
 }
 
 #[cfg(test)]
@@ -194,5 +253,26 @@ mod tests {
         let registry = LanguageRegistry::builtin();
         assert_eq!(registry.get("json").unwrap().badge.text, "{}");
         assert!(registry.get("cobol").is_none());
+    }
+
+    #[test]
+    fn packages_add_languages_and_replace_builtin_ones() {
+        let package = |id: &str, extensions: &[&str]| Language {
+            id: id.to_owned(),
+            extensions: extensions.iter().map(|e| (*e).to_owned()).collect(),
+            package: Some(PathBuf::from(id)),
+            ..builtin_languages()[0].clone()
+        };
+        let registry = LanguageRegistry::with_packages(vec![
+            package("python", &["py"]),
+            package("csharp", &["cs"]),
+            package("mysql", &["sql"]),
+        ]);
+        let id = |path: &str| registry.for_path(Path::new(path)).map(|l| l.id.as_str());
+        assert_eq!(id("a.py"), Some("python"));
+        assert_eq!(id("a.csx"), None, "the replaced C# no longer claims .csx");
+        assert_eq!(id("a.sql"), Some("mysql"), "a package wins an extension");
+        assert_eq!(registry.languages().len(), 3 + 5);
+        assert!(registry.get("csharp").unwrap().package.is_some());
     }
 }

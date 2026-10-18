@@ -523,6 +523,7 @@ version = "0.0.0"
 dependencies = [
  "bracket-core",
  "bracket-session",
+ "bracket-syntax",
  "bracket-ui",
  "bracket-update",
  "windows-sys 0.61.2",
@@ -565,6 +566,7 @@ dependencies = [
  "bracket-core",
  "criterion",
  "syntect",
+ "toml_edit",
 ]
 
 [[package]]

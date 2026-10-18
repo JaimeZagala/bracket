@@ -10,6 +10,7 @@
 //! lines.
 
 use std::ops::Range;
+use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
@@ -19,6 +20,8 @@ use syntect::highlighting::{
     Color, HighlightIterator, HighlightState, Highlighter, Theme, ThemeSet,
 };
 use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxReference, SyntaxSet};
+
+use crate::packages::{self, PackageWarning};
 
 /// Larger documents are not highlighted (the checkpoints and the first pass would cost too
 /// much memory and time).
@@ -33,10 +36,46 @@ const THEME: &str = "InspiredGitHub";
 
 static GRAMMARS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/grammars.packdump"));
 
+/// Grammar files from language packages, set once at startup.
+static EXTERNAL: OnceLock<Vec<PathBuf>> = OnceLock::new();
+/// Problems found while compiling the external grammars.
+static EXTERNAL_WARNINGS: OnceLock<Vec<PackageWarning>> = OnceLock::new();
+
+/// Adds the grammars of language packages. Call before anything is highlighted; later calls
+/// are ignored.
+pub fn set_external_grammars(files: Vec<PathBuf>) {
+    let _ = EXTERNAL.set(files);
+}
+
+/// Problems with the external grammars, once they have been compiled (`None` before).
+pub fn external_grammar_warnings() -> Option<&'static [PackageWarning]> {
+    EXTERNAL_WARNINGS.get().map(Vec::as_slice)
+}
+
 /// The compiled grammars, loaded on first use (about a millisecond; regexes compile lazily).
+/// With external grammars they are compiled together, so a package can use or replace the
+/// built-in ones (for one scope, the last grammar added wins).
 pub fn grammars() -> &'static SyntaxSet {
     static SET: OnceLock<SyntaxSet> = OnceLock::new();
-    SET.get_or_init(|| syntect::dumps::from_binary(GRAMMARS))
+    SET.get_or_init(|| {
+        let builtin: SyntaxSet = syntect::dumps::from_binary(GRAMMARS);
+        let files = EXTERNAL.get().map(Vec::as_slice).unwrap_or_default();
+        let mut warnings = Vec::new();
+        let set = if files.is_empty() {
+            builtin
+        } else {
+            let mut builder = builtin.into_builder();
+            for file in files {
+                match packages::parse_grammar(file) {
+                    Ok(syntax) => builder.add(syntax),
+                    Err(warning) => warnings.push(warning),
+                }
+            }
+            builder.build()
+        };
+        let _ = EXTERNAL_WARNINGS.set(warnings);
+        set
+    })
 }
 
 fn theme() -> &'static Theme {
