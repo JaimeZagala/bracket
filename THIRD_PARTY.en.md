@@ -26,7 +26,7 @@ Direct dependencies only; transitive ones will be reviewed with a license tool b
 
 The BSD-3-Clause part of encoding_rs (WHATWG data tables) requires its copyright notice to be reproduced in binary distributions: it will be included in the third-party license file shipped with the installer and the zip (Phase 5).
 
-## Development and testing only
+## Development, testing and build only
 
 Not included in the executable.
 
@@ -34,6 +34,8 @@ Not included in the executable.
 |---|---|---|---|
 | [proptest](https://crates.io/crates/proptest) | 1.12.0 | MIT OR Apache-2.0 | Property tests |
 | [criterion](https://crates.io/crates/criterion) | 0.8.2 | Apache-2.0 OR MIT | Benchmarks |
+| [embed-resource](https://crates.io/crates/embed-resource) | 3.0.12 | MIT | Compiling the Windows resources (manifest, icon, version) in `bracket-app`'s `build.rs` |
+| [miniz_oxide](https://crates.io/crates/miniz_oxide) | 0.9.1 | MIT OR Zlib OR Apache-2.0 | Compressing the generated icon's large sizes as PNG (`build.rs`) |
 
 ## Grammars and themes
 

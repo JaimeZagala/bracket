@@ -21,5 +21,9 @@ bracket-update.workspace = true
 winreg.workspace = true
 windows-sys.workspace = true
 
+[build-dependencies]
+embed-resource.workspace = true
+miniz_oxide.workspace = true
+
 [lints]
 workspace = true

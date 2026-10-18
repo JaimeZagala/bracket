@@ -76,6 +76,13 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 - The window (position, size, maximized) is saved by eframe with its `persistence` feature in `window.ron`, in the data folder (portable mode too). eframe moves it back onto a connected monitor if its own is gone and accounts for each screen's scaling. Only the window is saved, not egui's widget state. eframe applies `centered` after the saved position, so it is only turned on while `window.ron` does not exist yet. Cost: 547 KB (serde and ron).
 - While the measurement probes are on, the session is neither read nor written, so measurements neither depend on the user's session nor change it.
 
+## Windows resources (Phase 1)
+
+- `crates/bracket-app/build.rs` generates a resource script and compiles it with the Windows SDK's `rc.exe` (`embed-resource`); if that is not possible, the build fails rather than producing an exe without a manifest.
+- **Manifest** (`res/bracket.manifest`): per-monitor DPI (PerMonitorV2), long paths, Windows 10/11 as a supported OS, common controls v6 (the current look of dialogs) and running without asking for administrator rights.
+- **Version:** `VERSIONINFO` with the version from `Cargo.toml`, shown in the file properties and Task Manager.
+- **Icon:** drawn by code in `build/icon.rs` (no binary files in the repository): a rounded square with `[|]`, sampled 4×4 per pixel. The `.ico` holds 9 sizes (16 to 256; bitmaps up to 48 and PNG from 64, 32 KB in total). A 64×64 RGBA copy is the window icon (`ViewportBuilder::with_icon`).
+
 ## Command line and single instance (Phase 1)
 
 - `bracket-app` (`cli.rs`) parses the arguments; `OpenRequest::parse` (`bracket-session`) splits `file:line:column` (a trailing `:number` is always a position, because Windows file names cannot contain `:` except after the drive).

@@ -76,6 +76,13 @@ En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync
 - La ventana (posición, tamaño, maximizada) la guarda eframe con su feature `persistence` en `window.ron`, en la carpeta de datos (también en modo portable). eframe la devuelve a un monitor conectado si el suyo ya no está y tiene en cuenta el escalado de cada pantalla. Solo se guarda la ventana, no el estado de los widgets de egui. eframe aplica `centered` después de la posición guardada, así que solo se activa cuando aún no existe `window.ron`. Coste: 547 KB (serde y ron).
 - Con las sondas de medición activas no se lee ni se escribe la sesión, para que las medidas no dependan de la sesión del usuario ni la cambien.
 
+## Recursos de Windows (Fase 1)
+
+- `crates/bracket-app/build.rs` genera un script de recursos y lo compila con `rc.exe` del Windows SDK (`embed-resource`); si no se puede, la compilación falla en vez de producir un exe sin manifiesto.
+- **Manifiesto** (`res/bracket.manifest`): DPI por monitor (PerMonitorV2), rutas largas, Windows 10/11 como sistema compatible, controles comunes v6 (aspecto actual de los diálogos) y ejecución sin pedir permisos de administrador.
+- **Versión:** `VERSIONINFO` con la versión de `Cargo.toml`, visible en las propiedades del fichero y en el Administrador de tareas.
+- **Icono:** lo dibuja `build/icon.rs` por código (sin ficheros binarios en el repositorio): un cuadrado redondeado con `[|]`, muestreado 4×4 por píxel. El `.ico` lleva 9 tamaños (16 a 256; bitmaps hasta 48 y PNG desde 64, 32 KB en total). Una copia de 64×64 en RGBA es el icono de la ventana (`ViewportBuilder::with_icon`).
+
 ## Línea de comandos e instancia única (Fase 1)
 
 - `bracket-app` (`cli.rs`) interpreta los argumentos; `OpenRequest::parse` (`bracket-session`) separa `fichero:línea:columna` (un `:número` final siempre es posición, porque los nombres de fichero de Windows no admiten `:` salvo tras la unidad).

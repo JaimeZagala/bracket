@@ -129,6 +129,7 @@ Conclusions:
 | Step 13: language packages | 8,300,544 B | +257 KB | syntect's YAML reader (`yaml-load`) for package grammars, and the loader. Interleaved startup against step 12 (15 rounds, busy machine): 165.5 versus 164.3 ms |
 | Step 14: themes | 8,369,664 B | +69 KB | View menu, appearance and editor colours (the themes were already in the exe). Interleaved startup against step 13 (15 rounds): 139.5 versus 142.2 ms |
 | Step 15: full status bar | 8,400,896 B | +31 KB | Document language, selections and new layout. Interleaved startup against step 14 (15 rounds): 135.4 versus 141.9 ms |
+| Step 16: manifest, icon and version | 8,454,144 B | +53 KB | Icon (32 KB), RGBA window icon (16 KB), manifest and version. Interleaved startup against step 15 (15 rounds): 120.3 versus 131.7 ms; "first `ui()` → frame" drops from 33.5 to 25.8 ms (probably from declaring DPI awareness in the manifest) |
 
 Step 5, interleaved startup against step 4 (15 rounds): 144.9 ms versus 148.6 ms, within the noise. That day absolute medians were around 145–149 ms with a busy machine: the margin against 150 ms is minimal.
 

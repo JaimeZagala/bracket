@@ -129,6 +129,7 @@ Conclusiones:
 | Paso 13: paquetes de lenguaje | 8.300.544 B | +257 KB | Lector YAML de syntect (`yaml-load`) para las gramáticas de los paquetes, y el cargador. Arranque intercalado frente al paso 12 (15 rondas, equipo cargado): 165,5 frente a 164,3 ms |
 | Paso 14: temas | 8.369.664 B | +69 KB | Menú Ver, apariencia y colores del editor (los temas ya iban en el exe). Arranque intercalado frente al paso 13 (15 rondas): 139,5 frente a 142,2 ms |
 | Paso 15: barra de estado completa | 8.400.896 B | +31 KB | Lenguaje del documento, selecciones y nueva disposición. Arranque intercalado frente al paso 14 (15 rondas): 135,4 frente a 141,9 ms |
+| Paso 16: manifiesto, icono y versión | 8.454.144 B | +53 KB | Icono (32 KB), icono de la ventana en RGBA (16 KB), manifiesto y versión. Arranque intercalado frente al paso 15 (15 rondas): 120,3 frente a 131,7 ms; «primer `ui()` → fotograma» baja de 33,5 a 25,8 ms (probablemente por declarar el DPI en el manifiesto) |
 
 Paso 5, arranque intercalado frente al paso 4 (15 rondas): 144,9 ms frente a 148,6 ms, dentro del ruido. Ese día las medianas absolutas rondaron 145–149 ms con el equipo cargado: el margen frente a los 150 ms es mínimo.
 

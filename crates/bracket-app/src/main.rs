@@ -23,6 +23,9 @@ use crate::instance::Instance;
 use crate::system_fonts::SystemFonts;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// The window icon in raw RGBA, drawn by build.rs like the executable's icon.
+const WINDOW_ICON: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/window-icon.rgba"));
+const WINDOW_ICON_SIZE: u32 = 64;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Taken first so the startup measurement covers as much as possible.
@@ -111,6 +114,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         session,
         window_file,
         languages,
+        window_icon: Some(bracket_ui::egui::IconData {
+            rgba: WINDOW_ICON.to_vec(),
+            width: WINDOW_ICON_SIZE,
+            height: WINDOW_ICON_SIZE,
+        }),
     };
     bracket_ui::run(launch, probe)?;
     Ok(())

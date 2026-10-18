@@ -207,6 +207,7 @@ impl BracketApp {
             session,
             window_file: _,
             languages,
+            window_icon: _,
         } = launch;
         let bracket_syntax::Packages {
             languages: package_languages,

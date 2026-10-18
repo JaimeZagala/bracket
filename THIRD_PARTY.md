@@ -26,7 +26,7 @@ Solo las dependencias directas; las transitivas se revisarán con una herramient
 
 La parte BSD-3-Clause de encoding_rs (tablas de datos de WHATWG) exige reproducir su aviso de copyright en la distribución binaria: se incluirá en el fichero de licencias de terceros que acompañe al instalador y al zip (Fase 5).
 
-## Solo para desarrollo y pruebas
+## Solo para desarrollo, pruebas y compilación
 
 No se incluyen en el ejecutable.
 
@@ -34,6 +34,8 @@ No se incluyen en el ejecutable.
 |---|---|---|---|
 | [proptest](https://crates.io/crates/proptest) | 1.12.0 | MIT OR Apache-2.0 | Tests de propiedades |
 | [criterion](https://crates.io/crates/criterion) | 0.8.2 | Apache-2.0 OR MIT | Benchmarks |
+| [embed-resource](https://crates.io/crates/embed-resource) | 3.0.12 | MIT | Compilar los recursos de Windows (manifiesto, icono, versión) en el `build.rs` de `bracket-app` |
+| [miniz_oxide](https://crates.io/crates/miniz_oxide) | 0.9.1 | MIT OR Zlib OR Apache-2.0 | Comprimir en PNG los tamaños grandes del icono generado (`build.rs`) |
 
 ## Gramáticas y temas
 

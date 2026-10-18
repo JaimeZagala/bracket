@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 
-use eframe::egui;
+pub use eframe::egui;
 
 pub use editor_view::{EditorStyle, EditorView, ViewOutput};
 pub use measure::Probe;
@@ -42,6 +42,8 @@ pub struct Launch {
     pub window_file: Option<PathBuf>,
     /// Language packages found at startup.
     pub languages: bracket_syntax::Packages,
+    /// Icon of the window (title bar and taskbar), if the executable provides one.
+    pub window_icon: Option<egui::IconData>,
 }
 
 /// The session left by the previous run.
@@ -77,7 +79,7 @@ pub fn run(launch: Launch, probe: Option<Probe>) -> eframe::Result {
         .unwrap_or_else(|| std::env::temp_dir().join("bracket-measure-window.ron"));
     let maximize_later = Arc::new(AtomicBool::new(false));
     let hook_flag = Arc::clone(&maximize_later);
-    let options = eframe::NativeOptions {
+    let mut options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Bracket")
             .with_inner_size([1000.0, 700.0])
@@ -103,6 +105,9 @@ pub fn run(launch: Launch, probe: Option<Probe>) -> eframe::Result {
         })),
         ..Default::default()
     };
+    if let Some(icon) = launch.window_icon.clone() {
+        options.viewport = options.viewport.with_icon(Arc::new(icon));
+    }
     eframe::run_native(
         "Bracket",
         options,
