@@ -149,7 +149,12 @@ tab_width = 4        # tab width, 1 to 16
 [files]
 line_ending = "crlf" # line ending of new files: "crlf", "lf" or "cr"
 encoding = "utf-8"   # encoding of new files: "utf-8", "utf-8-bom" or another one (e.g. "windows-1252")
+
+[project]
+exclude = ["bin/", "obj/"] # left out of every project, like .gitignore lines
 ```
+
+Projects also leave out the files excluded by `.gitignore` and `.ignore` (even if the folder is not a Git repository) and the `.git`, `.svn` and `.hg` folders; hidden files do appear.
 
 The language can also be changed from the button on the right of the status bar: the change is immediate and saved in `config.toml`. Other changes made by hand take effect when Bracket restarts. If a value is invalid, its default is used and the status bar says so; the rest of the file is honoured. When Bracket saves the configuration, it writes all its keys with their current value, keeps your comments, the order and any keys it does not know, and it never overwrites a file with syntax errors.
 

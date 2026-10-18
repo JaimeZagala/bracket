@@ -149,7 +149,12 @@ tab_width = 4        # ancho de tabulación, de 1 a 16
 [files]
 line_ending = "crlf" # salto de línea de los ficheros nuevos: "crlf", "lf" o "cr"
 encoding = "utf-8"   # codificación de los ficheros nuevos: "utf-8", "utf-8-bom" u otra (p. ej. "windows-1252")
+
+[project]
+exclude = ["bin/", "obj/"] # se dejan fuera de todos los proyectos, como líneas de .gitignore
 ```
+
+En los proyectos se dejan fuera también los ficheros que excluyen `.gitignore` e `.ignore` (aunque la carpeta no sea un repositorio Git) y las carpetas `.git`, `.svn` y `.hg`; los ficheros ocultos sí aparecen.
 
 El idioma también se puede cambiar desde el botón de la derecha de la barra de estado: el cambio es inmediato y se guarda en `config.toml`. El resto de cambios hechos a mano se aplican al reiniciar Bracket. Si un valor no es válido, se usa su valor por defecto y la barra de estado lo avisa; el resto del fichero se respeta. Cuando Bracket guarda la configuración, escribe todas sus claves con el valor actual, mantiene tus comentarios, el orden y las claves que no conoce, y nunca sobrescribe un fichero con errores de sintaxis.
 

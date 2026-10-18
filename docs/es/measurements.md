@@ -173,3 +173,14 @@ El coste por línea es el del motor de regex en Rust puro; como se resalta prime
 | Ctrl+P con 50.000 ficheros | < 50 ms | — | Fase 2 |
 
 La primera ejecución de cada medición (1,2–1,5 s) es la de un exe recién copiado: incluye el análisis de Windows Defender y no representa el uso normal.
+
+## Fase 2, paso 4 — recorrido del proyecto (2026-10-19, equipo A)
+
+`cargo bench -p bracket-index` sobre `target/project-50k` (`cargo run --release -p bracket-index --example generate_project`): 50.000 ficheros en 50 × 20 carpetas, más 5.000 en `node_modules/`, que excluye `.gitignore`.
+
+| Benchmark | Tiempo (mediana) |
+|---|---|
+| `walk/index_50k_files`: índice completo, varios hilos | 110,5 ms |
+| `walk/list_root`: listar la raíz para el árbol | 1,53 ms |
+
+En caliente (la caché de ficheros de Windows ya tiene las carpetas). Generar el proyecto tarda unos 26 s, casi todo por Windows Defender.

@@ -10,7 +10,7 @@ Status: Phase 1 complete (0.1.0). This document describes the agreed structure; 
 |---|---|---|---|
 | `bracket-core` | Buffer (ropey), multiple selections, transactional undo/redo, cursor movement, encoding, line endings, document model. No UI and no Windows APIs. | — | Phase 1: buffer, selections, history with exact saved state, movement, encodings, line endings, document with atomic saving, reloading and disk stamps |
 | `bracket-syntax` | Loading of built-in and external languages, incremental line-based highlighting with cache, themes. | `bracket-core` | Phase 1: language registry (the six built-in languages, extensions, badge and grammar) and highlighting with syntect |
-| `bracket-index` | Project walking, symbol extraction (tree-sitter and regex), incremental index, fuzzy search, references by name. | `bracket-core` (planned) | Empty |
+| `bracket-index` | Project walking, symbol extraction (tree-sitter and regex), incremental index, fuzzy search, references by name. | `bracket-core` | Phase 2: project walk with `ignore` (file index and listing one folder) |
 | `bracket-search` | Cancellable regex find and replace in a file and across a folder, with streamed results. | `bracket-core` (planned) | Empty |
 | `bracket-session` | TOML configuration, portable mode, recoverable session, recent files, file watching, command registry. | `bracket-core` | Phase 1: paths (portable mode or `%APPDATA%`), TOML configuration, recoverable session and file watching |
 | `bracket-update` | Release channel checks, download, checksum and signature verification, apply and rollback. | — | Empty |
@@ -76,6 +76,7 @@ Worker threads use `std::thread` and `std::sync::mpsc`. `bracket-core` (`task.rs
 - The window (position, size, maximized) is saved by eframe with its `persistence` feature in `window.ron`, in the data folder (portable mode too). eframe moves it back onto a connected monitor if its own is gone and accounts for each screen's scaling. Only the window is saved, not egui's widget state. eframe applies `centered` after the saved position, so it is only turned on while `window.ron` does not exist yet. Cost: 547 KB (serde and ron).
 - The session also keeps the project folder (`project`); if it no longer exists, it is not reopened.
 - Recent items (`bracket-session`, `recent.rs`) go in `recent.toml`, apart from the session because they are history. A single thread writes the file with the newest version of the list, so two quick changes never write at the same time. Entries that no longer exist are hidden when the menu is shown and removed if opening them fails.
+- The project walk (`bracket-index`, `walk.rs`) uses ripgrep's `ignore` crate with the same rules for the whole index and for listing one folder of the tree: `.gitignore` even without a repository (`require_git(false)`), `.ignore`, hidden files included and version control folders left out. The `[project] exclude` patterns go in as negated overrides (`!pattern`), because a plain override means "only this". The whole index runs on several threads (`build_parallel`) and checks the `CancelToken` at every entry; it returns paths relative to the root sorted case-insensitively.
 - While the measurement probes are on, the session is neither read nor written, so measurements neither depend on the user's session nor change it.
 
 ## Windows resources (Phase 1)

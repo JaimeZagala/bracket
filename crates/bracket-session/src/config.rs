@@ -19,6 +19,9 @@
 //! [files]
 //! line_ending = "crlf" # line ending of new files: "crlf", "lf" or "cr"
 //! encoding = "utf-8"  # encoding of new files: "utf-8", "utf-8-bom", or another label
+//!
+//! [project]
+//! exclude = ["bin/", "obj/"] # left out of every project, like .gitignore lines
 //! ```
 
 use std::fmt;
@@ -29,7 +32,7 @@ use std::path::Path;
 use bracket_core::LineEnding;
 use bracket_core::document::{RenameReplacer, write_bytes_atomic};
 use bracket_core::encoding::TextEncoding;
-use toml_edit::{DocumentMut, Item, Table, Value};
+use toml_edit::{Array, DocumentMut, Item, Table, Value};
 
 /// Interface language.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -90,6 +93,7 @@ pub const FONT_SIZE_MIN: f32 = 8.0;
 pub const FONT_SIZE_MAX: f32 = 48.0;
 pub const TAB_WIDTH_MAX: usize = 16;
 pub const FONT_FAMILY_MAX_LEN: usize = 100;
+pub const EXCLUDE_MAX: usize = 200;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Config {
@@ -105,6 +109,8 @@ pub struct Config {
     pub line_ending: LineEnding,
     /// Encoding used for new files.
     pub encoding: TextEncoding,
+    /// Left out of every project, written like `.gitignore` lines.
+    pub project_exclude: Vec<String>,
 }
 
 impl Default for Config {
@@ -118,6 +124,7 @@ impl Default for Config {
             tab_width: 4,
             line_ending: LineEnding::CrLf,
             encoding: TextEncoding::UTF8,
+            project_exclude: Vec::new(),
         }
     }
 }
@@ -219,6 +226,7 @@ pub fn parse(text: &str) -> LoadedConfig {
                     .as_str()
                     .and_then(TextEncoding::from_code)
                     .map(|v| config.encoding = v),
+                ("project", "exclude") => string_list(item).map(|v| config.project_exclude = v),
                 _ => {
                     warnings.push(ConfigWarning::UnknownKey { key: full_key });
                     continue;
@@ -234,6 +242,19 @@ pub fn parse(text: &str) -> LoadedConfig {
     }
 
     LoadedConfig { config, warnings }
+}
+
+/// An array of strings, without empty entries; `None` if anything else is in it.
+fn string_list(item: &Item) -> Option<Vec<String>> {
+    let array = item.as_array().filter(|a| a.len() <= EXCLUDE_MAX)?;
+    let mut list = Vec::new();
+    for value in array {
+        let text = value.as_str()?.trim();
+        if !text.is_empty() {
+            list.push(text.to_owned());
+        }
+    }
+    Some(list)
 }
 
 /// Accepts both `14` and `14.5`.
@@ -341,6 +362,18 @@ pub fn save(config: &Config, path: &Path) -> Result<(), SaveError> {
         line_ending_code(config.line_ending).into(),
     );
     set(&mut doc, "files", "encoding", config.encoding.code().into());
+    set(
+        &mut doc,
+        "project",
+        "exclude",
+        Value::Array(
+            config
+                .project_exclude
+                .iter()
+                .map(String::as_str)
+                .collect::<Array>(),
+        ),
+    );
 
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(SaveError::Io)?;
@@ -395,7 +428,8 @@ mod tests {
         let loaded = parse(
             "[interface]\nlanguage = \"en\"\nappearance = \"dark\"\n[editor]\n\
              font_family = \" Fira Code \"\ntheme = \"Solarized (dark)\"\n\
-             font_size = 16\ntab_width = 2\n[files]\nline_ending = \"lf\"\n",
+             font_size = 16\ntab_width = 2\n[files]\nline_ending = \"lf\"\n\
+             [project]\nexclude = [\"bin/\", \" \", \"*.log\"]\n",
         );
         assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
         assert_eq!(
@@ -409,6 +443,7 @@ mod tests {
                 tab_width: 2,
                 line_ending: LineEnding::Lf,
                 encoding: TextEncoding::UTF8,
+                project_exclude: vec!["bin/".into(), "*.log".into()],
             }
         );
     }
@@ -429,9 +464,10 @@ mod tests {
 
     #[test]
     fn out_of_range_values_are_rejected() {
-        let loaded = parse("[editor]\ntab_width = 0\nfont_size = 200\n");
+        let loaded =
+            parse("[editor]\ntab_width = 0\nfont_size = 200\n[project]\nexclude = [\"a\", 3]\n");
         assert_eq!(loaded.config, Config::default());
-        assert_eq!(loaded.warnings.len(), 2);
+        assert_eq!(loaded.warnings.len(), 3);
     }
 
     #[test]
@@ -481,6 +517,7 @@ mod tests {
             tab_width: 8,
             line_ending: LineEnding::Cr,
             encoding: TextEncoding::UTF8_BOM,
+            project_exclude: vec!["obj/".into(), "docs/old/**".into()],
         };
         save(&config, &path).unwrap();
         let loaded = load(&path);

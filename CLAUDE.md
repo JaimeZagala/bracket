@@ -20,6 +20,7 @@ cargo build --release -p bracket-app        # target/release/bracket.exe
 cargo bench --workspace                     # benchmarks (criterion)
 ./scripts/compare-startup.ps1 -A <exe anterior> -B target/release/bracket.exe   # regresiones de arranque
 cargo run --release -p bracket-core --example generate_large_file   # target/large-1m.txt
+cargo run --release -p bracket-index --example generate_project     # target/project-50k (50.000 ficheros)
 ```
 
 Las mediciones se anotan en `docs/es/measurements.md` y `docs/en/measurements.md` con fecha, versión y equipo.
