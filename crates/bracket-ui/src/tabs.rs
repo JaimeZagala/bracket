@@ -134,9 +134,9 @@ pub struct TabHighlight {
 }
 
 impl TabHighlight {
-    pub fn start(scope: String, notify: impl Fn() + Send + 'static) -> Self {
+    pub fn start(scope: String, theme: String, notify: impl Fn() + Send + 'static) -> Self {
         Self {
-            worker: HighlightWorker::start(scope, notify),
+            worker: HighlightWorker::start(scope, theme, notify),
             latest: None,
             requested: None,
         }

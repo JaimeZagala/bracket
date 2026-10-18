@@ -30,6 +30,38 @@ pub struct ViewOutput {
     pub visible_lines: std::ops::Range<usize>,
 }
 
+/// Colours of the editor area: from the editor theme, falling back to the interface's.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EditorStyle {
+    /// Text without a highlighting colour.
+    pub text: Color32,
+    pub line_number: Color32,
+    pub selection: Color32,
+    pub caret: Color32,
+    /// Background of the line numbers, if the theme has its own.
+    pub gutter: Option<Color32>,
+}
+
+impl EditorStyle {
+    /// The interface's own colours.
+    pub fn from_visuals(visuals: &egui::Visuals) -> Self {
+        Self {
+            text: visuals.text_color(),
+            line_number: visuals.weak_text_color(),
+            selection: visuals.selection.bg_fill,
+            caret: visuals.text_cursor.stroke.color,
+            gutter: None,
+        }
+    }
+}
+
+/// How to colour the text: the highlighting and the editor colours.
+#[derive(Clone, Copy)]
+struct Look<'a> {
+    highlights: Option<&'a Highlights>,
+    style: &'a EditorStyle,
+}
+
 pub struct EditorView {
     id: Id,
     /// IME composition text, shown at the caret but not yet part of the buffer.
@@ -127,6 +159,7 @@ impl EditorView {
         ui: &mut Ui,
         doc: &mut Document,
         highlights: Option<&Highlights>,
+        style: &EditorStyle,
     ) -> ViewOutput {
         let mut output = ViewOutput::default();
         let font = FontId::monospace(self.font_size);
@@ -183,7 +216,7 @@ impl EditorView {
                 &layout,
                 first..last,
                 response.has_focus(),
-                highlights,
+                Look { highlights, style },
             );
 
             let caret_rect = self.caret_rect(ui, doc, &layout);
@@ -379,16 +412,25 @@ impl EditorView {
         layout: &Layout<'_>,
         lines: std::ops::Range<usize>,
         has_focus: bool,
-        highlights: Option<&Highlights>,
+        look: Look<'_>,
     ) -> Option<char> {
         let mut missing_glyph = None;
         let painter = ui.painter();
-        let visuals = ui.visuals();
-        let text_color = visuals.text_color();
-        let weak_color = visuals.weak_text_color();
-        let selection_color = visuals.selection.bg_fill;
-        let caret_color = visuals.text_cursor.stroke.color;
+        let Look { highlights, style } = look;
+        let text_color = style.text;
+        let weak_color = style.line_number;
+        let selection_color = style.selection;
+        let caret_color = style.caret;
         let m = layout.metrics;
+        if let Some(gutter) = style.gutter {
+            let clip = ui.clip_rect();
+            let right = layout.origin.x + m.gutter_width - m.char_width * 0.5;
+            painter.rect_filled(
+                Rect::from_min_max(pos2(clip.left(), clip.top()), pos2(right, clip.bottom())),
+                0.0,
+                gutter,
+            );
+        }
         let text = doc.buffer.text();
         let selections = doc.buffer.selections();
         let primary_head = selections.primary().head;
@@ -779,7 +821,7 @@ mod tests {
         };
         let mut output = ctx.run_ui(input, |ui| {
             egui::CentralPanel::default().show(ui, |ui| {
-                view.show(ui, doc, None);
+                view.show(ui, doc, None, &EditorStyle::from_visuals(ui.visuals()));
             });
         });
         // There is no renderer to upload font textures to; egui asserts they are handled.

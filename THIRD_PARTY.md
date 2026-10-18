@@ -41,4 +41,4 @@ No se incluyen en el ejecutable.
 |---|---|---|
 | Gramáticas de C#, CSS, JSON, XML, HTML, JavaScript y el resto del paquete de syntect | [sublimehq/Packages](https://github.com/sublimehq/Packages), a través del paquete incluido en syntect 5.3.0 | Licencia propia de Sublime HQ: permite copiar, usar, modificar y distribuir, sin garantía y sin exigir atribución (los ficheros con licencia propia se rigen por ella) |
 | Gramáticas de Razor y T-SQL (`crates/bracket-syntax/grammars/`) | Propias de Bracket | MIT OR Apache-2.0 |
-| Tema de colores InspiredGitHub | Incluido en syntect 5.3.0 ([InspiredGitHub.tmtheme](https://github.com/sethlopezme/InspiredGitHub.tmtheme)) | MIT |
+| Temas de colores: InspiredGitHub, Solarized (claro y oscuro), base16-ocean (claro y oscuro), base16-eighties y base16-mocha | Incluidos en syntect 5.3.0 ([InspiredGitHub.tmtheme](https://github.com/sethlopezme/InspiredGitHub.tmtheme), [Solarized](https://github.com/altercation/solarized), [base16](https://github.com/chriskempson/base16)) | MIT |

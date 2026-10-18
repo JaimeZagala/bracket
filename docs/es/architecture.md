@@ -95,6 +95,12 @@ En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync
 - Cada pestaña resaltada tiene su hilo (`HighlightWorker`). La interfaz pide las líneas visibles más una página por arriba y otra por abajo. El hilo atiende solo la petición más reciente, abandona una larga si llega otra (conservando el trabajo hecho) y devuelve tramos de color por línea. Mientras llega el resultado nuevo, las líneas cuyo texto no cambió usan el anterior.
 - La vista construye un `LayoutJob` de egui por línea con esos colores (egui guarda en caché las galeradas).
 
+## Temas (Fase 1)
+
+- Dos ajustes independientes: la apariencia de la interfaz (`Appearance`: según el sistema, clara u oscura, aplicada con `egui::Context::set_theme`, que también cambia la barra de título de Windows) y el tema del editor (`auto` o el nombre de uno de los siete temas de syntect).
+- `follow_theme` (en `App::logic`) calcula el tema efectivo: el configurado o, en automático, el claro o el oscuro según `ctx.theme()`, así que sigue a Windows en directo. Cuando cambia, se descartan los hilos de resaltado, que se vuelven a crear con el tema nuevo.
+- `bracket-syntax` da los colores del área del editor (`ThemeColors`: fondo, texto, cursor, selección, margen y números de línea) sin depender de egui; la interfaz usa los de la interfaz donde el tema no define uno (`EditorStyle`).
+
 ## Paquetes de lenguaje (Fase 1)
 
 - `bracket-syntax` (`packages.rs`) lee `languages/<id>/language.toml` en las carpetas de `Paths::language_dirs` (prioridad: `%APPDATA%\Bracket\languages`, `languages` junto al exe; en portable solo esta). La primera carpeta con un id gana; un paquete con el id de un lenguaje integrado lo sustituye, y en las extensiones los paquetes van antes que los integrados.

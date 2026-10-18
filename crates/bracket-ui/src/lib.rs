@@ -17,7 +17,7 @@ use std::thread::JoinHandle;
 
 use eframe::egui;
 
-pub use editor_view::{EditorView, ViewOutput};
+pub use editor_view::{EditorStyle, EditorView, ViewOutput};
 pub use measure::Probe;
 
 /// Everything `bracket-app` prepares before the window opens.

@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use bracket_core::document::{Document, LineEnding, LoadedText};
 use bracket_core::{Motion, Selections};
-use bracket_ui::EditorView;
 use bracket_ui::fonts::{Fallback, FontFile, StartupFonts, definitions};
+use bracket_ui::{EditorStyle, EditorView};
 use criterion::{Criterion, criterion_group, criterion_main};
 use eframe::egui::{self, Pos2, RawInput, Rect, vec2};
 
@@ -33,7 +33,7 @@ fn frame(ctx: &egui::Context, view: &mut EditorView, doc: &mut Document) -> usiz
     };
     let output = ctx.run_ui(input, |ui| {
         egui::CentralPanel::default().show(ui, |ui| {
-            view.show(ui, doc, None);
+            view.show(ui, doc, None, &EditorStyle::from_visuals(ui.visuals()));
         });
     });
     let shapes = output.shapes.len();

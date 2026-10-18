@@ -95,6 +95,12 @@ In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; can
 - Each highlighted tab has its own thread (`HighlightWorker`). The UI asks for the visible lines plus a page above and below. The thread only serves the newest request, gives up a long one if another arrives (keeping the work done) and returns colour spans per line. Until the new result arrives, lines whose text did not change use the previous one.
 - The view builds one egui `LayoutJob` per line with those colours (egui caches the galleys).
 
+## Themes (Phase 1)
+
+- Two independent settings: the interface appearance (`Appearance`: system, light or dark, applied with `egui::Context::set_theme`, which also changes Windows' title bar) and the editor theme (`auto` or the name of one of syntect's seven themes).
+- `follow_theme` (in `App::logic`) works out the effective theme: the configured one or, when automatic, the light or dark one from `ctx.theme()`, so it follows Windows live. When it changes, the highlighting threads are dropped and created again with the new theme.
+- `bracket-syntax` provides the editor-area colours (`ThemeColors`: background, text, caret, selection, gutter and line numbers) without depending on egui; the interface uses its own where the theme defines none (`EditorStyle`).
+
 ## Language packages (Phase 1)
 
 - `bracket-syntax` (`packages.rs`) reads `languages/<id>/language.toml` in the folders of `Paths::language_dirs` (priority: `%APPDATA%\Bracket\languages`, `languages` next to the exe; in portable mode only the latter). The first folder with an id wins; a package with a built-in language's id replaces it, and for extensions packages come before built-in languages.

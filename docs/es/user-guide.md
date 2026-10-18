@@ -50,7 +50,16 @@ Los ficheros de C#, Razor (`.razor`, `.cshtml`), CSS, T-SQL (`.sql`), JSON y XML
 
 - Los ficheros de más de 16 MB y las líneas de más de 20.000 caracteres (por ejemplo, JSON minificado) se muestran sin colores, para que el editor siga siendo rápido.
 - En Razor se colorean las directivas (`@page`, `@using`...), los comentarios `@* *@`, las expresiones (`@Model.Nombre`, `@(a + b)`) y el C# de `@{ }` y `@code { }`. El HTML dentro de los bloques de código todavía no se reconoce.
-- Por ahora el tema de colores es fijo (claro); los temas llegan en un paso posterior.
+- Los colores dependen del tema del editor (ver [Apariencia y temas](#apariencia-y-temas)).
+
+## Apariencia y temas
+
+En el menú **Ver**:
+
+- **Apariencia:** interfaz clara, oscura o según Windows (por defecto). Con «Según Windows», Bracket cambia solo cuando cambia el modo de Windows.
+- **Tema del editor:** los colores del texto y del fondo del editor. «Automático» (por defecto) usa InspiredGitHub con la apariencia clara y base16 Ocean oscuro con la oscura; también se puede elegir uno fijo: InspiredGitHub, Solarized (claro u oscuro), base16-ocean (claro u oscuro), base16-eighties o base16-mocha.
+
+Los cambios se aplican al momento y se guardan en `config.toml`.
 
 ## Lenguajes externos
 
@@ -111,9 +120,11 @@ El fichero es opcional: si no existe se usan los valores por defecto, y Bracket 
 ```toml
 [interface]
 language = "es"      # idioma de la interfaz: "es" (español) o "en" (inglés)
+appearance = "system" # apariencia: "system" (según Windows), "light" o "dark"
 
 [editor]
 font_family = "Consolas" # fuente del editor: cualquier fuente instalada
+theme = "auto"       # tema del editor: "auto" o un nombre, p. ej. "Solarized (dark)"
 font_size = 14.0     # tamaño de letra, de 8 a 48
 tab_width = 4        # ancho de tabulación, de 1 a 16
 

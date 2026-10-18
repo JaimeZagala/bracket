@@ -14,8 +14,8 @@ use std::sync::OnceLock;
 
 use std::path::Path;
 
-use bracket_session::ConfigWarning;
 pub use bracket_session::Language;
+use bracket_session::{Appearance, ConfigWarning};
 use bracket_syntax::PackageWarning;
 
 const SPANISH_CATALOG: &str = include_str!("../locales/es.toml");
@@ -123,6 +123,30 @@ impl Texts {
 
     pub fn menu_close_tab(&self) -> &str {
         self.get("menu_close_tab")
+    }
+
+    pub fn menu_view(&self) -> &str {
+        self.get("menu_view")
+    }
+
+    pub fn menu_appearance(&self) -> &str {
+        self.get("menu_appearance")
+    }
+
+    pub fn appearance(&self, appearance: Appearance) -> &str {
+        self.get(match appearance {
+            Appearance::System => "appearance_system",
+            Appearance::Light => "appearance_light",
+            Appearance::Dark => "appearance_dark",
+        })
+    }
+
+    pub fn menu_editor_theme(&self) -> &str {
+        self.get("menu_editor_theme")
+    }
+
+    pub fn editor_theme_auto(&self) -> &str {
+        self.get("editor_theme_auto")
     }
 
     pub fn menu_exit(&self) -> &str {
@@ -406,6 +430,19 @@ mod tests {
                 ("menu_save_as", t.menu_save_as().to_owned()),
                 ("menu_close_tab", t.menu_close_tab().to_owned()),
                 ("menu_exit", t.menu_exit().to_owned()),
+                ("menu_view", t.menu_view().to_owned()),
+                ("menu_appearance", t.menu_appearance().to_owned()),
+                (
+                    "appearance_system",
+                    t.appearance(Appearance::System).to_owned(),
+                ),
+                (
+                    "appearance_light",
+                    t.appearance(Appearance::Light).to_owned(),
+                ),
+                ("appearance_dark", t.appearance(Appearance::Dark).to_owned()),
+                ("menu_editor_theme", t.menu_editor_theme().to_owned()),
+                ("editor_theme_auto", t.editor_theme_auto().to_owned()),
                 ("dialog_open_title", t.dialog_open_title().to_owned()),
                 ("dialog_save_as_title", t.dialog_save_as_title().to_owned()),
                 ("saved", t.saved().to_owned()),

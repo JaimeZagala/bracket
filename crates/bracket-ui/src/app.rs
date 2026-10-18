@@ -14,17 +14,19 @@ use bracket_core::Selections;
 use bracket_core::document::{self, DiskStamp, Document, FileReplacer, LineEnding, SaveError};
 use bracket_core::encoding::{self, TextEncoding};
 use bracket_core::movement::{self, Motion};
+use bracket_session::config::AUTO_THEME;
 use bracket_session::{
-    Config, ConfigWarning, FileWatcher, Language, LoadedConfig, OpenRequest, SessionTab, config,
-    requests,
+    Appearance, Config, ConfigWarning, FileWatcher, Language, LoadedConfig, OpenRequest,
+    SessionTab, config, requests,
 };
-use bracket_syntax::highlight::MAX_HIGHLIGHT_BYTES;
+use bracket_syntax::ThemeColors;
+use bracket_syntax::highlight::{self, MAX_HIGHLIGHT_BYTES};
 use bracket_syntax::{LanguageRegistry, PackageWarning};
 use eframe::egui::{self, Id, Key, KeyboardShortcut, Modifiers, ViewportCommand};
 
 use crate::dialogs;
 use crate::disk::{self, DiskNotice, DiskState, DiskWatch, NoticeAction};
-use crate::editor_view::EditorView;
+use crate::editor_view::{EditorStyle, EditorView};
 use crate::fonts::{self, Fallback, FontSource, LoadedFallback};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
@@ -50,6 +52,13 @@ enum StatusAction {
     ConvertLineEndings(LineEnding),
     ReopenWith(TextEncoding),
     SaveWith(TextEncoding),
+}
+
+/// Something picked in the View menu.
+#[derive(Debug, Clone)]
+enum ViewAction {
+    Appearance(Appearance),
+    EditorTheme(String),
 }
 
 /// What waits for the user to deal with unsaved changes.
@@ -134,6 +143,10 @@ pub struct BracketApp {
     status: Option<String>,
     /// Configuration warnings, shown (translated) while there is no other status message.
     config_warnings: Vec<ConfigWarning>,
+    /// The editor theme in use (the configured one, or the light or dark default).
+    editor_theme: String,
+    /// Its editor-area colours.
+    theme_colors: ThemeColors,
     /// Problems with language packages; grammar problems are added once they are compiled.
     package_warnings: Vec<PackageWarning>,
     grammar_warnings_seen: bool,
@@ -199,7 +212,19 @@ impl BracketApp {
             warnings: package_warnings,
         } = languages;
         bracket_syntax::highlight::set_external_grammars(grammars);
-        let LoadedConfig { config, warnings } = settings;
+        let LoadedConfig {
+            config,
+            mut warnings,
+        } = settings;
+        ctx.set_theme(theme_preference(config.appearance));
+        if config.editor_theme != AUTO_THEME
+            && !highlight::theme_names().contains(&config.editor_theme.as_str())
+        {
+            warnings.push(ConfigWarning::InvalidValue {
+                key: "editor.theme".to_owned(),
+                found: format!("\"{}\"", config.editor_theme),
+            });
+        }
 
         // The font thread started at the beginning of main() and has normally finished by now.
         let setup = fonts.join().ok();
@@ -238,6 +263,8 @@ impl BracketApp {
             languages: LanguageRegistry::with_packages(package_languages),
             package_warnings,
             grammar_warnings_seen: false,
+            editor_theme: String::new(),
+            theme_colors: ThemeColors::default(),
             reveal_active_tab: false,
             status: None,
             config_warnings: warnings,
@@ -729,7 +756,7 @@ impl BracketApp {
         }
         for tab in &mut self.tabs {
             if tab.loading.is_none() && tab.unloaded.is_none() && tab.highlight.is_none() {
-                start_highlight(tab, &self.languages, ctx);
+                start_highlight(tab, &self.languages, &self.editor_theme, ctx);
             }
         }
         // A tab opened for a file that could not be read has nothing to show.
@@ -889,8 +916,10 @@ impl BracketApp {
     }
 
     /// Draws the menu bar. Returns the command picked, if any.
-    fn menu_bar(&self, ui: &mut egui::Ui) -> Option<Command> {
+    fn menu_bar(&self, ui: &mut egui::Ui) -> (Option<Command>, Option<ViewAction>) {
         let mut picked = None;
+        let mut view_pick = None;
+        let theme_names = highlight::theme_names();
         let items = [
             (Command::New, self.texts.menu_new()),
             (Command::Open, self.texts.menu_open()),
@@ -917,9 +946,39 @@ impl BracketApp {
                         ui.close();
                     }
                 });
+                ui.menu_button(self.texts.menu_view(), |ui| {
+                    ui.menu_button(self.texts.menu_appearance(), |ui| {
+                        for appearance in Appearance::ALL {
+                            let label = self.texts.appearance(appearance);
+                            let current = appearance == self.config.appearance;
+                            if ui.selectable_label(current, label).clicked() {
+                                view_pick = Some(ViewAction::Appearance(appearance));
+                                ui.close();
+                            }
+                        }
+                    });
+                    ui.menu_button(self.texts.menu_editor_theme(), |ui| {
+                        let auto = self.config.editor_theme == AUTO_THEME;
+                        if ui
+                            .selectable_label(auto, self.texts.editor_theme_auto())
+                            .clicked()
+                        {
+                            view_pick = Some(ViewAction::EditorTheme(AUTO_THEME.to_owned()));
+                            ui.close();
+                        }
+                        ui.separator();
+                        for name in &theme_names {
+                            let current = self.config.editor_theme == *name;
+                            if ui.selectable_label(current, *name).clicked() {
+                                view_pick = Some(ViewAction::EditorTheme((*name).to_owned()));
+                                ui.close();
+                            }
+                        }
+                    });
+                });
             });
         });
-        picked
+        (picked, view_pick)
     }
 
     /// Draws the tab bar. Returns what was done with the mouse, if anything.
@@ -1102,6 +1161,61 @@ impl BracketApp {
         }
     }
 
+    fn run_view_action(&mut self, ctx: &egui::Context, action: ViewAction) {
+        match action {
+            ViewAction::Appearance(appearance) => {
+                if appearance == self.config.appearance {
+                    return;
+                }
+                self.config.appearance = appearance;
+                ctx.set_theme(theme_preference(appearance));
+            }
+            ViewAction::EditorTheme(name) => {
+                if name == self.config.editor_theme {
+                    return;
+                }
+                self.config.editor_theme = name;
+            }
+        }
+        self.follow_theme(ctx);
+        self.start_config_save(ctx);
+    }
+
+    /// Keeps the editor theme in step with the configuration and the interface (light or
+    /// dark, which may follow Windows). A new theme restarts highlighting.
+    fn follow_theme(&mut self, ctx: &egui::Context) {
+        let configured = self.config.editor_theme.as_str();
+        let theme = if configured != AUTO_THEME && highlight::theme_names().contains(&configured) {
+            configured
+        } else if ctx.theme() == egui::Theme::Dark {
+            highlight::DARK_THEME
+        } else {
+            highlight::LIGHT_THEME
+        };
+        if theme == self.editor_theme {
+            return;
+        }
+        self.editor_theme = theme.to_owned();
+        self.theme_colors = highlight::theme_colors(theme);
+        for tab in &mut self.tabs {
+            tab.highlight = None;
+        }
+        ctx.request_repaint();
+    }
+
+    /// The editor-area colours: the theme's, or the interface's where it has none.
+    fn editor_style(&self, visuals: &egui::Visuals) -> EditorStyle {
+        let base = EditorStyle::from_visuals(visuals);
+        let colors = &self.theme_colors;
+        EditorStyle {
+            text: colors.foreground.map_or(base.text, color32),
+            line_number: colors.gutter_foreground.map_or(base.line_number, color32),
+            selection: colors.selection.map_or(base.selection, color32),
+            caret: colors.caret.map_or(base.caret, color32),
+            gutter: colors.gutter.map(color32),
+        }
+    }
+
     /// Switches the interface language at once and saves it in the configuration.
     fn set_language(&mut self, ctx: &egui::Context, language: Language) {
         if language == self.config.language {
@@ -1277,6 +1391,7 @@ impl eframe::App for BracketApp {
     /// session and closing from the taskbar are handled even then.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.minimized = ctx.input(|i| i.viewport().minimized.unwrap_or(false));
+        self.follow_theme(ctx);
         self.poll_loading(ctx);
         self.poll_saving();
         self.poll_config_saving();
@@ -1302,9 +1417,13 @@ impl eframe::App for BracketApp {
             .iter()
             .find(|(_, shortcut)| ctx.input_mut(|i| i.consume_shortcut(shortcut)))
             .map(|(command, _)| *command);
-        let menu_command = self.menu_bar(ui);
+        let (menu_command, view_action) = self.menu_bar(ui);
         if let Some(command) = shortcut.or(menu_command) {
             self.run_command(&ctx, frame, command);
+        }
+        if let Some(action) = view_action {
+            self.run_view_action(&ctx, action);
+            self.focus_editor(&ctx);
         }
         match self.tab_bar(ui) {
             Some(TabAction::Activate(index)) => self.activate(&ctx, index),
@@ -1318,7 +1437,13 @@ impl eframe::App for BracketApp {
         }
         let mut missing_glyph = None;
         let mut notice_action = None;
-        egui::CentralPanel::default().show(ui, |ui| {
+        let style = self.editor_style(ui.visuals());
+        let background = self
+            .theme_colors
+            .background
+            .map_or(ui.visuals().panel_fill, color32);
+        let panel = egui::Frame::central_panel(ui.style()).fill(background);
+        egui::CentralPanel::default().frame(panel).show(ui, |ui| {
             let tab = &mut self.tabs[self.active];
             if let Some(loading) = &tab.loading {
                 let waited = loading.started.elapsed();
@@ -1339,7 +1464,7 @@ impl eframe::App for BracketApp {
                     ..
                 } = tab;
                 let highlights = highlight.as_mut().and_then(TabHighlight::current);
-                let output = view.show(ui, doc, highlights);
+                let output = view.show(ui, doc, highlights, &style);
                 if let Some(highlight) = highlight {
                     highlight.follow(doc, output.visible_lines);
                 }
@@ -1361,8 +1486,20 @@ impl eframe::App for BracketApp {
     }
 }
 
+fn theme_preference(appearance: Appearance) -> egui::ThemePreference {
+    match appearance {
+        Appearance::System => egui::ThemePreference::System,
+        Appearance::Light => egui::ThemePreference::Light,
+        Appearance::Dark => egui::ThemePreference::Dark,
+    }
+}
+
+fn color32([r, g, b, a]: [u8; 4]) -> egui::Color32 {
+    egui::Color32::from_rgba_unmultiplied(r, g, b, a)
+}
+
 /// Starts highlighting a tab if its language has a grammar and the text is not too big.
-fn start_highlight(tab: &mut Tab, languages: &LanguageRegistry, ctx: &egui::Context) {
+fn start_highlight(tab: &mut Tab, languages: &LanguageRegistry, theme: &str, ctx: &egui::Context) {
     let Some(language) = tab.language.as_deref().and_then(|id| languages.get(id)) else {
         return;
     };
@@ -1370,9 +1507,11 @@ fn start_highlight(tab: &mut Tab, languages: &LanguageRegistry, ctx: &egui::Cont
         return;
     }
     let ctx = ctx.clone();
-    tab.highlight = Some(TabHighlight::start(language.scope.clone(), move || {
-        ctx.request_repaint()
-    }));
+    tab.highlight = Some(TabHighlight::start(
+        language.scope.clone(),
+        theme.to_owned(),
+        move || ctx.request_repaint(),
+    ));
 }
 
 /// The folder where other Bracket processes leave files for this one, and its watcher.
