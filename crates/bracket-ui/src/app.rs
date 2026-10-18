@@ -76,6 +76,8 @@ enum PendingAction {
 enum Command {
     New,
     Open,
+    OpenFolder,
+    CloseFolder,
     Save,
     SaveAs,
     CloseTab,
@@ -134,6 +136,8 @@ impl Command {
 pub struct BracketApp {
     texts: &'static Texts,
     config: Config,
+    /// Folder open as a project.
+    project: Option<PathBuf>,
     /// Never empty: closing the last tab opens an untitled one.
     tabs: Vec<Tab>,
     active: usize,
@@ -260,6 +264,7 @@ impl BracketApp {
         let mut app = Self {
             texts: i18n::texts(config.language),
             config,
+            project: None,
             tabs: Vec::new(),
             active: 0,
             next_tab_id: 0,
@@ -340,6 +345,10 @@ impl BracketApp {
             self.active = previous.active.min(self.tabs.len() - 1);
             self.reveal_active_tab = true;
         }
+        // A project folder that was deleted or moved is simply not reopened.
+        if let Some(project) = previous.project.filter(|p| p.is_dir()) {
+            self.set_project(Some(project));
+        }
     }
 
     /// Writes the session now (the window is closing). Returns false if it could not be
@@ -385,6 +394,10 @@ impl BracketApp {
     /// Opens a file from the command line or another Bracket, at its line and column if given.
     fn open_request(&mut self, ctx: &egui::Context, request: OpenRequest) {
         let OpenRequest { path, line, column } = request;
+        if path.is_dir() {
+            self.set_project(Some(path));
+            return;
+        }
         self.open_file(ctx, path);
         let Some(line) = line else { return };
         let position = (line, column.unwrap_or(1));
@@ -882,6 +895,8 @@ impl BracketApp {
                 self.status = None;
             }
             Command::Open => self.open_with_dialog(ctx, frame),
+            Command::OpenFolder => self.open_folder_with_dialog(frame),
+            Command::CloseFolder => self.set_project(None),
             // Nothing to save until the file has loaded.
             Command::Save | Command::SaveAs if loading => {}
             Command::Save if self.active_tab().doc.path().is_none() => {
@@ -901,12 +916,30 @@ impl BracketApp {
         self.focus_editor(ctx);
     }
 
+    /// Opens `folder` as the project, or closes the project with `None`. Open tabs stay.
+    fn set_project(&mut self, folder: Option<PathBuf>) {
+        let folder = folder.map(|f| std::path::absolute(&f).unwrap_or(f));
+        if let Some(keeper) = &mut self.session {
+            keeper.set_project(folder.clone());
+        }
+        self.project = folder;
+    }
+
+    fn open_folder_with_dialog(&mut self, frame: &eframe::Frame) {
+        let title = self.texts.dialog_open_folder_title();
+        if let Some(folder) = dialogs::pick_folder(frame, title, self.project.as_deref()) {
+            self.set_project(Some(folder));
+        }
+    }
+
     fn open_with_dialog(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
+        // The active file's folder, or else the project.
         let start_dir = self
             .active_tab()
             .path()
             .and_then(|p| p.parent())
-            .map(PathBuf::from);
+            .map(PathBuf::from)
+            .or_else(|| self.project.clone());
         let title = self.texts.dialog_open_title();
         if let Some(path) = dialogs::pick_file_to_open(frame, title, start_dir.as_deref()) {
             self.open_file(ctx, path);
@@ -934,13 +967,17 @@ impl BracketApp {
         let mut picked = None;
         let mut view_pick = None;
         let theme_names = highlight::theme_names();
-        let items = [
+        let mut items = vec![
             (Command::New, self.texts.menu_new()),
             (Command::Open, self.texts.menu_open()),
+            (Command::OpenFolder, self.texts.menu_open_folder()),
             (Command::Save, self.texts.menu_save()),
             (Command::SaveAs, self.texts.menu_save_as()),
             (Command::CloseTab, self.texts.menu_close_tab()),
         ];
+        if self.project.is_some() {
+            items.push((Command::CloseFolder, self.texts.menu_close_folder()));
+        }
         egui::Panel::top("menu").show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button(self.texts.menu_file(), |ui| {
@@ -1036,14 +1073,21 @@ impl BracketApp {
                 .collect()
         });
         for path in dropped {
-            self.open_file(ctx, path);
+            if path.is_dir() {
+                self.set_project(Some(path));
+            } else {
+                self.open_file(ctx, path);
+            }
         }
     }
 
     fn update_title(&mut self, ctx: &egui::Context) {
         let tab = self.active_tab();
-        let dirty = if tab.doc.is_dirty() { " ●" } else { "" };
-        let title = format!("{}{dirty} — Bracket", tab.title(self.texts));
+        let title = window_title(
+            &tab.title(self.texts),
+            tab.doc.is_dirty(),
+            self.project.as_deref(),
+        );
         if title != self.title {
             ctx.send_viewport_cmd(ViewportCommand::Title(title.clone()));
             self.title = title;
@@ -1683,6 +1727,16 @@ fn save_error_text(texts: &Texts, err: &SaveError) -> String {
     }
 }
 
+/// "file ● — project — Bracket": the active file, a dot for unsaved changes and the project
+/// folder's name.
+fn window_title(file: &str, dirty: bool, project: Option<&std::path::Path>) -> String {
+    let dirty = if dirty { " ●" } else { "" };
+    match project.and_then(|p| p.file_name()) {
+        Some(folder) => format!("{file}{dirty} — {} — Bracket", folder.to_string_lossy()),
+        None => format!("{file}{dirty} — Bracket"),
+    }
+}
+
 /// "Ln 3, Col 7", with the number of selections and of selected characters when there are.
 fn position_text(texts: &Texts, doc: &Document) -> String {
     let text = doc.buffer.text();
@@ -1721,6 +1775,15 @@ mod tests {
         doc.buffer.insert(text);
         doc.buffer.set_selections(Selections::new(selections, 0));
         doc
+    }
+
+    #[test]
+    fn the_title_names_the_file_and_the_project() {
+        assert_eq!(window_title("a.cs", false, None), "a.cs — Bracket");
+        assert_eq!(
+            window_title("a.cs", true, Some(std::path::Path::new(r"C:\src\Demo"))),
+            "a.cs ● — Demo — Bracket"
+        );
     }
 
     #[test]

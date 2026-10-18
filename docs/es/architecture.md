@@ -74,6 +74,7 @@ Los hilos de trabajo usan `std::thread` y `std::sync::mpsc`. `bracket-core` (`ta
 - Carga diferida: al arrancar solo se restauran la pestaña activa y las que tienen texto sin guardar (así cerrar y «Guardar todo» siguen viendo sus cambios). Las demás quedan como `Tab::unloaded` con su entrada de la sesión, que se vuelve a guardar tal cual hasta que la pestaña se activa por primera vez.
 - `bracket-app` lee la sesión al arrancar (30 µs con 10 pestañas).
 - La ventana (posición, tamaño, maximizada) la guarda eframe con su feature `persistence` en `window.ron`, en la carpeta de datos (también en modo portable). eframe la devuelve a un monitor conectado si el suyo ya no está y tiene en cuenta el escalado de cada pantalla. Solo se guarda la ventana, no el estado de los widgets de egui. eframe aplica `centered` después de la posición guardada, así que solo se activa cuando aún no existe `window.ron`. Coste: 547 KB (serde y ron).
+- La sesión guarda también la carpeta del proyecto (`project`); si ya no existe, no se reabre.
 - Con las sondas de medición activas no se lee ni se escribe la sesión, para que las medidas no dependan de la sesión del usuario ni la cambien.
 
 ## Recursos de Windows (Fase 1)

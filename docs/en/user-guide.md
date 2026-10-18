@@ -12,6 +12,12 @@ Bracket 0.1.0 (Phase 1, base editor). This guide describes what already works an
 - If there are unsaved changes, Bracket asks before closing the tab. It does not ask when exiting: the changes stay in the session (see below).
 - Bracket detects the encoding when opening (UTF-8, UTF-16 and legacy encodings such as windows-1252) and saves in the same one, byte for byte. If a file cannot be written back exactly the same, it opens read-only and the status bar says so.
 
+## Projects
+
+A folder opens as a project with **File → Open Folder**, with `bracket.exe C:\path\folder`, by dropping it on the window or by handing it to a Bracket that is already open. The window title shows the project's name, the Open dialog starts in it and the session remembers it when Bracket closes. **File → Close Folder** closes it; open tabs stay.
+
+The folder tree panel, Ctrl+P and project search come in the next steps of Phase 2.
+
 ## Tabs
 
 - Each file opens in its own tab. If the active tab is an empty new document, the file takes its place; if the file is already open, its tab is shown.

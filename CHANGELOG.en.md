@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Open a folder as a project: File → Open Folder, `bracket <folder>`, dropping the folder on the window or handing it to an open Bracket. The window title shows the project and the session remembers it; File → Close Folder closes it without touching the tabs.
+
 ## [0.1.0] - 2026-10-18
 
 First version of the base editor (Phase 1). Not published: only the local `v0.1.0` tag exists.

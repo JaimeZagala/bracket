@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -84,6 +84,8 @@ pub struct SessionKeeper {
     /// Version of the text already in each modified tab's backup.
     backups: HashMap<u64, u64>,
     saving: Option<Receiver<Saved>>,
+    /// Folder open as a project, kept in the session.
+    project: Option<PathBuf>,
     last_saved: Option<u64>,
     changed_at: Option<Instant>,
 }
@@ -100,6 +102,7 @@ impl SessionKeeper {
             owned: previous.backups().map(String::from).collect(),
             backups: HashMap::new(),
             saving: None,
+            project: None,
             last_saved: None,
             changed_at: None,
         }
@@ -109,6 +112,11 @@ impl SessionKeeper {
         &self.files
     }
 
+    /// The folder open as a project (the next save writes it).
+    pub fn set_project(&mut self, project: Option<PathBuf>) {
+        self.project = project;
+    }
+
     /// Call every frame. Writes the session on a worker thread once it has been stable for a
     /// moment. Returns the error of a failed save, if one has just finished.
     pub fn tick(&mut self, ctx: &egui::Context, tabs: &[Tab], active: usize) -> Option<String> {
@@ -116,7 +124,7 @@ impl SessionKeeper {
         if self.saving.is_some() {
             return error;
         }
-        let signature = signature(tabs, active);
+        let signature = signature(tabs, active, self.project.as_deref());
         if self.last_saved == Some(signature) {
             self.changed_at = None;
             return error;
@@ -206,7 +214,10 @@ impl SessionKeeper {
 
     /// The session as it is now, plus the backup texts that changed since they were written.
     fn snapshot(&self, tabs: &[Tab], active: usize) -> (Snapshot, HashMap<u64, u64>) {
-        let mut session = Session::default();
+        let mut session = Session {
+            project: self.project.clone(),
+            ..Session::default()
+        };
         let mut texts = Vec::new();
         let mut backups = HashMap::new();
         let mut owned = self.owned.clone();
@@ -270,9 +281,10 @@ impl SessionKeeper {
 }
 
 /// A hash of everything the session stores, to notice when it changes.
-fn signature(tabs: &[Tab], active: usize) -> u64 {
+fn signature(tabs: &[Tab], active: usize, project: Option<&Path>) -> u64 {
     let mut hasher = DefaultHasher::new();
     active.hash(&mut hasher);
+    project.hash(&mut hasher);
     for tab in tabs {
         tab.id.hash(&mut hasher);
         tab.path().hash(&mut hasher);
@@ -348,10 +360,12 @@ mod tests {
         ];
 
         let mut keeper = SessionKeeper::new(files.clone(), &Session::default());
+        keeper.set_project(Some(dir.clone()));
         keeper.save_now(&tabs, 1).unwrap();
 
         let (session, error) = session::load_previous(&files);
         assert_eq!(error, None);
+        assert_eq!(session.project.as_deref(), Some(dir.as_path()));
         assert_eq!(session.tabs.len(), 3, "the empty untitled tab is not kept");
         assert_eq!(session.active, 1);
 

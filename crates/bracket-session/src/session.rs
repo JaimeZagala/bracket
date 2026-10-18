@@ -8,6 +8,7 @@
 //! ```toml
 //! format_version = 1
 //! active = 1
+//! project = 'C:\src\Demo'
 //!
 //! [[tab]]
 //! path = 'C:\src\Program.cs'
@@ -43,6 +44,8 @@ pub struct Session {
     pub tabs: Vec<SessionTab>,
     /// Index of the active tab.
     pub active: usize,
+    /// Folder open as a project.
+    pub project: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -153,6 +156,11 @@ pub fn parse(text: &str) -> io::Result<Session> {
         }
     }
     session.active = active_index.unwrap_or(0);
+    session.project = doc
+        .get("project")
+        .and_then(Item::as_str)
+        .filter(|p| !p.is_empty())
+        .map(PathBuf::from);
     Ok(session)
 }
 
@@ -222,6 +230,9 @@ pub fn to_toml(session: &Session) -> String {
     let mut doc = DocumentMut::new();
     doc.insert("format_version", value(FORMAT_VERSION));
     doc.insert("active", value(session.active as i64));
+    if let Some(project) = &session.project {
+        doc.insert("project", value(project.to_string_lossy().as_ref()));
+    }
     let mut tabs = ArrayOfTables::new();
     for tab in &session.tabs {
         let mut table = Table::new();
@@ -337,6 +348,7 @@ mod tests {
                 },
             ],
             active: 1,
+            project: Some(PathBuf::from(r"C:\src\Demo")),
         }
     }
 

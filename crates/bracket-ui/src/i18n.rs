@@ -133,6 +133,18 @@ impl Texts {
         self.get("menu_open")
     }
 
+    pub fn menu_open_folder(&self) -> &str {
+        self.get("menu_open_folder")
+    }
+
+    pub fn menu_close_folder(&self) -> &str {
+        self.get("menu_close_folder")
+    }
+
+    pub fn dialog_open_folder_title(&self) -> &str {
+        self.get("dialog_open_folder_title")
+    }
+
     pub fn menu_save(&self) -> &str {
         self.get("menu_save")
     }
@@ -454,6 +466,12 @@ mod tests {
                 ("menu_file", t.menu_file().to_owned()),
                 ("menu_new", t.menu_new().to_owned()),
                 ("menu_open", t.menu_open().to_owned()),
+                ("menu_open_folder", t.menu_open_folder().to_owned()),
+                ("menu_close_folder", t.menu_close_folder().to_owned()),
+                (
+                    "dialog_open_folder_title",
+                    t.dialog_open_folder_title().to_owned(),
+                ),
                 ("menu_save", t.menu_save().to_owned()),
                 ("menu_save_as", t.menu_save_as().to_owned()),
                 ("menu_close_tab", t.menu_close_tab().to_owned()),

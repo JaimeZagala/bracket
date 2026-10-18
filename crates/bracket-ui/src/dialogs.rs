@@ -28,6 +28,19 @@ pub fn pick_file_to_open(
     dialog.pick_file()
 }
 
+/// Asks for a folder to open as a project. Starts in `start_dir` if given.
+pub fn pick_folder(
+    parent: &eframe::Frame,
+    title: &str,
+    start_dir: Option<&Path>,
+) -> Option<PathBuf> {
+    let mut dialog = rfd::FileDialog::new().set_title(title).set_parent(parent);
+    if let Some(dir) = start_dir {
+        dialog = dialog.set_directory(dir);
+    }
+    dialog.pick_folder()
+}
+
 /// Asks where to save, suggesting `current` (its folder and name) if the document has a path.
 pub fn pick_file_to_save(
     parent: &eframe::Frame,

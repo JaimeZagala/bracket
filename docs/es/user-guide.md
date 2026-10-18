@@ -12,6 +12,12 @@ Bracket 0.1.0 (Fase 1, editor base). Esta guía describe lo que ya funciona y cr
 - Si hay cambios sin guardar, Bracket pregunta antes de cerrar la pestaña. Al salir no pregunta: los cambios se quedan en la sesión (ver abajo).
 - Bracket detecta la codificación al abrir (UTF-8, UTF-16 y codificaciones heredadas como windows-1252) y guarda en la misma, byte a byte. Si un fichero no se puede volver a escribir exactamente igual, se abre en solo lectura y la barra de estado lo indica.
 
+## Proyectos
+
+Una carpeta se abre como proyecto con **Archivo → Abrir carpeta**, con `bracket.exe C:\ruta\carpeta`, arrastrándola a la ventana o pasándosela a un Bracket que ya esté abierto. El título de la ventana muestra el nombre del proyecto, el diálogo Abrir empieza en él y la sesión lo recuerda al cerrar. **Archivo → Cerrar carpeta** lo cierra; las pestañas abiertas se quedan.
+
+El panel con el árbol de carpetas, Ctrl+P y la búsqueda en el proyecto llegan en los próximos pasos de la Fase 2.
+
 ## Pestañas
 
 - Cada fichero se abre en su propia pestaña. Si la pestaña activa es un documento nuevo vacío, el fichero ocupa su lugar; si el fichero ya está abierto, se va a su pestaña.

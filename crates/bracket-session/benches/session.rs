@@ -24,7 +24,11 @@ fn ten_tabs() -> String {
             ..SessionTab::default()
         })
         .collect();
-    session::to_toml(&Session { tabs, active: 3 })
+    session::to_toml(&Session {
+        tabs,
+        active: 3,
+        project: Some(PathBuf::from(r"C:\src\Project")),
+    })
 }
 
 fn parse(c: &mut Criterion) {
