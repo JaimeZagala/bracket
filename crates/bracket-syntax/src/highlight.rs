@@ -462,6 +462,7 @@ mod tests {
             "source.tsql",
             "source.json",
             "text.xml",
+            "source.rust",
         ] {
             assert!(Engine::new(scope).is_some(), "no grammar for {scope}");
         }

@@ -1,7 +1,7 @@
 //! The language registry: which languages Bracket knows, how files map to them and how each
 //! one is shown (its badge on tabs).
 //!
-//! Six languages are built in. External language packages (see `packages.rs`) add languages or
+//! Seven languages are built in. External language packages (see `packages.rs`) add languages or
 //! replace built-in ones with the same id, so every field is owned data rather than a
 //! compile-time constant.
 
@@ -188,7 +188,26 @@ fn builtin_languages() -> Vec<Language> {
             block_comment: Some(("<!--", "-->")),
         }
         .into(),
+        rust(),
     ]
+}
+
+/// Rust, highlighted with syntect's bundled grammar. A quote is not closed in pairs: in Rust it
+/// starts lifetimes (`'a`) more often than character literals.
+fn rust() -> Language {
+    let mut rust: Language = Builtin {
+        id: "rust",
+        name: "Rust",
+        scope: "source.rust",
+        extensions: &["rs"],
+        badge: "RS",
+        color: [0xB7, 0x41, 0x0E],
+        line_comment: Some("//"),
+        block_comment: Some(("/*", "*/")),
+    }
+    .into();
+    rust.pairs.retain(|(open, _)| open != "'");
+    rust
 }
 
 #[cfg(test)]
@@ -196,10 +215,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_six_builtin_languages_are_registered() {
+    fn the_seven_builtin_languages_are_registered() {
         let registry = LanguageRegistry::builtin();
         let ids: Vec<&str> = registry.languages().iter().map(|l| l.id.as_str()).collect();
-        assert_eq!(ids, ["csharp", "razor", "css", "tsql", "json", "xml"]);
+        assert_eq!(
+            ids,
+            ["csharp", "razor", "css", "tsql", "json", "xml", "rust"]
+        );
+    }
+
+    #[test]
+    fn rust_does_not_close_quotes_in_pairs() {
+        let registry = LanguageRegistry::builtin();
+        let opens = |id: &str| -> Vec<String> {
+            let pairs = &registry.get(id).unwrap().pairs;
+            pairs.iter().map(|(open, _)| open.clone()).collect()
+        };
+        assert!(!opens("rust").contains(&"'".to_owned()), "lifetimes: 'a");
+        assert!(opens("rust").contains(&"\"".to_owned()));
+        assert!(opens("csharp").contains(&"'".to_owned()));
     }
 
     #[test]
@@ -218,6 +252,7 @@ mod tests {
         assert_eq!(id("invoice.xsig"), Some("xml"));
         assert_eq!(id("Bracket.csproj"), Some("xml"));
         assert_eq!(id("web.config"), Some("xml"));
+        assert_eq!(id(r"src\main.rs"), Some("rust"));
         assert_eq!(id("notes.txt"), None);
         assert_eq!(id("Makefile"), None);
     }
@@ -272,7 +307,7 @@ mod tests {
         assert_eq!(id("a.py"), Some("python"));
         assert_eq!(id("a.csx"), None, "the replaced C# no longer claims .csx");
         assert_eq!(id("a.sql"), Some("mysql"), "a package wins an extension");
-        assert_eq!(registry.languages().len(), 3 + 5);
+        assert_eq!(registry.languages().len(), 3 + 6);
         assert!(registry.get("csharp").unwrap().package.is_some());
     }
 }

@@ -29,7 +29,7 @@ Ctrl+P y la búsqueda en el proyecto llegan en los próximos pasos de la Fase 2.
 ## Pestañas
 
 - Cada fichero se abre en su propia pestaña. Si la pestaña activa es un documento nuevo vacío, el fichero ocupa su lugar; si el fichero ya está abierto, se va a su pestaña.
-- La insignia de color indica el lenguaje según la extensión: `C#` (C#), `@` (Razor), `#` (CSS), `SQL` (T-SQL), `{}` (JSON) y `<>` (XML, también `.xsig`, `.config`, `.csproj`, `.resx`...). Al pasar el ratón por una pestaña se ve la ruta completa.
+- La insignia de color indica el lenguaje según la extensión: `C#` (C#), `@` (Razor), `#` (CSS), `SQL` (T-SQL), `{}` (JSON), `<>` (XML, también `.xsig`, `.config`, `.csproj`, `.resx`...) y `RS` (Rust). Al pasar el ratón por una pestaña se ve la ruta completa.
 - Un punto en lugar de la × indica cambios sin guardar.
 - **Cerrar:** Ctrl+W, la × o clic con el botón central. Al cerrar la última queda un documento nuevo.
 - **Cambiar de pestaña:** Ctrl+Tab y Ctrl+Mayús+Tab, o Ctrl+AvPág y Ctrl+RePág.
@@ -60,7 +60,7 @@ Al cerrar Bracket se guarda la sesión: las pestañas abiertas, cuál estaba act
 
 ## Resaltado de sintaxis
 
-Los ficheros de C#, Razor (`.razor`, `.cshtml`), CSS, T-SQL (`.sql`), JSON y XML (también `.xsig`, `.config`, `.csproj`...) se muestran con colores, según la insignia de su pestaña. El resaltado se calcula en segundo plano: al abrir un fichero largo primero se colorea lo que está a la vista.
+Los ficheros de C#, Razor (`.razor`, `.cshtml`), CSS, T-SQL (`.sql`), JSON, XML (también `.xsig`, `.config`, `.csproj`...) y Rust (`.rs`) se muestran con colores, según la insignia de su pestaña. El resaltado se calcula en segundo plano: al abrir un fichero largo primero se colorea lo que está a la vista.
 
 - Los ficheros de más de 16 MB y las líneas de más de 20.000 caracteres (por ejemplo, JSON minificado) se muestran sin colores, para que el editor siga siendo rápido.
 - En Razor se colorean las directivas (`@page`, `@using`...), los comentarios `@* *@`, las expresiones (`@Model.Nombre`, `@(a + b)`) y el C# de `@{ }` y `@code { }`. El HTML dentro de los bloques de código todavía no se reconoce.

@@ -18,7 +18,7 @@ Windows developers who open many loose files and project folders (C#, Razor, CSS
 - Atomic save that preserves encoding, BOM and line endings. XML/XSIG files are saved byte for byte (signed files are not invalidated).
 - Folder as a project: side tree that honours `.gitignore`, Ctrl+P (file), Ctrl+T (project symbol), Ctrl+Shift+O (file symbol), command palette, regex find and replace in a file and across a folder.
 - Symbol navigation without a compiler: outline, go to definition and find references by name (approximate).
-- Highlighting and symbols for C#, Razor, CSS, T-SQL, JSON and XML/XSIG, built into the executable. Other languages are added by copying a folder, without recompiling.
+- Highlighting and symbols for C#, Razor, CSS, T-SQL, JSON and XML/XSIG, and highlighting for Rust, built into the executable. Other languages are added by copying a folder, without recompiling.
 - Per-user installer (no administrator rights) or portable zip. "Open with" and file associations.
 - Updates only when the user accepts them, with a stable channel and an optional preview channel.
 - Interface in Spanish (default) and English.

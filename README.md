@@ -18,7 +18,7 @@ Desarrolladores en Windows que abren muchos ficheros sueltos y carpetas de proye
 - Guardado atómico que conserva codificación, BOM y saltos de línea. Los XML/XSIG se guardan byte a byte (no invalida ficheros firmados).
 - Carpeta como proyecto: árbol lateral que respeta `.gitignore`, Ctrl+P (fichero), Ctrl+T (símbolo en el proyecto), Ctrl+Shift+O (símbolo en el fichero), paleta de comandos, buscar y reemplazar con regex en fichero y carpeta.
 - Navegación por símbolos sin compilador: outline, ir a definición y referencias por nombre (aproximadas).
-- Resaltado y símbolos para C#, Razor, CSS, T-SQL, JSON y XML/XSIG, integrados en el ejecutable. Otros lenguajes se añaden copiando una carpeta, sin recompilar.
+- Resaltado y símbolos para C#, Razor, CSS, T-SQL, JSON y XML/XSIG, y resaltado para Rust, integrados en el ejecutable. Otros lenguajes se añaden copiando una carpeta, sin recompilar.
 - Instalador por usuario (sin administrador) o zip portable. "Abrir con" y asociaciones de ficheros.
 - Actualizaciones solo cuando el usuario las acepta, con canal estable y canal preliminar opcional.
 - Interfaz en español (predeterminado) e inglés.

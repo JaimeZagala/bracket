@@ -29,7 +29,7 @@ Ctrl+P and project search come in the next steps of Phase 2.
 ## Tabs
 
 - Each file opens in its own tab. If the active tab is an empty new document, the file takes its place; if the file is already open, its tab is shown.
-- The colored badge shows the language from the extension: `C#` (C#), `@` (Razor), `#` (CSS), `SQL` (T-SQL), `{}` (JSON) and `<>` (XML, also `.xsig`, `.config`, `.csproj`, `.resx`...). Hovering over a tab shows the full path.
+- The colored badge shows the language from the extension: `C#` (C#), `@` (Razor), `#` (CSS), `SQL` (T-SQL), `{}` (JSON), `<>` (XML, also `.xsig`, `.config`, `.csproj`, `.resx`...) and `RS` (Rust). Hovering over a tab shows the full path.
 - A dot instead of the × means unsaved changes.
 - **Close:** Ctrl+W, the × or a middle click. Closing the last one leaves a new document.
 - **Switch tabs:** Ctrl+Tab and Ctrl+Shift+Tab, or Ctrl+PageDown and Ctrl+PageUp.
@@ -60,7 +60,7 @@ When Bracket closes it saves the session: the open tabs, which one was active, t
 
 ## Syntax highlighting
 
-C#, Razor (`.razor`, `.cshtml`), CSS, T-SQL (`.sql`), JSON and XML files (also `.xsig`, `.config`, `.csproj`...) are shown in colour, matching their tab's badge. Highlighting is computed in the background: when a long file opens, what is in view is coloured first.
+C#, Razor (`.razor`, `.cshtml`), CSS, T-SQL (`.sql`), JSON, XML (also `.xsig`, `.config`, `.csproj`...) and Rust (`.rs`) files are shown in colour, matching their tab's badge. Highlighting is computed in the background: when a long file opens, what is in view is coloured first.
 
 - Files over 16 MB and lines over 20,000 characters (minified JSON, for example) are shown without colours, so the editor stays fast.
 - In Razor, directives (`@page`, `@using`...), `@* *@` comments, expressions (`@Model.Name`, `@(a + b)`) and the C# in `@{ }` and `@code { }` are coloured. HTML inside code blocks is not recognised yet.

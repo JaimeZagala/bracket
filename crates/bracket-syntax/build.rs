@@ -1,6 +1,6 @@
 //! Compiles the grammars Bracket ships into one file embedded in the executable.
 //!
-//! syntect's bundled grammars (from sublimehq/Packages) provide C#, CSS, JSON and XML, plus
+//! syntect's bundled grammars (from sublimehq/Packages) provide C#, CSS, JSON, XML and Rust, plus
 //! HTML and JavaScript, which Razor builds on. Razor and T-SQL are Bracket's own grammars in
 //! `grammars/`. The whole bundle is kept (75 languages, about 370 KB compressed): its grammars
 //! refer to each other by position, so single ones cannot be taken out of it.
