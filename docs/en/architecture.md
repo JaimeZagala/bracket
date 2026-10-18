@@ -39,7 +39,7 @@ bracket-app ──► bracket-ui ──► bracket-syntax ─┐
 - Indexing, searching, folder loading, heavy highlighting and networking run on worker threads.
 - The UI sends commands over channels and receives events. Every long task carries a cancellation token and a generation number; results from an outdated generation are discarded.
 
-In Phase 0, file loading and saving use `std::thread` and `std::sync::mpsc`; cancellation tokens and generations arrive with the first cancellable tasks (Phase 2).
+Worker threads use `std::thread` and `std::sync::mpsc`. `bracket-core` (`task.rs`) gives every long task a `Task`: a `CancelToken` the task checks between units of work and a generation number it sends back with its results. `Generations` keeps the current task of each kind: starting another one cancels the previous one, and results from a generation that is no longer current are dropped even if they arrive late.
 
 ## Core model (`bracket-core`)
 

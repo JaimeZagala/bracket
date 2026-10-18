@@ -39,7 +39,7 @@ bracket-app ──► bracket-ui ──► bracket-syntax ─┐
 - Indexado, búsqueda, carga de carpetas, resaltado pesado y red van en hilos de trabajo.
 - La interfaz envía comandos por canales y recibe eventos. Cada tarea larga lleva un token de cancelación y un número de generación; el resultado de una generación ya superada se descarta.
 
-En la Fase 0, la carga y el guardado de ficheros usan `std::thread` y `std::sync::mpsc`; los tokens de cancelación y las generaciones llegan con las primeras tareas cancelables (Fase 2).
+Los hilos de trabajo usan `std::thread` y `std::sync::mpsc`. `bracket-core` (`task.rs`) da a cada tarea larga un `Task`: un `CancelToken` que la tarea consulta entre unidades de trabajo y un número de generación que devuelve con sus resultados. `Generations` lleva la tarea actual de cada tipo: empezar otra cancela la anterior, y los resultados de una generación que ya no es la actual se descartan aunque lleguen tarde.
 
 ## Modelo del núcleo (`bracket-core`)
 
