@@ -12,4 +12,4 @@ pub use paths::{Mode, Paths};
 pub use recent::Recent;
 pub use requests::OpenRequest;
 pub use session::{Session, SessionFiles, SessionTab, Sidebar, Unsaved};
-pub use watch::FileWatcher;
+pub use watch::{FileWatcher, ProjectChanges, ProjectWatcher};

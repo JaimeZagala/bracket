@@ -25,6 +25,16 @@ fn walks(c: &mut Criterion) {
     group.bench_function("list_root", |b| {
         b.iter(|| list_dir(&root, black_box(&root), &options))
     });
+    // The worst case of an update: a change at the root rewrites the whole sorted list.
+    let mut resynced = index.clone();
+    group.bench_function("resync_root", |b| {
+        b.iter(|| resynced.resync_dir(black_box(&root), &options))
+    });
+    let deep = root.join(r"src07\module03");
+    group.bench_function("resync_deep_folder", |b| {
+        b.iter(|| resynced.resync_dir(black_box(&deep), &options))
+    });
+    assert_eq!(resynced.files, index.files);
     group.finish();
 }
 

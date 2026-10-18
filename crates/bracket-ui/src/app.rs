@@ -17,8 +17,8 @@ use bracket_core::movement::{self, Motion};
 use bracket_index::WalkOptions;
 use bracket_session::config::AUTO_THEME;
 use bracket_session::{
-    Appearance, Config, ConfigWarning, FileWatcher, Language, LoadedConfig, OpenRequest, Recent,
-    SessionTab, Sidebar, config, requests,
+    Appearance, Config, ConfigWarning, FileWatcher, Language, LoadedConfig, OpenRequest,
+    ProjectChanges, ProjectWatcher, Recent, SessionTab, Sidebar, config, requests,
 };
 use bracket_syntax::ThemeColors;
 use bracket_syntax::highlight::{self, MAX_HIGHLIGHT_BYTES};
@@ -93,6 +93,30 @@ impl RecentList {
         if change(&mut self.list) {
             let _ = self.writer.send(self.list.clone());
         }
+    }
+}
+
+/// The watcher of the project folder and the changes it reports.
+struct ProjectWatch {
+    _watcher: ProjectWatcher,
+    changes: Receiver<ProjectChanges>,
+}
+
+impl ProjectWatch {
+    /// `None` if the folder cannot be watched (some network drives); the tree then lists
+    /// folders again whenever they are reopened.
+    fn start(ctx: &egui::Context, root: &std::path::Path) -> Option<Self> {
+        let (tx, changes) = mpsc::channel();
+        let ctx = ctx.clone();
+        let watcher = ProjectWatcher::new(root, move |batch| {
+            let _ = tx.send(batch);
+            ctx.request_repaint();
+        })
+        .ok()?;
+        Some(Self {
+            _watcher: watcher,
+            changes,
+        })
     }
 }
 
@@ -183,6 +207,8 @@ pub struct BracketApp {
     project: Option<PathBuf>,
     /// The tree of the project folder, in the side panel.
     tree: Option<ProjectTree>,
+    /// Reports what is created, deleted or renamed in the project folder.
+    project_watch: Option<ProjectWatch>,
     /// The side panel's visibility and width (its open folders live in `tree`).
     sidebar: Sidebar,
     /// `None` while measuring: recent items are neither read nor written.
@@ -316,6 +342,7 @@ impl BracketApp {
             config,
             project: None,
             tree: None,
+            project_watch: None,
             sidebar: Sidebar::default(),
             recent: recent_file.map(RecentList::start),
             tabs: Vec::new(),
@@ -1055,6 +1082,12 @@ impl BracketApp {
             let ctx = ctx.clone();
             ProjectTree::new(root.clone(), options, move || ctx.request_repaint())
         });
+        self.project_watch = folder
+            .as_ref()
+            .and_then(|root| ProjectWatch::start(ctx, root));
+        if let Some(tree) = &mut self.tree {
+            tree.set_watched(self.project_watch.is_some());
+        }
         if let Some(keeper) = &mut self.session {
             keeper.set_project(folder.clone());
         }
@@ -1713,6 +1746,11 @@ impl eframe::App for BracketApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.minimized = ctx.input(|i| i.viewport().minimized.unwrap_or(false));
         self.follow_theme(ctx);
+        if let (Some(watch), Some(tree)) = (&self.project_watch, &mut self.tree) {
+            while let Ok(changes) = watch.changes.try_recv() {
+                tree.apply_changes(&changes);
+            }
+        }
         if let Some(tree) = &mut self.tree
             && let Some(bad) = tree.poll()
         {

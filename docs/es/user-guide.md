@@ -23,6 +23,7 @@ Con un proyecto abierto, el **panel del proyecto** muestra a la izquierda el ár
 - **Ctrl+B** oculta o muestra el panel (también en **Ver → Panel del proyecto**).
 - **Ctrl+Mayús+E** lleva el teclado al árbol: ↑ y ↓ mueven la selección (también Inicio, Fin, RePág y AvPág), → abre la carpeta o entra en ella, ← la cierra o sube a la carpeta que la contiene, Intro abre el fichero en una pestaña normal (o abre y cierra la carpeta), Espacio lo muestra en la vista previa sin salir del árbol, y Esc vuelve al editor.
 - La sesión recuerda el ancho, si el panel está visible y qué carpetas estaban abiertas.
+- El árbol se actualiza solo cuando otros programas crean, borran o renombran ficheros y carpetas del proyecto (un `git checkout`, una compilación, el Explorador), también si cambia `.gitignore`.
 
 Ctrl+P y la búsqueda en el proyecto llegan en los próximos pasos de la Fase 2.
 

@@ -6,6 +6,7 @@
 //! are. The same rules serve the whole-project walk (the file index) and listing one folder (the
 //! tree).
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -92,8 +93,26 @@ pub fn walk(
     options: &WalkOptions,
     cancel: &CancelToken,
 ) -> Result<Result<FileIndex, Cancelled>, BadPattern> {
+    let Some(mut files) = files_under(root, root, options, cancel)? else {
+        return Ok(Err(Cancelled));
+    };
+    files.sort_unstable_by_key(|f| f.to_lowercase());
+    Ok(Ok(FileIndex {
+        root: root.to_path_buf(),
+        files,
+    }))
+}
+
+/// The files under `start` (a folder of the project at `root`), relative to `root`, unsorted.
+/// `None` if cancelled.
+fn files_under(
+    root: &Path,
+    start: &Path,
+    options: &WalkOptions,
+    cancel: &CancelToken,
+) -> Result<Option<Vec<String>>, BadPattern> {
     let files = Mutex::new(Vec::new());
-    builder(root, root, options)?.build_parallel().run(|| {
+    builder(root, start, options)?.build_parallel().run(|| {
         let files = &files;
         Box::new(move |entry| {
             if cancel.is_cancelled() {
@@ -115,14 +134,79 @@ pub fn walk(
         })
     });
     if cancel.is_cancelled() {
-        return Ok(Err(Cancelled));
+        return Ok(None);
     }
-    let mut files = files.into_inner().expect("no panics while holding it");
-    files.sort_unstable_by_key(|f| f.to_lowercase());
-    Ok(Ok(FileIndex {
-        root: root.to_path_buf(),
-        files,
-    }))
+    Ok(Some(
+        files.into_inner().expect("no panics while holding it"),
+    ))
+}
+
+impl FileIndex {
+    /// Brings the index up to date after something changed directly inside `dir` (a file or
+    /// folder created, deleted or renamed there): the files directly in it are compared with
+    /// a new listing, subfolders that appeared are walked and the files of subfolders that
+    /// disappeared are removed. Subfolders that are still there are left alone; changes inside
+    /// them come with their own folder.
+    pub fn resync_dir(&mut self, dir: &Path, options: &WalkOptions) -> Result<(), BadPattern> {
+        let Ok(relative) = dir.strip_prefix(&self.root) else {
+            return Ok(()); // outside the project
+        };
+        let prefix = match relative.to_string_lossy() {
+            r if r.is_empty() => String::new(),
+            r => format!("{r}\\"),
+        };
+        let listing = list_dir(&self.root, dir, options)?;
+        let files: HashSet<&str> = listing
+            .iter()
+            .filter(|e| !e.is_dir)
+            .map(|e| e.name.as_str())
+            .collect();
+        let folders: HashSet<&str> = listing
+            .iter()
+            .filter(|e| e.is_dir)
+            .map(|e| e.name.as_str())
+            .collect();
+
+        // Every path starting with the prefix sits in one block of the sorted list.
+        let lower = prefix.to_lowercase();
+        let start = self.files.partition_point(|f| f.to_lowercase() < lower);
+        let end =
+            start + self.files[start..].partition_point(|f| f.to_lowercase().starts_with(&lower));
+        let mut known_files = HashSet::new();
+        let mut known_folders = HashSet::new();
+        let mut block: Vec<String> = Vec::with_capacity(end - start);
+        for path in &self.files[start..end] {
+            // The same folder written with different case: left as it is.
+            let Some(rest) = path.strip_prefix(prefix.as_str()) else {
+                block.push(path.clone());
+                continue;
+            };
+            let keep = match rest.split_once('\\') {
+                None => {
+                    known_files.insert(rest.to_owned());
+                    files.contains(rest)
+                }
+                Some((folder, _)) => {
+                    known_folders.insert(folder.to_owned());
+                    folders.contains(folder)
+                }
+            };
+            if keep {
+                block.push(path.clone());
+            }
+        }
+        for name in files.iter().filter(|n| !known_files.contains(**n)) {
+            block.push(format!("{prefix}{name}"));
+        }
+        let cancel = CancelToken::new();
+        for name in folders.iter().filter(|n| !known_folders.contains(**n)) {
+            let new = files_under(&self.root, &dir.join(name), options, &cancel)?;
+            block.extend(new.unwrap_or_default());
+        }
+        block.sort_unstable_by_key(|f| f.to_lowercase());
+        self.files.splice(start..end, block);
+        Ok(())
+    }
 }
 
 /// The folders and files directly inside `dir` (a folder of the project at `root`), folders
@@ -227,6 +311,47 @@ mod tests {
         cancel.cancel();
         let result = walk(&root, &WalkOptions::default(), &cancel).unwrap();
         assert_eq!(result, Err(Cancelled));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn resyncing_a_folder_follows_what_changed_in_it() {
+        let root = project("resync");
+        let options = WalkOptions::default();
+        let mut index = walk(&root, &options, &CancelToken::new()).unwrap().unwrap();
+
+        // In src: a file added, one deleted, a folder added with files, and one ignored.
+        fs::write(root.join(r"src\Startup.cs"), "x").unwrap();
+        fs::remove_file(root.join(r"src\App.razor")).unwrap();
+        fs::create_dir_all(root.join(r"src\Models\Dto")).unwrap();
+        fs::write(root.join(r"src\Models\User.cs"), "x").unwrap();
+        fs::write(root.join(r"src\Models\Dto\UserDto.cs"), "x").unwrap();
+        fs::write(root.join(r"src\debug.log"), "x").unwrap();
+        index.resync_dir(&root.join("src"), &options).unwrap();
+        let fresh = walk(&root, &options, &CancelToken::new()).unwrap().unwrap();
+        assert_eq!(index.files, fresh.files);
+        assert!(
+            index
+                .files
+                .contains(&r"src\Models\Dto\UserDto.cs".to_owned())
+        );
+
+        // At the root: a folder renamed.
+        fs::rename(root.join("docs"), root.join("Documentation")).unwrap();
+        index.resync_dir(&root, &options).unwrap();
+        let fresh = walk(&root, &options, &CancelToken::new()).unwrap().unwrap();
+        assert_eq!(index.files, fresh.files);
+
+        // A folder that is gone entirely, and one outside the project.
+        fs::remove_dir_all(root.join(r"src\Models")).unwrap();
+        index
+            .resync_dir(&root.join(r"src\Models"), &options)
+            .unwrap();
+        index.resync_dir(&root.join("src"), &options).unwrap();
+        index
+            .resync_dir(Path::new(r"C:\elsewhere"), &options)
+            .unwrap();
+        assert!(!index.files.iter().any(|f| f.starts_with(r"src\Models")));
         fs::remove_dir_all(&root).unwrap();
     }
 

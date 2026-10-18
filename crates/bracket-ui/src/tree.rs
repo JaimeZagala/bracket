@@ -1,6 +1,7 @@
 //! The project tree in the side panel. Each folder is listed on a worker thread the first time
-//! it is opened (and again each time it is reopened); only the visible rows are drawn. Works with
-//! the mouse and the keyboard, and shows a language badge next to files.
+//! it is opened; after that the project watcher tells which listed folders changed (without a
+//! watcher, a folder is listed again each time it is reopened). Only the visible rows are drawn.
+//! Works with the mouse and the keyboard, and shows a language badge next to files.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -9,6 +10,7 @@ use std::thread;
 
 use bracket_core::CancelToken;
 use bracket_index::{BadPattern, Entry, WalkOptions, list_dir};
+use bracket_session::ProjectChanges;
 use bracket_syntax::LanguageRegistry;
 use eframe::egui::{
     self, Color32, EventFilter, FontId, Id, Key, Modifiers, Rect, Sense, Shape, Stroke, TextStyle,
@@ -70,6 +72,10 @@ pub struct ProjectTree {
     listings: Receiver<Listing>,
     cancel: CancelToken,
     bad_pattern_reported: bool,
+    /// The project watcher reports changes, so open folders are not listed again on reopening.
+    watched: bool,
+    /// Listings requested and not received yet.
+    pending: usize,
 }
 
 impl ProjectTree {
@@ -122,6 +128,8 @@ impl ProjectTree {
             listings,
             cancel,
             bad_pattern_reported: false,
+            watched: false,
+            pending: 0,
             root,
         };
         tree.request(tree.root.clone());
@@ -175,6 +183,7 @@ impl ProjectTree {
 
     fn request(&mut self, dir: PathBuf) {
         self.folders.entry(dir.clone()).or_insert(None);
+        self.pending += 1;
         let _ = self.requests.send(dir);
     }
 
@@ -183,6 +192,7 @@ impl ProjectTree {
     pub fn poll(&mut self) -> Option<BadPattern> {
         let mut bad = None;
         while let Ok(listing) = self.listings.try_recv() {
+            self.pending -= 1;
             if let Some(pattern) = listing.bad_pattern
                 && !self.bad_pattern_reported
             {
@@ -201,11 +211,42 @@ impl ProjectTree {
         self.reveal_selected = true;
     }
 
+    /// Whether the project watcher reports changes to the tree.
+    pub fn set_watched(&mut self, watched: bool) {
+        self.watched = watched;
+    }
+
+    /// Lists again the folders where something was created, deleted or renamed, if they were
+    /// listed. A change to `.gitignore` or `.ignore` can change any folder, so then they all are.
+    pub fn apply_changes(&mut self, changes: &ProjectChanges) {
+        let rules_changed = changes.paths.iter().any(|path| {
+            path.file_name().is_some_and(|n| {
+                n.eq_ignore_ascii_case(".gitignore") || n.eq_ignore_ascii_case(".ignore")
+            })
+        });
+        let dirs: HashSet<PathBuf> = if changes.rescan || rules_changed {
+            self.folders.keys().cloned().collect()
+        } else {
+            changes
+                .paths
+                .iter()
+                .filter_map(|path| path.parent())
+                .filter(|dir| self.folders.contains_key(*dir))
+                .map(Path::to_path_buf)
+                .collect()
+        };
+        for dir in dirs {
+            self.request(dir);
+        }
+    }
+
     fn set_expanded(&mut self, folder: &Path, open: bool) {
         if open {
             self.expanded.insert(folder.to_path_buf());
-            // Listed again, in case it changed since it was last open.
-            self.request(folder.to_path_buf());
+            if !self.watched {
+                // Listed again, in case it changed since it was last open.
+                self.request(folder.to_path_buf());
+            }
         } else {
             self.expanded.remove(folder);
         }
@@ -550,7 +591,7 @@ mod tests {
         loop {
             tree.poll();
             tree.rebuild_rows();
-            if tree.folders.values().all(Option::is_some) {
+            if tree.pending == 0 {
                 return;
             }
             assert!(Instant::now() < deadline, "listings never arrived");
@@ -593,6 +634,67 @@ mod tests {
             tree.expanded_for_session(),
             [root.join(r"src\Models")],
             "kept for when src opens again"
+        );
+        drop(tree);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn changes_list_again_only_the_folders_already_listed() {
+        let root = project("changes");
+        let mut tree = ProjectTree::new(root.clone(), WalkOptions::default(), || {});
+        tree.set_watched(true);
+        tree.expand([root.join("src")]);
+        settle(&mut tree);
+        assert_eq!(
+            rows(&tree),
+            ["src", "  Models", "  Program.cs", "README.md"]
+        );
+
+        fs::write(root.join(r"src\Startup.cs"), "x").unwrap();
+        fs::write(root.join(r"src\Models\Order.cs"), "x").unwrap();
+        let changes = ProjectChanges {
+            paths: [
+                root.join(r"src\Startup.cs"),
+                root.join(r"src\Models\Order.cs"),
+            ]
+            .into(),
+            rescan: false,
+        };
+        tree.apply_changes(&changes);
+        assert!(
+            !tree.folders.contains_key(&root.join(r"src\Models")),
+            "Models was never listed, so it is not listed now"
+        );
+        settle(&mut tree);
+        assert_eq!(
+            rows(&tree),
+            [
+                "src",
+                "  Models",
+                "  Program.cs",
+                "  Startup.cs",
+                "README.md"
+            ]
+        );
+
+        // A rule change lists everything again.
+        fs::write(root.join(".gitignore"), "*.md\n").unwrap();
+        let changes = ProjectChanges {
+            paths: [root.join(".gitignore")].into(),
+            rescan: false,
+        };
+        tree.apply_changes(&changes);
+        settle(&mut tree);
+        assert_eq!(
+            rows(&tree),
+            [
+                "src",
+                "  Models",
+                "  Program.cs",
+                "  Startup.cs",
+                ".gitignore"
+            ]
         );
         drop(tree);
         fs::remove_dir_all(&root).unwrap();

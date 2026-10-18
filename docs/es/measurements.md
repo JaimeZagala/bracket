@@ -193,3 +193,12 @@ En caliente (la caché de ficheros de Windows ya tiene las carpetas). Generar el
 | Arranque (`compare-startup.ps1`, 15 rondas intercaladas, mediana) | 132,2 ms | 131,4 ms | Ruido |
 
 El árbol solo pinta las filas visibles (`ScrollArea::show_rows`) y reconstruye la lista de filas cuando cambia, así que el coste por frame no depende del tamaño del proyecto. Listar una carpeta cuesta lo mismo que `walk/list_root` del paso 4 (1,5 ms con 50 carpetas).
+
+## Fase 2, paso 7 — vigilancia del proyecto (2026-10-19, equipo A)
+
+| Medida | Resultado |
+|---|---|
+| `walk/resync_root`: actualizar el índice tras un cambio en la raíz (50.000 ficheros) | 9,9 ms (recorrer el proyecto entero: 109 ms) |
+| `walk/resync_deep_folder`: tras un cambio en `src07\module03` | 0,66 ms |
+| Árbol al día tras crear una carpeta y dos ficheros, renombrar uno y borrar otro desde fuera | < 1,5 s (antirrebote de 200 ms) |
+| Tamaño del ejecutable | 8.837.632 B (+37,5 KB frente al paso 6, con Rust incluido: Rust no añade nada) |

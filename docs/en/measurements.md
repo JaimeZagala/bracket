@@ -193,3 +193,12 @@ Warm (Windows' file cache already holds the folders). Generating the project tak
 | Startup (`compare-startup.ps1`, 15 interleaved rounds, median) | 132.2 ms | 131.4 ms | Noise |
 
 The tree paints only the visible rows (`ScrollArea::show_rows`) and rebuilds the list of rows when it changes, so the cost per frame does not depend on the size of the project. Listing a folder costs the same as step 4's `walk/list_root` (1.5 ms with 50 folders).
+
+## Phase 2, step 7 — project watching (2026-10-19, machine A)
+
+| Measure | Result |
+|---|---|
+| `walk/resync_root`: updating the index after a change at the root (50,000 files) | 9.9 ms (walking the whole project: 109 ms) |
+| `walk/resync_deep_folder`: after a change in `src07\module03` | 0.66 ms |
+| Tree up to date after creating a folder and two files, renaming one and deleting another from outside | < 1.5 s (200 ms debounce) |
+| Executable size | 8,837,632 B (+37.5 KB against step 6, Rust included: Rust adds nothing) |

@@ -23,6 +23,7 @@ With a project open, the **project panel** on the left shows the folder tree: fo
 - **Ctrl+B** hides or shows the panel (also **View → Project panel**).
 - **Ctrl+Shift+E** moves the keyboard to the tree: ↑ and ↓ move the selection (also Home, End, PgUp and PgDn), → opens the folder or goes into it, ← closes it or goes up to the folder that contains it, Enter opens the file in a normal tab (or opens and closes the folder), Space shows it in the preview without leaving the tree, and Esc goes back to the editor.
 - The session remembers the width, whether the panel is shown and which folders were open.
+- The tree updates by itself when other programs create, delete or rename files and folders in the project (a `git checkout`, a build, File Explorer), also when `.gitignore` changes.
 
 Ctrl+P and project search come in the next steps of Phase 2.
 
