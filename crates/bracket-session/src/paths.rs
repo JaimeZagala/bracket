@@ -20,6 +20,8 @@ pub const BACKUP_DIR: &str = "backups";
 pub const WINDOW_FILE: &str = "window.ron";
 /// Folder where a second Bracket leaves the files for the running one.
 pub const REQUESTS_DIR: &str = "requests";
+/// Recently opened files and folders, inside the data folder.
+pub const RECENT_FILE: &str = "recent.toml";
 /// Folder with language packages, in the data folder and next to the executable.
 pub const LANGUAGES_DIR: &str = "languages";
 /// Folder created inside `%APPDATA%` in installed mode.
@@ -68,6 +70,10 @@ impl Paths {
 
     pub fn config_file(&self) -> PathBuf {
         self.data_dir.join(CONFIG_FILE)
+    }
+
+    pub fn recent_file(&self) -> PathBuf {
+        self.data_dir.join(RECENT_FILE)
     }
 
     pub fn window_file(&self) -> PathBuf {

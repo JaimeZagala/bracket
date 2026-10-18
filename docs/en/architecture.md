@@ -75,6 +75,7 @@ Worker threads use `std::thread` and `std::sync::mpsc`. `bracket-core` (`task.rs
 - `bracket-app` reads the session at startup (30 µs with 10 tabs).
 - The window (position, size, maximized) is saved by eframe with its `persistence` feature in `window.ron`, in the data folder (portable mode too). eframe moves it back onto a connected monitor if its own is gone and accounts for each screen's scaling. Only the window is saved, not egui's widget state. eframe applies `centered` after the saved position, so it is only turned on while `window.ron` does not exist yet. Cost: 547 KB (serde and ron).
 - The session also keeps the project folder (`project`); if it no longer exists, it is not reopened.
+- Recent items (`bracket-session`, `recent.rs`) go in `recent.toml`, apart from the session because they are history. A single thread writes the file with the newest version of the list, so two quick changes never write at the same time. Entries that no longer exist are hidden when the menu is shown and removed if opening them fails.
 - While the measurement probes are on, the session is neither read nor written, so measurements neither depend on the user's session nor change it.
 
 ## Windows resources (Phase 1)

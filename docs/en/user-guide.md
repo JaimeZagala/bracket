@@ -16,6 +16,8 @@ Bracket 0.1.0 (Phase 1, base editor). This guide describes what already works an
 
 A folder opens as a project with **File → Open Folder**, with `bracket.exe C:\path\folder`, by dropping it on the window or by handing it to a Bracket that is already open. The window title shows the project's name, the Open dialog starts in it and the session remembers it when Bracket closes. **File → Close Folder** closes it; open tabs stay.
 
+**File → Recent** shows the last files (up to 15) and folders (up to 10) that were opened, newest first; the ones that no longer exist are not shown. A recent folder opens as the project. "Clear the list" empties it. The list is kept in `recent.toml`, next to `config.toml`.
+
 The folder tree panel, Ctrl+P and project search come in the next steps of Phase 2.
 
 ## Tabs

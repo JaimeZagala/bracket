@@ -141,6 +141,18 @@ impl Texts {
         self.get("menu_close_folder")
     }
 
+    pub fn menu_recent(&self) -> &str {
+        self.get("menu_recent")
+    }
+
+    pub fn menu_recent_clear(&self) -> &str {
+        self.get("menu_recent_clear")
+    }
+
+    pub fn recent_empty(&self) -> &str {
+        self.get("recent_empty")
+    }
+
     pub fn dialog_open_folder_title(&self) -> &str {
         self.get("dialog_open_folder_title")
     }
@@ -472,6 +484,9 @@ mod tests {
                     "dialog_open_folder_title",
                     t.dialog_open_folder_title().to_owned(),
                 ),
+                ("menu_recent", t.menu_recent().to_owned()),
+                ("menu_recent_clear", t.menu_recent_clear().to_owned()),
+                ("recent_empty", t.recent_empty().to_owned()),
                 ("menu_save", t.menu_save().to_owned()),
                 ("menu_save_as", t.menu_save_as().to_owned()),
                 ("menu_close_tab", t.menu_close_tab().to_owned()),

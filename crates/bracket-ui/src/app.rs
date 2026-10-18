@@ -16,7 +16,7 @@ use bracket_core::encoding::{self, TextEncoding};
 use bracket_core::movement::{self, Motion};
 use bracket_session::config::AUTO_THEME;
 use bracket_session::{
-    Appearance, Config, ConfigWarning, FileWatcher, Language, LoadedConfig, OpenRequest,
+    Appearance, Config, ConfigWarning, FileWatcher, Language, LoadedConfig, OpenRequest, Recent,
     SessionTab, config, requests,
 };
 use bracket_syntax::ThemeColors;
@@ -56,11 +56,42 @@ enum StatusAction {
     SaveWith(TextEncoding),
 }
 
-/// Something picked in the View menu.
+/// Something picked in a menu that is not a plain command.
 #[derive(Debug, Clone)]
-enum ViewAction {
+enum MenuAction {
     Appearance(Appearance),
     EditorTheme(String),
+    /// A recent file, or a recent folder to open as the project.
+    OpenRecent(PathBuf),
+    ClearRecent,
+}
+
+/// Recently opened files and folders, and the thread that writes them to disk (one writer, so
+/// two saves never overlap).
+struct RecentList {
+    list: Recent,
+    writer: Sender<Recent>,
+}
+
+impl RecentList {
+    fn start(file: PathBuf) -> Self {
+        let list = Recent::load(&file);
+        let (writer, rx) = mpsc::channel::<Recent>();
+        thread::spawn(move || {
+            while let Ok(first) = rx.recv() {
+                let newest = rx.try_iter().last().unwrap_or(first);
+                let _ = newest.save(&file);
+            }
+        });
+        Self { list, writer }
+    }
+
+    /// Applies `change` and saves if it changed anything.
+    fn update(&mut self, change: impl FnOnce(&mut Recent) -> bool) {
+        if change(&mut self.list) {
+            let _ = self.writer.send(self.list.clone());
+        }
+    }
 }
 
 /// What waits for the user to deal with unsaved changes.
@@ -138,6 +169,8 @@ pub struct BracketApp {
     config: Config,
     /// Folder open as a project.
     project: Option<PathBuf>,
+    /// `None` while measuring: recent items are neither read nor written.
+    recent: Option<RecentList>,
     /// Never empty: closing the last tab opens an untitled one.
     tabs: Vec<Tab>,
     active: usize,
@@ -212,6 +245,7 @@ impl BracketApp {
             window_file: _,
             languages,
             window_icon: _,
+            recent_file,
         } = launch;
         let bracket_syntax::Packages {
             languages: package_languages,
@@ -265,6 +299,7 @@ impl BracketApp {
             texts: i18n::texts(config.language),
             config,
             project: None,
+            recent: recent_file.map(RecentList::start),
             tabs: Vec::new(),
             active: 0,
             next_tab_id: 0,
@@ -719,6 +754,8 @@ impl BracketApp {
 
     fn poll_loading(&mut self, ctx: &egui::Context) {
         let mut failed = Vec::new();
+        let mut opened = Vec::new();
+        let mut unreadable = Vec::new();
         let mut loaded_active = false;
         for (index, tab) in self.tabs.iter_mut().enumerate() {
             let Some(loading) = &tab.loading else {
@@ -728,6 +765,8 @@ impl BracketApp {
             let read_encoding = loading.read_encoding;
             let top_line = loading.restore.as_ref().map(|entry| entry.top_line);
             let goto = loading.goto;
+            let restored = loading.restore.is_some();
+            let requested_path = loading.path.clone();
             let chosen_language = loading
                 .restore
                 .as_ref()
@@ -764,10 +803,16 @@ impl BracketApp {
                     }
                     self.status = None;
                     loaded_active |= index == self.active;
+                    if !restored && let Some(path) = tab.doc.path() {
+                        opened.push(path.to_path_buf());
+                    }
                 }
                 Ok(Err(err)) => {
                     self.status = Some(self.texts.open_failed(&err.to_string()));
                     tab.loading = None;
+                    if !restored && let Some(path) = requested_path {
+                        unreadable.push(path);
+                    }
                     if new_tab {
                         failed.push(tab.id);
                     }
@@ -784,6 +829,14 @@ impl BracketApp {
         for tab in &mut self.tabs {
             if tab.loading.is_none() && tab.unloaded.is_none() && tab.highlight.is_none() {
                 start_highlight(tab, &self.languages, &self.editor_theme, ctx);
+            }
+        }
+        if let Some(recent) = &mut self.recent {
+            for path in opened {
+                recent.update(|r| r.add_file(&path));
+            }
+            for path in unreadable {
+                recent.update(|r| r.remove(&path));
             }
         }
         // A tab opened for a file that could not be read has nothing to show.
@@ -858,6 +911,9 @@ impl BracketApp {
             let Some(path) = dialogs::pick_file_to_save(frame, &title, None) else {
                 return false;
             };
+            if let Some(recent) = &mut self.recent {
+                recent.update(|r| r.add_file(&path));
+            }
             let tab = &mut self.tabs[index];
             tab.doc.set_path(path);
             tab.refresh_language(&self.languages);
@@ -922,6 +978,9 @@ impl BracketApp {
         if let Some(keeper) = &mut self.session {
             keeper.set_project(folder.clone());
         }
+        if let (Some(recent), Some(folder)) = (&mut self.recent, &folder) {
+            recent.update(|r| r.add_folder(folder));
+        }
         self.project = folder;
     }
 
@@ -953,6 +1012,9 @@ impl BracketApp {
         }
         let title = self.texts.dialog_save_as_title();
         if let Some(path) = dialogs::pick_file_to_save(frame, title, self.tabs[index].doc.path()) {
+            if let Some(recent) = &mut self.recent {
+                recent.update(|r| r.add_file(&path));
+            }
             let tab = &mut self.tabs[index];
             tab.doc.set_path(path);
             tab.refresh_language(&self.languages);
@@ -963,9 +1025,9 @@ impl BracketApp {
     }
 
     /// Draws the menu bar. Returns the command picked, if any.
-    fn menu_bar(&self, ui: &mut egui::Ui) -> (Option<Command>, Option<ViewAction>) {
+    fn menu_bar(&self, ui: &mut egui::Ui) -> (Option<Command>, Option<MenuAction>) {
         let mut picked = None;
-        let mut view_pick = None;
+        let mut menu_pick = None;
         let theme_names = highlight::theme_names();
         let mut items = vec![
             (Command::New, self.texts.menu_new()),
@@ -990,6 +1052,16 @@ impl BracketApp {
                             picked = Some(command);
                             ui.close();
                         }
+                        if command == Command::OpenFolder
+                            && let Some(recent) = &self.recent
+                        {
+                            ui.menu_button(self.texts.menu_recent(), |ui| {
+                                if let Some(action) = recent_menu(ui, &recent.list, self.texts) {
+                                    menu_pick = Some(action);
+                                    ui.close();
+                                }
+                            });
+                        }
                     }
                     ui.separator();
                     if ui.button(self.texts.menu_exit()).clicked() {
@@ -1003,7 +1075,7 @@ impl BracketApp {
                             let label = self.texts.appearance(appearance);
                             let current = appearance == self.config.appearance;
                             if ui.selectable_label(current, label).clicked() {
-                                view_pick = Some(ViewAction::Appearance(appearance));
+                                menu_pick = Some(MenuAction::Appearance(appearance));
                                 ui.close();
                             }
                         }
@@ -1014,14 +1086,14 @@ impl BracketApp {
                             .selectable_label(auto, self.texts.editor_theme_auto())
                             .clicked()
                         {
-                            view_pick = Some(ViewAction::EditorTheme(AUTO_THEME.to_owned()));
+                            menu_pick = Some(MenuAction::EditorTheme(AUTO_THEME.to_owned()));
                             ui.close();
                         }
                         ui.separator();
                         for name in &theme_names {
                             let current = self.config.editor_theme == *name;
                             if ui.selectable_label(current, *name).clicked() {
-                                view_pick = Some(ViewAction::EditorTheme((*name).to_owned()));
+                                menu_pick = Some(MenuAction::EditorTheme((*name).to_owned()));
                                 ui.close();
                             }
                         }
@@ -1029,7 +1101,7 @@ impl BracketApp {
                 });
             });
         });
-        (picked, view_pick)
+        (picked, menu_pick)
     }
 
     /// Draws the tab bar. Returns what was done with the mouse, if anything.
@@ -1274,20 +1346,37 @@ impl BracketApp {
         }
     }
 
-    fn run_view_action(&mut self, ctx: &egui::Context, action: ViewAction) {
+    fn run_menu_action(&mut self, ctx: &egui::Context, action: MenuAction) {
         match action {
-            ViewAction::Appearance(appearance) => {
+            MenuAction::Appearance(appearance) => {
                 if appearance == self.config.appearance {
                     return;
                 }
                 self.config.appearance = appearance;
                 ctx.set_theme(theme_preference(appearance));
             }
-            ViewAction::EditorTheme(name) => {
+            MenuAction::EditorTheme(name) => {
                 if name == self.config.editor_theme {
                     return;
                 }
                 self.config.editor_theme = name;
+            }
+            MenuAction::OpenRecent(path) => {
+                if path.is_dir() {
+                    self.set_project(Some(path));
+                } else {
+                    self.open_file(ctx, path);
+                }
+                return;
+            }
+            MenuAction::ClearRecent => {
+                if let Some(recent) = &mut self.recent {
+                    recent.update(|r| {
+                        r.clear();
+                        true
+                    });
+                }
+                return;
             }
         }
         self.follow_theme(ctx);
@@ -1530,12 +1619,12 @@ impl eframe::App for BracketApp {
             .iter()
             .find(|(_, shortcut)| ctx.input_mut(|i| i.consume_shortcut(shortcut)))
             .map(|(command, _)| *command);
-        let (menu_command, view_action) = self.menu_bar(ui);
+        let (menu_command, menu_action) = self.menu_bar(ui);
         if let Some(command) = shortcut.or(menu_command) {
             self.run_command(&ctx, frame, command);
         }
-        if let Some(action) = view_action {
-            self.run_view_action(&ctx, action);
+        if let Some(action) = menu_action {
+            self.run_menu_action(&ctx, action);
             self.focus_editor(&ctx);
         }
         match self.tab_bar(ui) {
@@ -1727,6 +1816,50 @@ fn save_error_text(texts: &Texts, err: &SaveError) -> String {
     }
 }
 
+/// The Recent submenu: files, then folders; entries that no longer exist are hidden.
+fn recent_menu(ui: &mut egui::Ui, recent: &Recent, texts: &Texts) -> Option<MenuAction> {
+    let mut picked = None;
+    let files: Vec<&PathBuf> = recent.files.iter().filter(|p| p.is_file()).collect();
+    let folders: Vec<&PathBuf> = recent.folders.iter().filter(|p| p.is_dir()).collect();
+    if files.is_empty() && folders.is_empty() {
+        ui.add_enabled(false, egui::Button::new(texts.recent_empty()));
+        return None;
+    }
+    for (index, group) in [files, folders].into_iter().enumerate() {
+        if index == 1 && !group.is_empty() {
+            ui.separator();
+        }
+        for path in group {
+            if ui
+                .button(recent_label(path))
+                .on_hover_text(path.display().to_string())
+                .clicked()
+            {
+                picked = Some(MenuAction::OpenRecent(path.clone()));
+            }
+        }
+    }
+    ui.separator();
+    if ui.button(texts.menu_recent_clear()).clicked() {
+        picked = Some(MenuAction::ClearRecent);
+    }
+    picked
+}
+
+/// "Program.cs — C:\src\Demo": the name, then the folder it is in.
+fn recent_label(path: &std::path::Path) -> String {
+    let name = path.file_name().map_or_else(
+        || path.display().to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => {
+            format!("{name}  —  {}", parent.display())
+        }
+        _ => name,
+    }
+}
+
 /// "file ● — project — Bracket": the active file, a dot for unsaved changes and the project
 /// folder's name.
 fn window_title(file: &str, dirty: bool, project: Option<&std::path::Path>) -> String {
@@ -1775,6 +1908,14 @@ mod tests {
         doc.buffer.insert(text);
         doc.buffer.set_selections(Selections::new(selections, 0));
         doc
+    }
+
+    #[test]
+    fn recent_entries_show_the_name_then_the_folder() {
+        assert_eq!(
+            recent_label(std::path::Path::new(r"C:\src\Demo\Program.cs")),
+            r"Program.cs  —  C:\src\Demo"
+        );
     }
 
     #[test]

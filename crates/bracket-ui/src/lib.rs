@@ -44,6 +44,8 @@ pub struct Launch {
     pub languages: bracket_syntax::Packages,
     /// Icon of the window (title bar and taskbar), if the executable provides one.
     pub window_icon: Option<egui::IconData>,
+    /// Where recent files and folders are kept. `None` while measuring.
+    pub recent_file: Option<PathBuf>,
 }
 
 /// The session left by the previous run.

@@ -16,6 +16,8 @@ Bracket 0.1.0 (Fase 1, editor base). Esta guía describe lo que ya funciona y cr
 
 Una carpeta se abre como proyecto con **Archivo → Abrir carpeta**, con `bracket.exe C:\ruta\carpeta`, arrastrándola a la ventana o pasándosela a un Bracket que ya esté abierto. El título de la ventana muestra el nombre del proyecto, el diálogo Abrir empieza en él y la sesión lo recuerda al cerrar. **Archivo → Cerrar carpeta** lo cierra; las pestañas abiertas se quedan.
 
+**Archivo → Recientes** muestra los últimos ficheros (hasta 15) y carpetas (hasta 10) que se abrieron, los más recientes primero; los que ya no existen no aparecen. Una carpeta reciente se abre como proyecto. «Borrar la lista» la vacía. La lista se guarda en `recent.toml`, junto a `config.toml`.
+
 El panel con el árbol de carpetas, Ctrl+P y la búsqueda en el proyecto llegan en los próximos pasos de la Fase 2.
 
 ## Pestañas

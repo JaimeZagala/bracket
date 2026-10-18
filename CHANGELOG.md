@@ -11,6 +11,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 ### Added
 
 - Abrir una carpeta como proyecto: Archivo → Abrir carpeta, `bracket <carpeta>`, arrastrar la carpeta a la ventana o pasársela a un Bracket abierto. El título de la ventana muestra el proyecto y la sesión lo recuerda; Archivo → Cerrar carpeta lo cierra sin tocar las pestañas.
+- Recientes: Archivo → Recientes lista los últimos ficheros (15) y carpetas (10) abiertos, sin los que ya no existen, y permite borrar la lista. Se guardan en `recent.toml`.
 
 ## [0.1.0] - 2026-10-18
 

@@ -114,6 +114,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         session,
         window_file,
         languages,
+        recent_file: probe.is_none().then(|| paths.recent_file()),
         window_icon: Some(bracket_ui::egui::IconData {
             rgba: WINDOW_ICON.to_vec(),
             width: WINDOW_ICON_SIZE,

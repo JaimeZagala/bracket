@@ -11,6 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Added
 
 - Open a folder as a project: File → Open Folder, `bracket <folder>`, dropping the folder on the window or handing it to an open Bracket. The window title shows the project and the session remembers it; File → Close Folder closes it without touching the tabs.
+- Recent items: File → Recent lists the last files (15) and folders (10) opened, without the ones that no longer exist, and can clear the list. They are kept in `recent.toml`.
 
 ## [0.1.0] - 2026-10-18
 
