@@ -166,6 +166,9 @@ pub struct BracketApp {
     project_watch: Option<ProjectWatch>,
     /// The project's file index, on its own thread, and how many files it holds once built.
     index: Option<IndexWorker>,
+    /// A project whose index starts once the first frame is on screen: walking a large project
+    /// on every core would otherwise slow startup down.
+    index_pending: Option<(PathBuf, WalkOptions)>,
     indexed: Option<usize>,
     /// The Ctrl+P palette, while it is open.
     quick_open: Option<QuickOpen>,
@@ -317,6 +320,7 @@ impl BracketApp {
             tree: None,
             project_watch: None,
             index: None,
+            index_pending: None,
             indexed: None,
             quick_open: None,
             find: FindBar::default(),
@@ -1140,6 +1144,22 @@ impl BracketApp {
         tab.view.request_scroll_to_caret();
     }
 
+    /// Starts building the project's file index, once the first frame has been presented.
+    fn start_index(&mut self, ctx: &egui::Context) {
+        if self.index_pending.is_none() {
+            return;
+        }
+        if ctx.cumulative_frame_nr() == 0 {
+            ctx.request_repaint();
+            return;
+        }
+        let (root, options) = self.index_pending.take().expect("checked above");
+        let repaint = ctx.clone();
+        self.index = Some(IndexWorker::start(root, options, move || {
+            repaint.request_repaint();
+        }));
+    }
+
     /// Opens the palette: for files, for commands (`>`) or for a line (`:`).
     fn open_palette(&mut self, prefix: &str) {
         let recent = self
@@ -1170,11 +1190,10 @@ impl BracketApp {
             let ctx = ctx.clone();
             ProjectTree::new(root.clone(), options.clone(), move || ctx.request_repaint())
         });
-        self.index = folder.as_ref().map(|root| {
-            let ctx = ctx.clone();
-            IndexWorker::start(root.clone(), options.clone(), move || ctx.request_repaint())
-        });
+        self.index = None;
+        self.index_pending = folder.as_ref().map(|root| (root.clone(), options.clone()));
         self.indexed = None;
+        self.start_index(ctx);
         self.search.reset();
         self.project_watch = folder
             .as_ref()
@@ -2143,6 +2162,7 @@ impl eframe::App for BracketApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.minimized = ctx.input(|i| i.viewport().minimized.unwrap_or(false));
         self.follow_theme(ctx);
+        self.start_index(ctx);
         if let Some(watch) = &self.project_watch {
             while let Ok(changes) = watch.changes.try_recv() {
                 if let Some(tree) = &mut self.tree {
