@@ -65,6 +65,13 @@ ignore = "0.4.33"
 # Regular expressions for find and replace (linear time, no backtracking). Its engine,
 # regex-automata, is already linked through syntect and globset.
 regex = "1.13.1"
+# Symbols: tree-sitter and its C#, CSS, JSON and XML grammars (C code compiled with MSVC). The
+# C# grammar alone adds 5.4 MB, almost all of it a dense parse table (decisions/0003-symbols.md).
+tree-sitter = "0.27.1"
+tree-sitter-c-sharp = "0.23.5"
+tree-sitter-css = "0.25.0"
+tree-sitter-json = "0.24.8"
+tree-sitter-xml = "0.7.0"
 # Moving files and folders to the Recycle Bin (IFileOperation on Windows). Without chrono: it is
 # only needed to list what is in the bin.
 trash = { version = "5.2.9", default-features = false, features = ["coinit_apartmentthreaded"] }

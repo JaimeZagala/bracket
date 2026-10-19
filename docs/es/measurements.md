@@ -299,3 +299,19 @@ Benchmarks de la Fase 1, sin regresión: `open/rope_from_str_1m_lines` 24,2 ms (
 Durante el cierre, abrir el proyecto de 50.000 ficheros al arrancar subía el arranque a 151,6 ms: el recorrido del índice en todos los núcleos competía con el primer fotograma. Ahora el índice empieza después del primer fotograma (commit `perf(ui): start the file index after the first frame`) y el arranque con proyecto queda en 129,6 ms.
 
 La primera ejecución de cada medición (1,2–2,0 s) es la de un exe recién copiado: incluye el análisis de Windows Defender.
+
+## Fase 3, paso 1 — tree-sitter (2026-10-19, equipo A)
+
+Programa mínimo con el perfil release del workspace (`lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = true`), que analiza un texto con cada gramática:
+
+| Variante | Tamaño | Añadido |
+|---|---|---|
+| Sin tree-sitter | 118.784 B | — |
+| tree-sitter 0.27.1 (sin gramáticas en uso) | 130.048 B | +11 KB |
+| + C# 0.23.5 | 5.545.984 B | +5,42 MB |
+| + CSS 0.25.0, JSON 0.24.8 y XML 0.7.0 | 5.711.360 B | +0,17 MB (total: +5,59 MB) |
+| Todas, con las gramáticas en `opt-level = "s"` o `"z"` | 5.707.264 B | −4 KB |
+
+El tamaño de la gramática de C# es casi todo datos: `ts_parse_table` es una tabla densa de 4.096 estados × 530 símbolos × 2 bytes (4,3 MB) en `parser.c` (29,7 MB de código fuente generado). Ninguna opción del compilador la reduce; habría que regenerar la gramática. Se mantiene la optimización por defecto.
+
+Velocidad de análisis de C# (un fichero sintético de 1,5 MB, 4.000 clases): 287 ms, 5,3 MB/s, 508.008 nodos; igual con `opt-level = "s"` o `"z"`.

@@ -11,6 +11,11 @@ publish.workspace = true
 [dependencies]
 bracket-core.workspace = true
 ignore.workspace = true
+tree-sitter.workspace = true
+tree-sitter-c-sharp.workspace = true
+tree-sitter-css.workspace = true
+tree-sitter-json.workspace = true
+tree-sitter-xml.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

@@ -181,7 +181,7 @@ Dependencias previstas, cada una medida antes de entrar: `ignore` y `grep-search
 
 Aprobada el 2026-10-19, con tree-sitter para los símbolos ([decisions/0003-symbols.md](decisions/0003-symbols.md)). Pasos ordenados por dependencias; cada uno compila, tiene tests y lleva su propio commit.
 
-**Tamaño.** Medido con el perfil release del workspace, la gramática de C# añade 5,4 MB y las de CSS, JSON y XML, otros 0,16 MB: el ejecutable pasará de 9,1 a unos 14,6 MB, cerca del presupuesto de 15 MB. El paso 1 mide si se puede reducir sin perder velocidad; la Fase 5 (instalador y actualizador) tendrá que caber en lo que quede y, si no cabe, se revisará el presupuesto con datos.
+**Tamaño.** Medido con el perfil release del workspace, la gramática de C# añade 5,4 MB y las de CSS, JSON y XML, otros 0,17 MB: el ejecutable pasará de 9,1 a unos 14,7 MB, cerca del presupuesto de 15 MB. El paso 1 mide si se puede reducir sin perder velocidad; la Fase 5 (instalador y actualizador) tendrá que caber en lo que quede y, si no cabe, se revisará el presupuesto con datos.
 
 1. tree-sitter en `bracket-index`: `tree-sitter` y las gramáticas de C#, CSS, JSON y XML, medidas en tamaño y arranque, con las opciones para reducir el tamaño probadas, y anotadas en `THIRD_PARTY`. Modelo de símbolos (nombre, tipo, rango y rango del nombre en caracteres, contenedor y anidamiento) y extracción con consultas propias por lenguaje; tree-sitter trabaja en bytes y la conversión a caracteres se hace en el borde.
 2. Símbolos de C#: espacios de nombres (también de ámbito de fichero), clases, structs, interfaces, records, enums, delegados, métodos, constructores, propiedades, campos, eventos e indexadores. Corpus de prueba sintético (nada de código de clientes) y benchmark en MB/s.

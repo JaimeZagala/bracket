@@ -299,3 +299,19 @@ Phase 1 benchmarks, no regression: `open/rope_from_str_1m_lines` 24.2 ms (was 23
 During the close, opening the 50,000-file project at startup raised startup to 151.6 ms: the index walk on every core competed with the first frame. The index now starts after the first frame (commit `perf(ui): start the file index after the first frame`) and startup with a project stays at 129.6 ms.
 
 The first run of each measurement (1.2–2.0 s) is that of a freshly copied exe: it includes Windows Defender's scan.
+
+## Phase 3, step 1 — tree-sitter (2026-10-19, machine A)
+
+A minimal program with the workspace's release profile (`lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = true`) that parses a text with each grammar:
+
+| Variant | Size | Added |
+|---|---|---|
+| Without tree-sitter | 118,784 B | — |
+| tree-sitter 0.27.1 (no grammar in use) | 130,048 B | +11 KB |
+| + C# 0.23.5 | 5,545,984 B | +5.42 MB |
+| + CSS 0.25.0, JSON 0.24.8 and XML 0.7.0 | 5,711,360 B | +0.17 MB (in total: +5.59 MB) |
+| All of them, with the grammars at `opt-level = "s"` or `"z"` | 5,707,264 B | −4 KB |
+
+The C# grammar's size is almost all data: `ts_parse_table` is a dense table of 4,096 states × 530 symbols × 2 bytes (4.3 MB) in `parser.c` (29.7 MB of generated source). No compiler option reduces it; the grammar would have to be regenerated. The default optimization stays.
+
+C# parsing speed (a synthetic 1.5 MB file, 4,000 classes): 287 ms, 5.3 MB/s, 508,008 nodes; the same with `opt-level = "s"` or `"z"`.

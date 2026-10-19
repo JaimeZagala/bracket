@@ -16,10 +16,10 @@
 | Opción | Tamaño añadido | Notas |
 |---|---|---|
 | tree-sitter 0.27.1 + `tree-sitter-c-sharp` 0.23.5 | +5,4 MB | La gramática de C# es casi todo el coste (tablas del analizador) |
-| … + `tree-sitter-css` 0.25.0, `tree-sitter-json` 0.24.8 y `tree-sitter-xml` 0.7.0 | +0,16 MB más | Total +5,55 MB |
+| … + `tree-sitter-css` 0.25.0, `tree-sitter-json` 0.24.8 y `tree-sitter-xml` 0.7.0 | +0,17 MB más | Total +5,59 MB |
 | Extractores propios (escáner por lenguaje) | Decenas de KB (estimado) | Solo reconocen declaraciones; el de C# es el trabajo grande |
 
-Con el ejecutable en 9,1 MB (0.2.0), tree-sitter lo deja en unos 14,6 MB frente al presupuesto de 15 MB.
+Con el ejecutable en 9,1 MB (0.2.0), tree-sitter lo deja en unos 14,7 MB frente al presupuesto de 15 MB.
 
 ## Decisión
 
