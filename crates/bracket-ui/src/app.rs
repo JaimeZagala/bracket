@@ -23,8 +23,9 @@ use bracket_session::{
 use bracket_syntax::ThemeColors;
 use bracket_syntax::highlight::{self, MAX_HIGHLIGHT_BYTES};
 use bracket_syntax::{LanguageRegistry, PackageWarning};
-use eframe::egui::{self, Id, Key, KeyboardShortcut, Modifiers, ViewportCommand};
+use eframe::egui::{self, Id, ViewportCommand};
 
+use crate::commands::{self, Command, Menu};
 use crate::dialogs;
 use crate::disk::{self, DiskNotice, DiskState, DiskWatch, NoticeAction};
 use crate::editor_view::{EditorStyle, EditorView};
@@ -32,7 +33,7 @@ use crate::file_ops::{FileOp, FileOps, OpError};
 use crate::fonts::{self, Fallback, FontSource, LoadedFallback};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
-use crate::quick_open::{IndexEvent, IndexWorker, PaletteAction, QuickOpen};
+use crate::quick_open::{IndexEvent, IndexWorker, PaletteAction, PaletteCommand, QuickOpen};
 use crate::session::{self, SessionKeeper};
 use crate::tabs::{self, Loaded, Loading, Tab, TabAction, TabHighlight};
 use crate::tree::{self, ProjectTree, TreeAction};
@@ -128,83 +129,6 @@ enum PendingAction {
     /// Close the tab with this id.
     CloseTab(u64),
     CloseWindow,
-}
-
-/// Menu commands, also bound to keyboard shortcuts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Command {
-    New,
-    Open,
-    OpenFolder,
-    CloseFolder,
-    Save,
-    SaveAs,
-    CloseTab,
-    NextTab,
-    PreviousTab,
-    ToggleSidebar,
-    FocusTree,
-    QuickOpen,
-    Exit,
-}
-
-impl Command {
-    const SHORTCUTS: [(Self, KeyboardShortcut); 12] = [
-        // Shortcuts with Shift go first: Ctrl+S would also match Ctrl+Shift+S.
-        (
-            Self::FocusTree,
-            KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::E),
-        ),
-        (
-            Self::SaveAs,
-            KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S),
-        ),
-        (
-            Self::PreviousTab,
-            KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::Tab),
-        ),
-        (
-            Self::Save,
-            KeyboardShortcut::new(Modifiers::COMMAND, Key::S),
-        ),
-        (Self::New, KeyboardShortcut::new(Modifiers::COMMAND, Key::N)),
-        (
-            Self::Open,
-            KeyboardShortcut::new(Modifiers::COMMAND, Key::O),
-        ),
-        (
-            Self::CloseTab,
-            KeyboardShortcut::new(Modifiers::COMMAND, Key::W),
-        ),
-        (
-            Self::NextTab,
-            KeyboardShortcut::new(Modifiers::COMMAND, Key::Tab),
-        ),
-        (
-            Self::PreviousTab,
-            KeyboardShortcut::new(Modifiers::COMMAND, Key::PageUp),
-        ),
-        (
-            Self::NextTab,
-            KeyboardShortcut::new(Modifiers::COMMAND, Key::PageDown),
-        ),
-        (
-            Self::ToggleSidebar,
-            KeyboardShortcut::new(Modifiers::COMMAND, Key::B),
-        ),
-        (
-            Self::QuickOpen,
-            KeyboardShortcut::new(Modifiers::COMMAND, Key::P),
-        ),
-    ];
-
-    /// The first shortcut bound to the command, as shown in menus.
-    fn shortcut(self) -> Option<KeyboardShortcut> {
-        Self::SHORTCUTS
-            .iter()
-            .find(|(command, _)| *command == self)
-            .map(|(_, shortcut)| *shortcut)
-    }
 }
 
 pub struct BracketApp {
@@ -1087,19 +1011,32 @@ impl BracketApp {
                     return;
                 }
             }
-            Command::QuickOpen => {
-                let recent = self
-                    .recent
-                    .as_ref()
-                    .map(|r| r.list.files.clone())
-                    .unwrap_or_default();
-                self.quick_open = Some(QuickOpen::new(recent));
-                return;
-            }
+            Command::QuickOpen => return self.open_palette(""),
+            Command::Palette => return self.open_palette(">"),
+            Command::GoToLine => return self.open_palette(":"),
             // Closing goes through the unsaved-changes check in handle_window_events.
             Command::Exit => ctx.send_viewport_cmd(ViewportCommand::Close),
         }
         self.focus_editor(ctx);
+    }
+
+    /// Opens the palette: for files, for commands (`>`) or for a line (`:`).
+    fn open_palette(&mut self, prefix: &str) {
+        let recent = self
+            .recent
+            .as_ref()
+            .map(|r| r.list.files.clone())
+            .unwrap_or_default();
+        self.quick_open = Some(QuickOpen::new(recent, prefix));
+    }
+
+    /// What decides which commands are available now.
+    fn command_state(&self) -> commands::State {
+        commands::State {
+            has_project: self.project.is_some(),
+            active_loaded: self.active_tab().loading.is_none(),
+            tabs: self.tabs.len(),
+        }
     }
 
     /// Opens `folder` as the project, or closes the project with `None`. Open tabs stay.
@@ -1178,30 +1115,32 @@ impl BracketApp {
         let mut picked = None;
         let mut menu_pick = None;
         let theme_names = highlight::theme_names();
-        let mut items = vec![
-            (Command::New, self.texts.menu_new()),
-            (Command::Open, self.texts.menu_open()),
-            (Command::QuickOpen, self.texts.menu_quick_open()),
-            (Command::OpenFolder, self.texts.menu_open_folder()),
-            (Command::Save, self.texts.menu_save()),
-            (Command::SaveAs, self.texts.menu_save_as()),
-            (Command::CloseTab, self.texts.menu_close_tab()),
-        ];
-        if self.project.is_some() {
-            items.push((Command::CloseFolder, self.texts.menu_close_folder()));
-        }
+        let state = self.command_state();
+        let texts = self.texts;
+        let sidebar_shown = self.project.is_some() && self.sidebar.visible;
+        // A menu entry for a command: its text and shortcut, disabled when not available.
+        let mut entry = |ui: &mut egui::Ui, command: Command| {
+            let selected = command == Command::ToggleSidebar && sidebar_shown;
+            let mut button = egui::Button::new(command.label(texts)).selected(selected);
+            if let Some(shortcut) = command.shortcut() {
+                button = button.shortcut_text(ui.ctx().format_shortcut(&shortcut));
+            }
+            if ui
+                .add_enabled(command.is_available(&state), button)
+                .clicked()
+            {
+                picked = Some(command);
+                ui.close();
+            }
+        };
         egui::Panel::top("menu").show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
-                ui.menu_button(self.texts.menu_file(), |ui| {
-                    for (command, label) in items {
-                        let mut button = egui::Button::new(label);
-                        if let Some(shortcut) = command.shortcut() {
-                            button = button.shortcut_text(ui.ctx().format_shortcut(&shortcut));
+                ui.menu_button(texts.menu_file(), |ui| {
+                    for command in Command::in_menu(Menu::File) {
+                        if command == Command::Exit {
+                            ui.separator();
                         }
-                        if ui.add(button).clicked() {
-                            picked = Some(command);
-                            ui.close();
-                        }
+                        entry(ui, command);
                         if command == Command::OpenFolder
                             && let Some(recent) = &self.recent
                         {
@@ -1213,30 +1152,10 @@ impl BracketApp {
                             });
                         }
                     }
-                    ui.separator();
-                    if ui.button(self.texts.menu_exit()).clicked() {
-                        picked = Some(Command::Exit);
-                        ui.close();
-                    }
                 });
-                ui.menu_button(self.texts.menu_view(), |ui| {
-                    let has_project = self.project.is_some();
-                    for (command, label, selected) in [
-                        (
-                            Command::ToggleSidebar,
-                            self.texts.menu_sidebar(),
-                            has_project && self.sidebar.visible,
-                        ),
-                        (Command::FocusTree, self.texts.menu_focus_tree(), false),
-                    ] {
-                        let mut button = egui::Button::new(label).selected(selected);
-                        if let Some(shortcut) = command.shortcut() {
-                            button = button.shortcut_text(ui.ctx().format_shortcut(&shortcut));
-                        }
-                        if ui.add_enabled(has_project, button).clicked() {
-                            picked = Some(command);
-                            ui.close();
-                        }
+                ui.menu_button(texts.menu_view(), |ui| {
+                    for command in Command::in_menu(Menu::View) {
+                        entry(ui, command);
                     }
                     ui.separator();
                     ui.menu_button(self.texts.menu_appearance(), |ui| {
@@ -1267,6 +1186,11 @@ impl BracketApp {
                             }
                         }
                     });
+                });
+                ui.menu_button(texts.menu_go(), |ui| {
+                    for command in Command::in_menu(Menu::Go) {
+                        entry(ui, command);
+                    }
                 });
             });
         });
@@ -1702,7 +1626,27 @@ impl BracketApp {
     }
 
     /// Draws the Ctrl+P palette, if open, and carries out what is picked in it.
-    fn quick_open_palette(&mut self, ctx: &egui::Context) {
+    fn quick_open_palette(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
+        if self.quick_open.is_none() {
+            return;
+        }
+        let state = self.command_state();
+        let texts = self.texts;
+        let commands: Vec<PaletteCommand> = Command::ALL
+            .into_iter()
+            .filter(|c| *c != Command::Palette && c.is_available(&state))
+            .map(|command| PaletteCommand {
+                command,
+                label: command.palette_label(texts),
+                id: command.id(),
+                shortcut: command.shortcut().map(|s| ctx.format_shortcut(&s)),
+            })
+            .collect();
+        let active = self.active_tab();
+        let lines = active
+            .loading
+            .is_none()
+            .then(|| active.doc.buffer.text().len_lines());
         let Some(palette) = &mut self.quick_open else {
             return;
         };
@@ -1711,6 +1655,8 @@ impl BracketApp {
             self.project.as_deref(),
             self.index.as_ref(),
             self.indexed,
+            &commands,
+            lines,
             &self.languages,
             self.texts,
         );
@@ -1733,6 +1679,7 @@ impl BracketApp {
                     go_to(tab, (line, column.unwrap_or(1)));
                 }
             }
+            PaletteAction::Run(command) => return self.run_command(ctx, frame, command),
             PaletteAction::Close => {}
         }
         self.focus_editor(ctx);
@@ -1969,10 +1916,8 @@ impl eframe::App for BracketApp {
 
         // Application shortcuts work wherever the keyboard focus is (for example after using a
         // status bar menu); consuming them keeps the editor from seeing them too.
-        let shortcut = Command::SHORTCUTS
-            .iter()
-            .find(|(_, shortcut)| ctx.input_mut(|i| i.consume_shortcut(shortcut)))
-            .map(|(command, _)| *command);
+        let state = self.command_state();
+        let shortcut = commands::pressed(&ctx).filter(|c| c.is_available(&state));
         let (menu_command, menu_action) = self.menu_bar(ui);
         if let Some(command) = shortcut.or(menu_command) {
             self.run_command(&ctx, frame, command);
@@ -2054,7 +1999,7 @@ impl eframe::App for BracketApp {
         if let Some(c) = missing_glyph {
             self.request_fallback(&ctx, c);
         }
-        self.quick_open_palette(&ctx);
+        self.quick_open_palette(&ctx, frame);
         self.unsaved_dialog(&ctx, frame);
         self.trash_dialog(&ctx);
         self.update_title(&ctx);

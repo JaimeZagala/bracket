@@ -227,3 +227,7 @@ El árbol solo pinta las filas visibles (`ScrollArea::show_rows`) y reconstruye 
 | Tamaño del ejecutable | 9.058.816 B | 9.251.328 B | +188 KB: el recorrido en paralelo de `ignore` (ya no solo el listado de una carpeta), el emparejador y la paleta |
 | Arranque (15 rondas intercaladas, mediana) | 118,9 ms | 122,6 ms | Ruido |
 | Bytes privados a los 6 s con `target/project-50k` abierto | 47,1 MB | 54,3 MB | +7,2 MB: el índice de 50.000 rutas |
+
+## Fase 2, paso 10 — paleta de comandos (2026-10-19, equipo A)
+
+Tamaño del ejecutable: 9.291.264 B (+39 KB frente al paso 9: el registro, el modo comandos de la paleta y el menú Ir).

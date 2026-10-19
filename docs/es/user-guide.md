@@ -30,13 +30,19 @@ Con un proyecto abierto, el **panel del proyecto** muestra a la izquierda el ár
 
 ### Ir a fichero (Ctrl+P)
 
-**Ctrl+P** (o **Archivo → Ir a fichero…**) abre un cuadro arriba para ir a un fichero escribiendo parte de su ruta:
+**Ctrl+P** (o **Ir → Ir a fichero…**) abre un cuadro arriba para ir a un fichero escribiendo parte de su ruta:
 
 - Basta con escribir algunas letras en orden, sin que vayan juntas: `prgcs` encuentra `src\Program.cs`. Pesan más las letras al principio de una palabra, las seguidas y las del nombre del fichero. Se pueden incluir carpetas con `\` o `/` (`models/user`); los espacios no cuentan.
 - Las letras que coinciden se resaltan. ↑ y ↓ eligen (también RePág y AvPág), Intro abre y Esc cierra.
 - Sin texto muestra los ficheros abiertos recientemente.
 - `Program.cs:42` abre el fichero en la línea 42 y `Program.cs:42:7`, también en la columna 7. `:120` va a la línea 120 del documento activo.
 - Busca en los ficheros del proyecto, con las mismas exclusiones que el árbol. El índice se prepara al abrir la carpeta (con 50.000 ficheros, una décima de segundo) y se actualiza solo. Sin proyecto, busca entre los recientes.
+
+### Paleta de comandos e Ir a línea
+
+- **Ctrl+Mayús+P** o **F1** (o **Ver → Paleta de comandos…**) abre el mismo cuadro con `>` delante: lista los comandos disponibles, como «Archivo: Guardar», con su atajo a la derecha, y se filtran escribiendo como en Ctrl+P. Al pasar el ratón por un comando se ve su identificador (por ejemplo `file.save`).
+- **Ctrl+G** (o **Ir → Ir a línea…**) abre el cuadro con `:` delante: escribe la línea, o `línea:columna`, e Intro. También funciona escribir `:` en Ctrl+P.
+- Los menús muestran los mismos comandos y atajos; los que no se pueden usar en ese momento (por ejemplo, Cerrar carpeta sin proyecto) salen desactivados.
 
 La búsqueda de texto en el proyecto llega en los próximos pasos de la Fase 2.
 

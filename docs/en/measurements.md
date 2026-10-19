@@ -227,3 +227,7 @@ The tree paints only the visible rows (`ScrollArea::show_rows`) and rebuilds the
 | Executable size | 9,058,816 B | 9,251,328 B | +188 KB: `ignore`'s parallel walk (no longer only listing one folder), the matcher and the palette |
 | Startup (15 interleaved rounds, median) | 118.9 ms | 122.6 ms | Noise |
 | Private bytes after 6 s with `target/project-50k` open | 47.1 MB | 54.3 MB | +7.2 MB: the index of 50,000 paths |
+
+## Phase 2, step 10 — command palette (2026-10-19, machine A)
+
+Executable size: 9,291,264 B (+39 KB against step 9: the registry, the palette's command mode and the Go menu).

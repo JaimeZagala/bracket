@@ -17,10 +17,11 @@ use bracket_session::ProjectChanges;
 use bracket_syntax::LanguageRegistry;
 use eframe::egui::{
     self, Align2, Color32, FontId, Id, Key, Modifiers, Order, Rect, Sense, TextStyle, Ui, pos2,
-    text::{LayoutJob, TextFormat},
+    text::{CCursor, CCursorRange, LayoutJob, TextFormat},
     vec2,
 };
 
+use crate::commands::Command;
 use crate::i18n::Texts;
 use crate::tabs;
 
@@ -217,6 +218,7 @@ pub enum PaletteAction {
     },
     /// `:line` in the active document.
     GoToLine(LinePosition),
+    Run(Command),
     Close,
 }
 
@@ -241,10 +243,11 @@ pub struct QuickOpen {
 }
 
 impl QuickOpen {
-    /// `recent`: recently opened files, newest first.
-    pub fn new(recent: Vec<PathBuf>) -> Self {
+    /// `recent`: recently opened files, newest first. `prefix`: what the box starts with:
+    /// nothing for files, `>` for commands, `:` for a line.
+    pub fn new(recent: Vec<PathBuf>, prefix: &str) -> Self {
         Self {
-            text: String::new(),
+            text: prefix.to_owned(),
             generation: 0,
             found: Vec::new(),
             found_generation: 0,
@@ -269,6 +272,7 @@ impl QuickOpen {
         self.selected = 0;
         let (file, _) = parse_query(&self.text);
         if let Some(index) = index
+            && Mode::of(&self.text) == Mode::Files
             && !file.is_empty()
         {
             index.query(file.to_owned(), self.generation);
@@ -318,24 +322,39 @@ impl QuickOpen {
         }
     }
 
-    /// Draws the palette. `indexed`: the number of files in the index, once it is built.
+    /// Draws the palette. `indexed`: the number of files in the index, once it is built;
+    /// `commands`: the commands available now; `lines`: the active document's line count.
+    #[allow(clippy::too_many_arguments)]
     pub fn show(
         &mut self,
         ctx: &egui::Context,
         root: Option<&Path>,
         index: Option<&IndexWorker>,
         indexed: Option<usize>,
+        commands: &[PaletteCommand],
+        lines: Option<usize>,
         registry: &LanguageRegistry,
         texts: &Texts,
     ) -> Option<PaletteAction> {
-        let has_index = index.is_some() && indexed.is_some();
-        let items = self.items(root, has_index);
+        let mode = Mode::of(&self.text);
+        let items = match mode {
+            Mode::Files => self.items(root, index.is_some() && indexed.is_some()),
+            _ => Vec::new(),
+        };
+        let matches = match mode {
+            Mode::Commands => command_matches(commands, self.text[1..].trim()),
+            _ => Vec::new(),
+        };
         let (file, line) = parse_query(&self.text);
         let file = file.to_owned();
-        let go_to_line = file.is_empty() && line.is_some();
+        let go_to_line = mode == Mode::Line && line.is_some();
 
         // List keys, before the text field sees them.
-        let count = if go_to_line { 1 } else { items.len() };
+        let count = match mode {
+            Mode::Files => items.len(),
+            Mode::Commands => matches.len(),
+            Mode::Line => usize::from(go_to_line),
+        };
         let pressed = |key| ctx.input_mut(|i| i.consume_key(Modifiers::NONE, key));
         let page = VISIBLE_ROWS as usize - 1;
         if count > 0 {
@@ -353,24 +372,26 @@ impl QuickOpen {
             }
         }
         self.selected = self.selected.min(count.saturating_sub(1));
-        let mut action = None;
         if pressed(Key::Escape) {
             return Some(PaletteAction::Close);
         }
         if pressed(Key::Enter) {
-            action = if go_to_line {
-                line.map(PaletteAction::GoToLine)
-            } else {
-                items.get(self.selected).map(|item| PaletteAction::Open {
+            let chosen = match mode {
+                Mode::Line => line.map(PaletteAction::GoToLine),
+                Mode::Commands => matches
+                    .get(self.selected)
+                    .map(|(i, _)| PaletteAction::Run(commands[*i].command)),
+                Mode::Files => items.get(self.selected).map(|item| PaletteAction::Open {
                     path: item.path.clone(),
                     line,
-                })
+                }),
             };
-            if action.is_some() {
-                return action;
+            if chosen.is_some() {
+                return chosen;
             }
         }
 
+        let mut action = None;
         let screen = ctx.content_rect();
         let width = (screen.width() - 32.0).clamp(200.0, 640.0);
         let area = egui::Area::new(Id::new("quick-open"))
@@ -379,62 +400,107 @@ impl QuickOpen {
             .show(ctx, |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_width(width);
-                    let edit = egui::TextEdit::singleline(&mut self.text)
-                        .id(Id::new("quick-open-text"))
+                    let edit_id = Id::new("quick-open-text");
+                    let mut edit = egui::TextEdit::singleline(&mut self.text)
+                        .id(edit_id)
                         .hint_text(texts.quick_open_hint())
                         .desired_width(f32::INFINITY)
                         .show(ui);
                     if self.first_frame {
+                        // After a prefix typed for the user (">" or ":"), ready to type on.
                         edit.response.request_focus();
+                        let end = CCursor::new(self.text.chars().count());
+                        edit.state
+                            .cursor
+                            .set_char_range(Some(CCursorRange::one(end)));
+                        edit.state.store(ui.ctx(), edit_id);
                         self.first_frame = false;
                     }
                     if edit.response.changed() {
                         self.query_changed(index);
                     }
                     ui.add_space(4.0);
-                    if go_to_line {
-                        let (number, _) = line.unwrap_or((1, None));
-                        let label = texts.quick_open_go_to_line(&number.to_string());
-                        if list_row(ui, &label, &[], true, None).clicked() {
-                            action = line.map(PaletteAction::GoToLine);
-                        }
-                        return;
-                    }
-                    if !file.is_empty() && root.is_some() && indexed.is_none() {
-                        ui.weak(texts.quick_open_indexing());
-                        return;
-                    }
-                    if items.is_empty() {
-                        if !file.is_empty() && self.found_generation == self.generation {
-                            ui.weak(texts.quick_open_no_results());
-                        }
-                        return;
-                    }
-                    egui::ScrollArea::vertical()
-                        .max_height(ROW_HEIGHT * VISIBLE_ROWS)
-                        .auto_shrink([false, true])
-                        .show_rows(ui, ROW_HEIGHT, items.len(), |ui, range| {
-                            ui.spacing_mut().item_spacing.y = 0.0;
-                            for i in range {
-                                let item = &items[i];
-                                let badge = registry.for_path(&item.path).map(|l| &l.badge);
-                                let selected = i == self.selected;
-                                let response =
-                                    list_row(ui, &item.shown, &item.positions, selected, badge);
-                                if selected {
-                                    response.scroll_to_me(None);
+                    match mode {
+                        Mode::Line => {
+                            let label = match (line, lines) {
+                                (Some((number, _)), _) => {
+                                    texts.quick_open_go_to_line(&number.to_string())
                                 }
-                                if response.clicked() {
-                                    action = Some(PaletteAction::Open {
-                                        path: item.path.clone(),
-                                        line,
-                                    });
-                                }
+                                (None, Some(lines)) => texts.go_to_line_hint(&lines.to_string()),
+                                (None, None) => texts.go_to_line_no_document().to_owned(),
+                            };
+                            if list_row(ui, &label, &[], go_to_line, None).clicked() {
+                                action = line.map(PaletteAction::GoToLine);
                             }
-                        });
-                    if let (Some(count), true) = (indexed, root.is_some()) {
-                        ui.add_space(2.0);
-                        ui.weak(texts.quick_open_count(&count.to_string()));
+                        }
+                        Mode::Commands => {
+                            if matches.is_empty() {
+                                ui.weak(texts.commands_no_results());
+                                return;
+                            }
+                            egui::ScrollArea::vertical()
+                                .max_height(ROW_HEIGHT * VISIBLE_ROWS)
+                                .auto_shrink([false, true])
+                                .show_rows(ui, ROW_HEIGHT, matches.len(), |ui, range| {
+                                    ui.spacing_mut().item_spacing.y = 0.0;
+                                    for i in range {
+                                        let (index, positions) = &matches[i];
+                                        let command = &commands[*index];
+                                        let selected = i == self.selected;
+                                        let response =
+                                            command_row(ui, command, positions, selected);
+                                        if selected {
+                                            response.scroll_to_me(None);
+                                        }
+                                        if response.clicked() {
+                                            action = Some(PaletteAction::Run(command.command));
+                                        }
+                                    }
+                                });
+                        }
+                        Mode::Files => {
+                            if !file.is_empty() && root.is_some() && indexed.is_none() {
+                                ui.weak(texts.quick_open_indexing());
+                                return;
+                            }
+                            if items.is_empty() {
+                                if !file.is_empty() && self.found_generation == self.generation {
+                                    ui.weak(texts.quick_open_no_results());
+                                }
+                                return;
+                            }
+                            egui::ScrollArea::vertical()
+                                .max_height(ROW_HEIGHT * VISIBLE_ROWS)
+                                .auto_shrink([false, true])
+                                .show_rows(ui, ROW_HEIGHT, items.len(), |ui, range| {
+                                    ui.spacing_mut().item_spacing.y = 0.0;
+                                    for i in range {
+                                        let item = &items[i];
+                                        let badge = registry.for_path(&item.path).map(|l| &l.badge);
+                                        let selected = i == self.selected;
+                                        let response = list_row(
+                                            ui,
+                                            &item.shown,
+                                            &item.positions,
+                                            selected,
+                                            badge,
+                                        );
+                                        if selected {
+                                            response.scroll_to_me(None);
+                                        }
+                                        if response.clicked() {
+                                            action = Some(PaletteAction::Open {
+                                                path: item.path.clone(),
+                                                line,
+                                            });
+                                        }
+                                    }
+                                });
+                            if let (Some(count), true) = (indexed, root.is_some()) {
+                                ui.add_space(2.0);
+                                ui.weak(texts.quick_open_count(&count.to_string()));
+                            }
+                        }
                     }
                 });
             });
@@ -443,6 +509,151 @@ impl QuickOpen {
         }
         action
     }
+}
+
+/// What the palette is doing, from the first character typed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Files,
+    /// `>`: run a command.
+    Commands,
+    /// `:`: go to a line of the active document.
+    Line,
+}
+
+impl Mode {
+    fn of(text: &str) -> Self {
+        if text.starts_with('>') {
+            Self::Commands
+        } else if text.trim() == ":"
+            || (text.trim_start().starts_with(':') && parse_query(text).0.is_empty())
+        {
+            Self::Line
+        } else {
+            Self::Files
+        }
+    }
+}
+
+/// A command as the palette lists it.
+#[derive(Debug, Clone)]
+pub struct PaletteCommand {
+    pub command: Command,
+    /// "File: Save".
+    pub label: String,
+    /// Shown when hovering over it, to know how to refer to it.
+    pub id: &'static str,
+    pub shortcut: Option<String>,
+}
+
+/// The commands matching `query` (all of them, in order, when it is empty), with the matched
+/// characters of each label.
+fn command_matches(commands: &[PaletteCommand], query: &str) -> Vec<(usize, Vec<usize>)> {
+    if query.is_empty() {
+        return (0..commands.len()).map(|i| (i, Vec::new())).collect();
+    }
+    let labels: Vec<String> = commands.iter().map(|c| c.label.clone()).collect();
+    fuzzy::search(&labels, &Query::new(query), LIMIT)
+        .into_iter()
+        .map(|m| (m.index, m.positions))
+        .collect()
+}
+
+/// One command: its label with the matched characters marked, and its shortcut on the right.
+fn command_row(
+    ui: &mut Ui,
+    command: &PaletteCommand,
+    positions: &[usize],
+    selected: bool,
+) -> egui::Response {
+    let (rect, response) =
+        ui.allocate_exact_size(vec2(ui.available_width(), ROW_HEIGHT), Sense::click());
+    let response = response.on_hover_text(command.id);
+    if !ui.is_rect_visible(rect) {
+        return response;
+    }
+    let visuals = ui.visuals().clone();
+    let painter = ui.painter();
+    let (text, weak, accent) = row_colors(&visuals, selected);
+    if selected {
+        painter.rect_filled(rect, 3.0, visuals.selection.bg_fill);
+    } else if response.hovered() {
+        painter.rect_filled(rect, 3.0, visuals.widgets.hovered.weak_bg_fill);
+    }
+    let font = TextStyle::Body.resolve(ui.style());
+    let chars: Vec<char> = command.label.chars().collect();
+    let label = painter.layout_job(highlighted(
+        &chars,
+        0..chars.len(),
+        positions,
+        text,
+        accent,
+        font.size,
+    ));
+    let center_y = rect.center().y;
+    let mut right = rect.right() - 8.0;
+    if let Some(shortcut) = &command.shortcut {
+        let keys = painter.layout_no_wrap(
+            shortcut.clone(),
+            FontId::proportional(font.size * 0.9),
+            weak,
+        );
+        right -= keys.size().x;
+        painter.galley(pos2(right, center_y - keys.size().y / 2.0), keys, weak);
+        right -= 12.0;
+    }
+    let left = rect.left() + 8.0;
+    painter
+        .with_clip_rect(Rect::from_min_max(
+            pos2(left, rect.top()),
+            pos2(right, rect.bottom()),
+        ))
+        .galley(pos2(left, center_y - label.size().y / 2.0), label, text);
+    response
+}
+
+/// Text, weak text and accent colours of a row.
+fn row_colors(visuals: &egui::Visuals, selected: bool) -> (Color32, Color32, Color32) {
+    if selected {
+        let strong = visuals.selection.stroke.color;
+        (strong, strong.gamma_multiply(0.8), strong)
+    } else {
+        (
+            visuals.text_color(),
+            visuals.weak_text_color(),
+            visuals.hyperlink_color,
+        )
+    }
+}
+
+/// `chars[range]` with the characters at `positions` in the accent colour, underlined.
+fn highlighted(
+    chars: &[char],
+    range: std::ops::Range<usize>,
+    positions: &[usize],
+    color: Color32,
+    accent: Color32,
+    size: f32,
+) -> LayoutJob {
+    let mut job = LayoutJob::default();
+    for i in range {
+        let matched = positions.contains(&i);
+        job.append(
+            &chars[i].to_string(),
+            0.0,
+            TextFormat {
+                font_id: FontId::proportional(size),
+                color: if matched { accent } else { color },
+                underline: if matched {
+                    egui::Stroke::new(1.0, accent)
+                } else {
+                    egui::Stroke::NONE
+                },
+                ..TextFormat::default()
+            },
+        );
+    }
+    job
 }
 
 /// One entry: badge, file name and the folder it is in, with the matched characters in the
@@ -467,16 +678,7 @@ fn list_row(
         painter.rect_filled(rect, 3.0, visuals.widgets.hovered.weak_bg_fill);
     }
     let font = TextStyle::Body.resolve(ui.style());
-    let (text, weak, accent) = if selected {
-        let strong = visuals.selection.stroke.color;
-        (strong, strong.gamma_multiply(0.8), strong)
-    } else {
-        (
-            visuals.text_color(),
-            visuals.weak_text_color(),
-            visuals.hyperlink_color,
-        )
-    };
+    let (text, weak, accent) = row_colors(&visuals, selected);
     let mut x = rect.left() + 8.0;
     let center_y = rect.center().y;
     if let Some(badge) = badge {
@@ -489,25 +691,7 @@ fn list_row(
         .rposition(|&c| c == '\\' || c == '/')
         .map_or(0, |i| i + 1);
     let job = |range: std::ops::Range<usize>, color: Color32, size: f32| {
-        let mut job = LayoutJob::default();
-        for i in range {
-            let matched = positions.contains(&i);
-            job.append(
-                &chars[i].to_string(),
-                0.0,
-                TextFormat {
-                    font_id: FontId::proportional(size),
-                    color: if matched { accent } else { color },
-                    underline: if matched {
-                        egui::Stroke::new(1.0, accent)
-                    } else {
-                        egui::Stroke::NONE
-                    },
-                    ..TextFormat::default()
-                },
-            );
-        }
-        job
+        highlighted(&chars, range, positions, color, accent, size)
     };
     let name = painter.layout_job(job(name_start..chars.len(), text, font.size));
     let folder = painter.layout_job(job(0..name_start.saturating_sub(1), weak, font.size * 0.9));
@@ -587,8 +771,42 @@ mod tests {
     }
 
     #[test]
+    fn the_first_character_picks_the_mode() {
+        assert_eq!(Mode::of("prog"), Mode::Files);
+        assert_eq!(Mode::of("prog:12"), Mode::Files);
+        assert_eq!(Mode::of(">save"), Mode::Commands);
+        assert_eq!(Mode::of(":"), Mode::Line);
+        assert_eq!(Mode::of(":42"), Mode::Line);
+        assert_eq!(Mode::of(":42:3"), Mode::Line);
+    }
+
+    #[test]
+    fn commands_are_found_by_their_label() {
+        let commands: Vec<PaletteCommand> = [
+            (Command::Save, "File: Save"),
+            (Command::GoToLine, "Go: Go to line"),
+        ]
+        .into_iter()
+        .map(|(command, label)| PaletteCommand {
+            command,
+            label: label.to_owned(),
+            id: command.id(),
+            shortcut: None,
+        })
+        .collect();
+        assert_eq!(
+            command_matches(&commands, "").len(),
+            2,
+            "all, with no query"
+        );
+        let found = command_matches(&commands, "gtl");
+        assert_eq!(found.len(), 1);
+        assert_eq!(commands[found[0].0].command, Command::GoToLine);
+    }
+
+    #[test]
     fn older_results_are_dropped() {
-        let mut palette = QuickOpen::new(Vec::new());
+        let mut palette = QuickOpen::new(Vec::new(), "");
         palette.text = "pro".into();
         palette.query_changed(None);
         palette.text = "prog".into();

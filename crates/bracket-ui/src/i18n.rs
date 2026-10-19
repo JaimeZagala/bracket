@@ -165,6 +165,38 @@ impl Texts {
         self.fill("quick_open_count", &[("count", &count)])
     }
 
+    pub fn menu_go(&self) -> &str {
+        self.get("menu_go")
+    }
+
+    pub fn menu_go_to_line(&self) -> &str {
+        self.get("menu_go_to_line")
+    }
+
+    pub fn menu_command_palette(&self) -> &str {
+        self.get("menu_command_palette")
+    }
+
+    pub fn menu_next_tab(&self) -> &str {
+        self.get("menu_next_tab")
+    }
+
+    pub fn menu_previous_tab(&self) -> &str {
+        self.get("menu_previous_tab")
+    }
+
+    pub fn go_to_line_no_document(&self) -> &str {
+        self.get("go_to_line_no_document")
+    }
+
+    pub fn commands_no_results(&self) -> &str {
+        self.get("commands_no_results")
+    }
+
+    pub fn go_to_line_hint(&self, count: &str) -> String {
+        self.fill("go_to_line_hint", &[("count", &count)])
+    }
+
     pub fn menu_recent(&self) -> &str {
         self.get("menu_recent")
     }
@@ -600,6 +632,17 @@ mod tests {
                     t.dialog_open_folder_title().to_owned(),
                 ),
                 ("menu_recent", t.menu_recent().to_owned()),
+                ("menu_go", t.menu_go().to_owned()),
+                ("menu_go_to_line", t.menu_go_to_line().to_owned()),
+                ("menu_command_palette", t.menu_command_palette().to_owned()),
+                ("menu_next_tab", t.menu_next_tab().to_owned()),
+                ("menu_previous_tab", t.menu_previous_tab().to_owned()),
+                (
+                    "go_to_line_no_document",
+                    t.go_to_line_no_document().to_owned(),
+                ),
+                ("commands_no_results", t.commands_no_results().to_owned()),
+                ("go_to_line_hint", t.go_to_line_hint("1")),
                 ("menu_quick_open", t.menu_quick_open().to_owned()),
                 ("quick_open_hint", t.quick_open_hint().to_owned()),
                 ("quick_open_indexing", t.quick_open_indexing().to_owned()),
