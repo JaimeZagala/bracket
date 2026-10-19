@@ -1,8 +1,8 @@
 //! The application shell: open documents as tabs, file loading and saving on worker threads,
 //! window title, status bar and the unsaved-changes dialog.
 
-use std::collections::HashSet;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -15,6 +15,7 @@ use bracket_core::encoding::{self, TextEncoding};
 use bracket_core::movement::{self, Motion};
 use bracket_core::{Selection, Selections};
 use bracket_index::WalkOptions;
+use bracket_index::rules::RuleSet;
 use bracket_search::{FileOutcome, replace_in_file};
 use bracket_session::config::AUTO_THEME;
 use bracket_session::{
@@ -35,6 +36,7 @@ use crate::find_bar::{FindAction, FindBar, ReplaceOutcome};
 use crate::fonts::{self, Fallback, FontSource, LoadedFallback};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
+use crate::outline::{self, Outline};
 use crate::quick_open::{IndexEvent, IndexWorker, PaletteAction, PaletteCommand, QuickOpen};
 use crate::search_panel::{OpenMatch, ReplacePlan, SearchAction, SearchPanel, replace_in_document};
 use crate::session::{self, SessionKeeper};
@@ -145,6 +147,8 @@ enum SidebarMode {
     #[default]
     Tree,
     Search,
+    /// The active document's symbols; the only mode without a project.
+    Outline,
 }
 
 /// What waits for the user to deal with unsaved changes.
@@ -177,6 +181,10 @@ pub struct BracketApp {
     /// Find in folder, in the side panel (Ctrl+Shift+F).
     search: SearchPanel,
     sidebar_mode: SidebarMode,
+    /// The active document's outline, in the side panel.
+    outline: Outline,
+    /// The `symbols.toml` rules of language packages, by language id.
+    symbol_rules: HashMap<String, Arc<RuleSet>>,
     /// "Replace all" in the folder, waiting for the user to confirm it.
     pending_folder_replace: Option<ReplacePlan>,
     /// Closed files being rewritten on a worker thread, and what was done in open tabs.
@@ -271,6 +279,10 @@ impl BracketApp {
             warnings: package_warnings,
         } = languages;
         bracket_syntax::highlight::set_external_grammars(grammars);
+        let languages = LanguageRegistry::with_packages(package_languages);
+        let (symbol_rules, rule_warnings) = outline::package_rules(languages.languages());
+        let mut package_warnings = package_warnings;
+        package_warnings.extend(rule_warnings);
         let LoadedConfig {
             config,
             mut warnings,
@@ -326,6 +338,8 @@ impl BracketApp {
             find: FindBar::default(),
             search: SearchPanel::default(),
             sidebar_mode: SidebarMode::Tree,
+            outline: Outline::default(),
+            symbol_rules,
             pending_folder_replace: None,
             folder_replace: None,
             file_ops: FileOps::new(),
@@ -335,7 +349,7 @@ impl BracketApp {
             tabs: Vec::new(),
             active: 0,
             next_tab_id: 0,
-            languages: LanguageRegistry::with_packages(package_languages),
+            languages,
             package_warnings,
             grammar_warnings_seen: false,
             editor_theme: String::new(),
@@ -1045,7 +1059,17 @@ impl BracketApp {
                 let count = self.tabs.len();
                 self.activate(ctx, (index + count - 1) % count);
             }
-            Command::ToggleSidebar => self.sidebar.visible = !self.sidebar.visible,
+            Command::ToggleSidebar => {
+                self.sidebar.visible = !self.sidebar.visible;
+                // Without a project, the outline is all the panel can show.
+                if self.sidebar.visible && self.project.is_none() {
+                    self.sidebar_mode = SidebarMode::Outline;
+                }
+            }
+            Command::ShowOutline => {
+                self.sidebar.visible = true;
+                self.sidebar_mode = SidebarMode::Outline;
+            }
             Command::FocusTree => {
                 if let Some(tree) = &mut self.tree {
                     self.sidebar.visible = true;
@@ -1345,16 +1369,30 @@ impl BracketApp {
 
     /// Draws the side panel with the project tree, if there is a project and the panel is not
     /// hidden. Remembers its width.
-    fn side_panel(&mut self, ui: &mut egui::Ui) -> (Option<TreeAction>, Option<SearchAction>) {
-        if !self.sidebar.visible {
-            return (None, None);
+    /// Draws the side panel: the project tree, folder search or the outline. Without a project
+    /// only the outline, and only when asked for. Remembers its width.
+    fn side_panel(
+        &mut self,
+        ui: &mut egui::Ui,
+    ) -> (
+        Option<TreeAction>,
+        Option<SearchAction>,
+        Option<std::ops::Range<usize>>,
+    ) {
+        let project = self.tree.is_some() && self.project.is_some();
+        if !self.sidebar.visible || (!project && self.sidebar_mode != SidebarMode::Outline) {
+            return (None, None, None);
         }
-        let (Some(tree), Some(root)) = (self.tree.as_mut(), self.project.as_deref()) else {
-            return (None, None);
-        };
         let (languages, texts) = (&self.languages, self.texts);
         let exclude = &self.config.project_exclude;
-        let (mode, search) = (&mut self.sidebar_mode, &mut self.search);
+        let root = self.project.as_deref();
+        let (mode, search, tree, outline) = (
+            &mut self.sidebar_mode,
+            &mut self.search,
+            &mut self.tree,
+            &mut self.outline,
+        );
+        let tab = &self.tabs[self.active];
         let frame =
             egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(0, 6));
         let panel = egui::Panel::left("project-panel")
@@ -1365,25 +1403,40 @@ impl BracketApp {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.add_space(6.0);
-                    let explorer = *mode == SidebarMode::Tree;
-                    if ui
-                        .selectable_label(explorer, texts.sidebar_explorer())
-                        .clicked()
-                    {
-                        *mode = SidebarMode::Tree;
+                    if project {
+                        if ui
+                            .selectable_label(*mode == SidebarMode::Tree, texts.sidebar_explorer())
+                            .clicked()
+                        {
+                            *mode = SidebarMode::Tree;
+                        }
+                        if ui
+                            .selectable_label(*mode == SidebarMode::Search, texts.sidebar_search())
+                            .clicked()
+                        {
+                            *mode = SidebarMode::Search;
+                            search.focus();
+                        }
                     }
                     if ui
-                        .selectable_label(!explorer, texts.sidebar_search())
+                        .selectable_label(*mode == SidebarMode::Outline, texts.sidebar_outline())
                         .clicked()
                     {
-                        *mode = SidebarMode::Search;
-                        search.focus();
+                        *mode = SidebarMode::Outline;
                     }
                 });
                 ui.separator();
-                match *mode {
-                    SidebarMode::Tree => (tree.show(ui, languages, texts), None),
-                    SidebarMode::Search => (None, search.show(ui, root, exclude, languages, texts)),
+                match (*mode, tree.as_mut(), root) {
+                    (SidebarMode::Tree, Some(tree), Some(_)) => {
+                        (tree.show(ui, languages, texts), None, None)
+                    }
+                    (SidebarMode::Search, Some(_), Some(root)) => {
+                        (None, search.show(ui, root, exclude, languages, texts), None)
+                    }
+                    _ if tab.loading.is_none() => {
+                        (None, None, outline.show(ui, tab.id, &tab.doc, texts))
+                    }
+                    _ => (None, None, None),
                 }
             });
         self.sidebar.width = panel.response.rect.width().round() as u32;
@@ -2188,6 +2241,14 @@ impl eframe::App for BracketApp {
         self.finish_file_ops(ctx);
         self.search.poll();
         self.poll_folder_replace();
+        if self.sidebar.visible && self.sidebar_mode == SidebarMode::Outline {
+            let tab = &self.tabs[self.active];
+            if tab.loading.is_none() {
+                let language = tab.language.as_deref();
+                let rules = language.and_then(|l| self.symbol_rules.get(l).cloned());
+                self.outline.update(ctx, tab.id, &tab.doc, language, rules);
+            }
+        }
         if let Some(tree) = &mut self.tree
             && let Some(bad) = tree.poll()
         {
@@ -2242,7 +2303,11 @@ impl eframe::App for BracketApp {
             // Give the keyboard back to the editor after using a menu.
             self.focus_editor(&ctx);
         }
-        let (tree_action, search_action) = self.side_panel(ui);
+        let (tree_action, search_action, outline_pick) = self.side_panel(ui);
+        if let Some(range) = outline_pick {
+            self.select_match(range);
+            self.focus_editor(&ctx);
+        }
         match search_action {
             Some(SearchAction::Open(OpenMatch { path, line, column })) => {
                 self.open_request(

@@ -325,3 +325,12 @@ Velocidad de análisis de C# (un fichero sintético de 1,5 MB, 4.000 clases): 28
 | `symbols/csharp_1_5mb`: analizar y extraer los símbolos | 414 ms | 3,4 MiB/s |
 
 Desglose medido en release: análisis de tree-sitter 297 ms, consulta 96 ms, construcción de los símbolos (nombres, posiciones en caracteres y anidamiento) 4 ms. Una primera ejecución dio 1,38 s con el equipo cargado (la referencia `walk/index_50k_files` también iba más lenta: 139 ms frente a 121); repetida, 414 ms. El índice del proyecto (paso 7) analizará los ficheros en paralelo y el esquema (paso 5) de forma incremental.
+
+## Fase 3, paso 5 — esquema, tree-sitter en el exe (2026-10-19, equipo A)
+
+| Medida | 0.2.0 | Paso 5 | Cambio |
+|---|---|---|---|
+| Tamaño del ejecutable | 9.523.712 B (9,08 MB) | 15.282.176 B (14,57 MB) | +5,49 MB: tree-sitter con las gramáticas de C#, CSS, JSON y XML, las consultas, las reglas y el esquema |
+| Arranque (`compare-startup.ps1`, 15 rondas intercaladas, mediana) | 168,1 ms | 169,9 ms | Ruido; las dos cifras son altas porque el equipo iba cargado |
+
+El presupuesto es de 15 MB (como en el resto de mediciones, 1 MB = 2²⁰ bytes: 15.728.640 B): quedan 446.464 B (436 KB) de margen para las fases siguientes.

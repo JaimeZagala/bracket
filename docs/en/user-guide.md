@@ -74,6 +74,16 @@ With a project open, the **project panel** on the left shows the folder tree: fo
 - **Replace all** asks for confirmation before touching anything. In files open in a tab, the change goes into the document: it stays unsaved and Ctrl+Z undoes it. The other files are saved at once, with the same encoding, BOM and line breaks, and cannot be undone from Bracket.
 - Read-only files, files that cannot be saved back identical in their encoding and files that changed since the search (also a tab whose unsaved changes no longer match) are left alone. The status bar sums up how many replacements were made and how many files were skipped, and the search runs again.
 
+### Outline
+
+The **Outline** tab of the side panel shows the active document's symbols as a tree: namespaces, classes, methods, properties… in C#; rules, `@media` and variables in CSS; keys in JSON; elements (with their `id` or `name`) in XML and XSIG; procedures, functions, views, tables, triggers and types in T-SQL; and in Razor, the directives and the members of `@code` blocks.
+
+- Clicking a symbol goes to it; the arrow of those with children collapses them.
+- The symbol where the caret is stays marked and the outline scrolls to show it.
+- It updates by itself, a moment after typing stops.
+- Without a project, **View → Outline** opens the panel with this tab only; Ctrl+B hides it.
+- Documents over 10 MB have no outline.
+
 ## Tabs
 
 - Each file opens in its own tab. If the active tab is an empty new document, the file takes its place; if the file is already open, its tab is shown.

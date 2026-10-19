@@ -392,6 +392,26 @@ impl Texts {
         )
     }
 
+    pub fn sidebar_outline(&self) -> &str {
+        self.get("sidebar_outline")
+    }
+
+    pub fn menu_outline(&self) -> &str {
+        self.get("menu_outline")
+    }
+
+    pub fn outline_none(&self) -> &str {
+        self.get("outline_none")
+    }
+
+    pub fn outline_unsupported(&self) -> &str {
+        self.get("outline_unsupported")
+    }
+
+    pub fn outline_too_large(&self) -> &str {
+        self.get("outline_too_large")
+    }
+
     pub fn menu_recent(&self) -> &str {
         self.get("menu_recent")
     }
@@ -827,6 +847,11 @@ mod tests {
                     t.dialog_open_folder_title().to_owned(),
                 ),
                 ("menu_recent", t.menu_recent().to_owned()),
+                ("sidebar_outline", t.sidebar_outline().to_owned()),
+                ("menu_outline", t.menu_outline().to_owned()),
+                ("outline_none", t.outline_none().to_owned()),
+                ("outline_unsupported", t.outline_unsupported().to_owned()),
+                ("outline_too_large", t.outline_too_large().to_owned()),
                 (
                     "menu_replace_in_folder",
                     t.menu_replace_in_folder().to_owned(),

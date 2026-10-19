@@ -325,3 +325,12 @@ C# parsing speed (a synthetic 1.5 MB file, 4,000 classes): 287 ms, 5.3 MB/s, 508
 | `symbols/csharp_1_5mb`: parsing and extracting the symbols | 414 ms | 3.4 MiB/s |
 
 Breakdown measured in release: tree-sitter parsing 297 ms, query 96 ms, building the symbols (names, char positions and nesting) 4 ms. A first run gave 1.38 s with the machine busy (the `walk/index_50k_files` reference was slower too: 139 ms against 121); repeated, 414 ms. The project index (step 7) will parse files in parallel and the outline (step 5) incrementally.
+
+## Phase 3, step 5 — outline, tree-sitter in the exe (2026-10-19, machine A)
+
+| Measure | 0.2.0 | Step 5 | Change |
+|---|---|---|---|
+| Executable size | 9,523,712 B (9.08 MB) | 15,282,176 B (14.57 MB) | +5.49 MB: tree-sitter with the C#, CSS, JSON and XML grammars, the queries, the rules and the outline |
+| Startup (`compare-startup.ps1`, 15 interleaved rounds, median) | 168.1 ms | 169.9 ms | Noise; both figures are high because the machine was busy |
+
+The budget is 15 MB (as in every other measurement, 1 MB = 2²⁰ bytes: 15,728,640 B): 446,464 B (436 KB) are left for the coming phases.

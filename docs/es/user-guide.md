@@ -74,6 +74,16 @@ Con un proyecto abierto, el **panel del proyecto** muestra a la izquierda el ár
 - **Reemplazar todo** pide confirmación antes de tocar nada. En los ficheros abiertos en una pestaña, el cambio va al documento: queda sin guardar y Ctrl+Z lo deshace. Los demás ficheros se guardan en el momento, con su misma codificación, BOM y saltos de línea, y no se pueden deshacer desde Bracket.
 - Se dejan sin tocar los ficheros de solo lectura, los que no se pueden volver a guardar idénticos en su codificación y los que cambiaron desde la búsqueda (también una pestaña con cambios sin guardar que ya no coinciden). La barra de estado resume cuántos reemplazos se hicieron y cuántos ficheros se omitieron, y la búsqueda se repite.
 
+### Esquema
+
+La pestaña **Esquema** del panel lateral muestra los símbolos del documento activo en árbol: espacios de nombres, clases, métodos, propiedades… en C#; reglas, `@media` y variables en CSS; claves en JSON; elementos (con su `id` o `name`) en XML y XSIG; procedimientos, funciones, vistas, tablas, triggers y tipos en T-SQL; y en Razor, las directivas y los miembros de los bloques `@code`.
+
+- Un clic en un símbolo lleva a él; la flecha de los que tienen hijos los pliega.
+- El símbolo donde está el cursor queda marcado y el esquema se desplaza para mostrarlo.
+- Se actualiza solo, un momento después de dejar de escribir.
+- Sin proyecto, **Ver → Esquema** abre el panel solo con esta pestaña; Ctrl+B lo oculta.
+- Los documentos de más de 10 MB no tienen esquema.
+
 ## Pestañas
 
 - Cada fichero se abre en su propia pestaña. Si la pestaña activa es un documento nuevo vacío, el fichero ocupa su lugar; si el fichero ya está abierto, se va a su pestaña.

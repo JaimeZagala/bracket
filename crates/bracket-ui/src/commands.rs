@@ -24,6 +24,7 @@ pub enum Command {
     ReplaceInFolder,
     Palette,
     ToggleSidebar,
+    ShowOutline,
     QuickOpen,
     GoToLine,
     FocusTree,
@@ -54,7 +55,7 @@ const CTRL_SHIFT: Modifiers = Modifiers::COMMAND.plus(Modifiers::SHIFT);
 
 impl Command {
     /// In menu order.
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 22] = [
         Self::New,
         Self::Open,
         Self::OpenFolder,
@@ -71,6 +72,7 @@ impl Command {
         Self::ReplaceInFolder,
         Self::Palette,
         Self::ToggleSidebar,
+        Self::ShowOutline,
         Self::QuickOpen,
         Self::GoToLine,
         Self::FocusTree,
@@ -97,6 +99,7 @@ impl Command {
             Self::ReplaceInFolder => "edit.replaceInFolder",
             Self::Palette => "view.commandPalette",
             Self::ToggleSidebar => "view.toggleSidebar",
+            Self::ShowOutline => "view.outline",
             Self::QuickOpen => "go.file",
             Self::GoToLine => "go.line",
             Self::FocusTree => "go.projectTree",
@@ -121,7 +124,7 @@ impl Command {
             | Self::Replace
             | Self::FindInFolder
             | Self::ReplaceInFolder => Menu::Edit,
-            Self::Palette | Self::ToggleSidebar => Menu::View,
+            Self::Palette | Self::ToggleSidebar | Self::ShowOutline => Menu::View,
             Self::QuickOpen
             | Self::GoToLine
             | Self::FocusTree
@@ -148,6 +151,7 @@ impl Command {
             Self::ReplaceInFolder => texts.menu_replace_in_folder(),
             Self::Palette => texts.menu_command_palette(),
             Self::ToggleSidebar => texts.menu_sidebar(),
+            Self::ShowOutline => texts.menu_outline(),
             Self::QuickOpen => texts.menu_quick_open(),
             Self::GoToLine => texts.menu_go_to_line(),
             Self::FocusTree => texts.menu_focus_tree(),
@@ -196,7 +200,7 @@ impl Command {
             Self::FocusTree => keys!(CTRL_SHIFT, E),
             Self::NextTab => keys!(CTRL, Tab; CTRL, PageDown),
             Self::PreviousTab => keys!(CTRL_SHIFT, Tab; CTRL, PageUp),
-            Self::OpenFolder | Self::CloseFolder | Self::Exit => &[],
+            Self::OpenFolder | Self::CloseFolder | Self::Exit | Self::ShowOutline => &[],
         }
     }
 
@@ -206,11 +210,9 @@ impl Command {
 
     pub fn is_available(self, state: &State) -> bool {
         match self {
-            Self::CloseFolder
-            | Self::ToggleSidebar
-            | Self::FocusTree
-            | Self::FindInFolder
-            | Self::ReplaceInFolder => state.has_project,
+            Self::CloseFolder | Self::FocusTree | Self::FindInFolder | Self::ReplaceInFolder => {
+                state.has_project
+            }
             Self::Save
             | Self::SaveAs
             | Self::GoToLine

@@ -17,7 +17,11 @@ use std::ops::Range;
 use std::sync::OnceLock;
 
 use regex::Regex;
-use tree_sitter::{Language, Parser, Query, QueryCursor, StreamingIterator};
+use std::sync::Arc;
+
+use tree_sitter::{
+    InputEdit, Language, Parser, Point, Query, QueryCursor, StreamingIterator, Tree,
+};
 
 use crate::rules::RuleSet;
 
@@ -182,6 +186,118 @@ pub fn extract(language: &str, text: &str) -> Option<Vec<Symbol>> {
     }
 }
 
+/// Extracts the symbols of one document again and again as it changes. With a grammar, the
+/// previous tree is reused: the old and new texts are compared, their common start and end give
+/// one edit covering every change, and tree-sitter parses only what that edit touched.
+pub struct SymbolParser {
+    kind: ParserKind,
+}
+
+enum ParserKind {
+    Grammar {
+        grammar: &'static Grammar,
+        parser: Parser,
+        /// The text last parsed and its tree.
+        last: Option<(String, Tree)>,
+    },
+    Rules(Arc<RuleSet>),
+    Builtin(fn(&str) -> Vec<Symbol>),
+}
+
+impl SymbolParser {
+    /// A parser for `language`; a language package's `rules` win over the built-in extractor.
+    /// `None` if the language has no symbols.
+    pub fn new(language: &str, rules: Option<Arc<RuleSet>>) -> Option<Self> {
+        let kind = if let Some(rules) = rules {
+            ParserKind::Rules(rules)
+        } else {
+            match language {
+                "tsql" => ParserKind::Builtin(|text| extract_with_rules(tsql_rules(), text)),
+                "razor" => ParserKind::Builtin(razor),
+                _ => {
+                    let grammar = grammar(language)?;
+                    grammar.query()?;
+                    let mut parser = Parser::new();
+                    parser.set_language(&(grammar.language)()).ok()?;
+                    ParserKind::Grammar {
+                        grammar,
+                        parser,
+                        last: None,
+                    }
+                }
+            }
+        };
+        Some(Self { kind })
+    }
+
+    /// The symbols of the document's current `text`.
+    pub fn symbols(&mut self, text: String) -> Vec<Symbol> {
+        match &mut self.kind {
+            ParserKind::Rules(rules) => extract_with_rules(rules, &text),
+            ParserKind::Builtin(extract) => extract(&text),
+            ParserKind::Grammar {
+                grammar,
+                parser,
+                last,
+            } => {
+                let old = last.take().map(|(old_text, mut tree)| {
+                    tree.edit(&edit_between(&old_text, &text));
+                    tree
+                });
+                let Some(tree) = parser.parse(&text, old.as_ref()) else {
+                    return Vec::new();
+                };
+                let query = grammar.query().expect("checked when the parser was made");
+                let symbols = symbols(&text, query_tree(query, &tree, &text));
+                *last = Some((text, tree));
+                symbols
+            }
+        }
+    }
+}
+
+/// The single edit that turns `old` into `new`: everything between their common start and their
+/// common end. Both ends fall on char boundaries.
+fn edit_between(old: &str, new: &str) -> InputEdit {
+    let (a, b) = (old.as_bytes(), new.as_bytes());
+    let mut start = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    while !old.is_char_boundary(start) || !new.is_char_boundary(start) {
+        start -= 1;
+    }
+    let room = a.len().min(b.len()) - start;
+    let mut suffix = a
+        .iter()
+        .rev()
+        .zip(b.iter().rev())
+        .take(room)
+        .take_while(|(x, y)| x == y)
+        .count();
+    while !old.is_char_boundary(a.len() - suffix) || !new.is_char_boundary(b.len() - suffix) {
+        suffix -= 1;
+    }
+    let (old_end, new_end) = (a.len() - suffix, b.len() - suffix);
+    InputEdit {
+        start_byte: start,
+        old_end_byte: old_end,
+        new_end_byte: new_end,
+        start_position: point_at(old, start),
+        old_end_position: point_at(old, old_end),
+        new_end_position: point_at(new, new_end),
+    }
+}
+
+/// Row and byte column of a byte offset, as tree-sitter counts them (rows end at `\n`).
+fn point_at(text: &str, byte: usize) -> Point {
+    let before = &text.as_bytes()[..byte];
+    let row = before.iter().filter(|&&c| c == b'\n').count();
+    let column = byte
+        - before
+            .iter()
+            .rposition(|&c| c == b'\n')
+            .map_or(0, |i| i + 1);
+    Point { row, column }
+}
+
 /// The symbols that a language package's rules (its `symbols.toml`) find in `text`.
 pub fn extract_with_rules(rules: &RuleSet, text: &str) -> Vec<Symbol> {
     let found = rules
@@ -315,6 +431,11 @@ fn find(language: &Language, query: &Query, text: &str) -> Vec<Found> {
     let Some(tree) = parser.parse(text, None) else {
         return Vec::new();
     };
+    query_tree(query, &tree, text)
+}
+
+/// Runs `query` over a parsed `tree` of `text`: the declarations, in bytes.
+fn query_tree(query: &Query, tree: &Tree, text: &str) -> Vec<Found> {
     let names = query.capture_names();
     let name_index = names.iter().position(|n| *n == "name");
     let detail_index = names.iter().position(|n| *n == "detail");
@@ -778,6 +899,77 @@ class C { }";
             .collect();
         assert!(names.contains(&"A".to_owned()) && names.contains(&"x".to_owned()));
         assert!(names.contains(&"Name".to_owned()), "{names:?}");
+    }
+
+    #[test]
+    fn incremental_parsing_gives_the_same_symbols_as_a_fresh_one() {
+        let mut parser = SymbolParser::new("csharp", None).unwrap();
+        let mut text = include_str!("../corpus/Sample.cs").to_owned();
+        assert_eq!(
+            parser.symbols(text.clone()),
+            extract("csharp", &text).unwrap()
+        );
+        // A member added in the middle, one renamed, non-ASCII text, and a deletion.
+        for (from, to) in [
+            (
+                "    public static int Count;",
+                "    public static int Count;\n    public void Añadir() { }",
+            ),
+            ("Describe()", "Describir()"),
+            ("public enum Status", "public enum Estado"),
+            ("    public int X { get; }\n", ""),
+        ] {
+            text = text.replacen(from, to, 1);
+            assert_eq!(
+                parser.symbols(text.clone()),
+                extract("csharp", &text).unwrap(),
+                "after replacing {from:?}"
+            );
+        }
+        let names: Vec<String> = parser
+            .symbols(text.clone())
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        assert!(names.contains(&"Añadir".to_owned()) && names.contains(&"Estado".to_owned()));
+        assert!(!names.contains(&"X".to_owned()));
+    }
+
+    #[test]
+    fn the_edit_between_two_texts_is_their_middle() {
+        let edit = edit_between("let ñ = 1;\nfoo();", "let ñ = 22;\nfoo();");
+        assert_eq!(
+            (edit.start_byte, edit.old_end_byte, edit.new_end_byte),
+            (9, 10, 11)
+        );
+        assert_eq!(edit.start_position, Point { row: 0, column: 9 });
+        let edit = edit_between("aaa", "aaaa");
+        assert_eq!(
+            (edit.start_byte, edit.old_end_byte, edit.new_end_byte),
+            (3, 3, 4)
+        );
+        let edit = edit_between("€", "£");
+        assert_eq!(
+            (edit.start_byte, edit.old_end_byte, edit.new_end_byte),
+            (0, 3, 2)
+        );
+    }
+
+    #[test]
+    fn parsers_exist_for_every_language_with_symbols() {
+        for language in ["csharp", "css", "json", "xml", "tsql", "razor"] {
+            let mut parser = SymbolParser::new(language, None).unwrap();
+            parser.symbols(String::new());
+        }
+        assert!(SymbolParser::new("rust", None).is_none());
+        let rules = Arc::new(
+            RuleSet::parse(
+                "format_version = 1\n[[symbol]]\nkind = \"function\"\npattern = '^fn (\\w+)'\n",
+            )
+            .unwrap(),
+        );
+        let mut parser = SymbolParser::new("rust", Some(rules)).unwrap();
+        assert_eq!(parser.symbols("fn main() {}".into())[0].name, "main");
     }
 
     #[test]
