@@ -6,7 +6,7 @@ use std::hint::black_box;
 
 use bracket_core::CancelToken;
 use bracket_index::fuzzy::{Query, search};
-use bracket_index::project_symbols::{ProjectSymbols, SymbolSource};
+use bracket_index::project_symbols::{Lookup, ProjectSymbols, SymbolSource};
 use bracket_index::{WalkOptions, walk};
 use criterion::{Criterion, criterion_group, criterion_main};
 
@@ -70,9 +70,16 @@ fn symbol_queries(c: &mut Criterion) {
         group.bench_function(name, |b| b.iter(|| symbols.search(black_box(text), 200)));
     }
     // Go to definition: every symbol compared with one name.
-    let from = Some(r"Module07\File03.cs");
+    let csharp = |path: &str| path.ends_with(".cs");
+    let lookup = Lookup {
+        name: "Compute3",
+        from: Some(r"Module07\File03.cs"),
+        component: false,
+        match_case: true,
+        files: &csharp,
+    };
     group.bench_function("definitions", |b| {
-        b.iter(|| symbols.definitions(black_box("Compute3"), from, false, 200))
+        b.iter(|| symbols.definitions(black_box(&lookup), 200))
     });
     group.finish();
 }

@@ -154,6 +154,20 @@ pub struct FoundSymbol {
     pub positions: Vec<usize>,
 }
 
+/// What go to definition looks for, and where.
+#[derive(Clone, Copy)]
+pub struct Lookup<'a> {
+    pub name: &'a str,
+    /// The file the lookup starts from, relative to the project.
+    pub from: Option<&'a str>,
+    /// A Razor component (`<Name />`): its file comes first.
+    pub component: bool,
+    /// With false, when no name matches exactly, names that differ only in case do (T-SQL).
+    pub match_case: bool,
+    /// The files to look in, by their relative path: those of related languages.
+    pub files: &'a dyn Fn(&str) -> bool,
+}
+
 /// A symbol as the fuzzy search sees it: its name, and where to find it again.
 struct Candidate<'a> {
     name: &'a str,
@@ -225,17 +239,18 @@ impl ProjectSymbols {
                 .sum::<usize>()
     }
 
-    /// Where `name` may be defined, the likeliest first: symbols with exactly that name in the
-    /// file `from` (relative to the project), then in its folder or in one of its namespaces,
-    /// then in the other files in their order. With no exact match, the same ignoring case. For
-    /// a Razor component (`<Name />`), its file `Name.razor` comes first.
-    pub fn definitions(
-        &self,
-        name: &str,
-        from: Option<&str>,
-        component: bool,
-        limit: usize,
-    ) -> Vec<FoundSymbol> {
+    /// Where a name may be defined, the likeliest first: symbols with exactly that name in the
+    /// file the lookup starts from, then in its folder or in one of its namespaces, then in the
+    /// other files in their order; only in the files `lookup.files` accepts. For a Razor
+    /// component (`<Name />`), its file `Name.razor` comes first.
+    pub fn definitions(&self, lookup: &Lookup, limit: usize) -> Vec<FoundSymbol> {
+        let Lookup {
+            name,
+            from,
+            component,
+            match_case,
+            files: accepts,
+        } = *lookup;
         fn folder_of(path: &str) -> &str {
             path.rsplit_once('\\').map_or("", |(folder, _)| folder)
         }
@@ -264,7 +279,7 @@ impl ProjectSymbols {
         let mut found = Vec::new();
         if component {
             let file_name = format!("{name}.razor");
-            for path in self.files.iter() {
+            for path in self.files.iter().filter(|p| accepts(p)) {
                 let base = path.rsplit('\\').next().unwrap_or(path);
                 if base.eq_ignore_ascii_case(&file_name) {
                     let rank = if Some(folder_of(path)) == from_folder {
@@ -287,8 +302,9 @@ impl ProjectSymbols {
                 }
             }
         }
-        for exact in [true, false] {
-            for path in self.files.iter() {
+        let passes: &[bool] = if match_case { &[true] } else { &[true, false] };
+        for &exact in passes {
+            for path in self.files.iter().filter(|p| accepts(p)) {
                 let Some(file) = self.by_file.get(path.as_str()) else {
                     continue;
                 };
@@ -878,8 +894,16 @@ mod tests {
                 .collect()
         };
         let from = Some(r"src\Billing\Invoice.cs");
+        let everywhere = |_: &str| true;
+        let lookup = |name| Lookup {
+            name,
+            from,
+            component: false,
+            match_case: true,
+            files: &everywhere,
+        };
         assert_eq!(
-            places(symbols.definitions("Total", from, false, 10)),
+            places(symbols.definitions(&lookup("Total"), 10)),
             [
                 r"src\Billing\Invoice.cs:2", // the same file
                 r"lib\Helpers.cs:0",         // the same namespace
@@ -887,18 +911,41 @@ mod tests {
                 r"src\Shop\Cart.cs:0",
             ]
         );
-        let found = symbols.definitions("Total", from, false, 10);
+        let found = symbols.definitions(&lookup("Total"), 10);
         assert_eq!(found[0].container.as_deref(), Some("Invoice"));
         assert_eq!(found[0].column, 23);
-        assert_eq!(
-            places(symbols.definitions("TAX", from, false, 10)),
-            [r"src\Billing\Tax.cs:0"],
-            "with no exact match, case is ignored"
+        assert!(
+            symbols.definitions(&lookup("TAX"), 10).is_empty(),
+            "case matters"
         );
-        assert!(symbols.definitions("Nothing", from, false, 10).is_empty());
-        assert_eq!(symbols.definitions("Total", from, false, 2).len(), 2);
+        let ignoring_case = Lookup {
+            match_case: false,
+            ..lookup("TAX")
+        };
         assert_eq!(
-            places(symbols.definitions("Basket", None, true, 10)),
+            places(symbols.definitions(&ignoring_case, 10)),
+            [r"src\Billing\Tax.cs:0"],
+            "without match_case, case is ignored when nothing matches exactly"
+        );
+        assert!(symbols.definitions(&lookup("Nothing"), 10).is_empty());
+        assert_eq!(symbols.definitions(&lookup("Total"), 2).len(), 2);
+        let only_shop = |path: &str| path.starts_with(r"src\Shop");
+        let in_shop = Lookup {
+            files: &only_shop,
+            ..lookup("Total")
+        };
+        assert_eq!(
+            places(symbols.definitions(&in_shop, 10)),
+            [r"src\Shop\Cart.cs:0"],
+            "only the files accepted"
+        );
+        let component = Lookup {
+            from: None,
+            component: true,
+            ..lookup("Basket")
+        };
+        assert_eq!(
+            places(symbols.definitions(&component, 10)),
             [r"src\Shop\Basket.razor:0"],
             "a Razor component is its file"
         );

@@ -1286,7 +1286,14 @@ impl BracketApp {
                 .is_some_and(|(p, r)| p.starts_with(r))
         });
         if let Some(index) = index {
-            index.definitions(name.clone(), path, component, self.definition_generation);
+            let language = tab.language.clone();
+            index.definitions(
+                name.clone(),
+                path,
+                language,
+                component,
+                self.definition_generation,
+            );
         }
         self.pending_definition = Some(PendingDefinition {
             tab: tab.id,
@@ -1366,7 +1373,8 @@ impl BracketApp {
             SymbolList::Pending => return,
             SymbolList::Ready { symbols, .. } => {
                 let exact: Vec<_> = symbols.iter().filter(|s| s.name == name).collect();
-                let chosen = match exact.is_empty() {
+                let match_case = navigation::references_match_case(tab.language.as_deref());
+                let chosen = match exact.is_empty() && !match_case {
                     true => symbols
                         .iter()
                         .filter(|s| s.name.to_lowercase() == name.to_lowercase())

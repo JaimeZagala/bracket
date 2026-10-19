@@ -25,7 +25,7 @@ Los símbolos son las declaraciones de un fichero: clases, métodos, reglas de C
 - **Esquema** (pestaña del panel lateral, **Ver → Esquema**): los símbolos del documento activo en árbol.
 - **Ctrl+Mayús+O** (`@` en la paleta): ir a un símbolo del documento activo.
 - **Ctrl+T** (`#` en la paleta): ir a un símbolo de cualquier fichero del proyecto.
-- **F12 y Ctrl+clic**: ir a la definición del nombre del cursor.
+- **F12 y Ctrl+clic**: ir a la definición del nombre del cursor, entre los símbolos de lenguajes relacionados: C# y Razor entre sí; JSON y XML, solo en el propio fichero; los demás, en su lenguaje (también los de los paquetes).
 
 **Mayús+F12** (referencias) no usa los símbolos: busca el nombre como palabra completa en el proyecto, así que funciona en cualquier lenguaje. Distingue mayúsculas salvo en T-SQL y en texto sin lenguaje.
 

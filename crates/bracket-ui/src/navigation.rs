@@ -48,6 +48,18 @@ pub fn references_match_case(language: Option<&str>) -> bool {
     language.is_some_and(|l| l != "tsql")
 }
 
+/// Whether go to definition, started in a document in `from_language`, looks in a file in
+/// `language` (`same_file`: the document itself). C# and Razor look in each other; JSON and XML,
+/// whose keys and elements are not declarations elsewhere, only in their own file; the rest, in
+/// the files of their language.
+pub fn looks_in(from_language: &str, language: &str, same_file: bool) -> bool {
+    match from_language {
+        "json" | "xml" => same_file,
+        "csharp" | "razor" => matches!(language, "csharp" | "razor"),
+        _ => language == from_language,
+    }
+}
+
 /// A place in a document: its tab, its file (to open it again if the tab was closed) and
 /// the caret's line and column, 1-based.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -155,6 +167,22 @@ mod tests {
         assert!(references_match_case(Some("json")));
         assert!(!references_match_case(Some("tsql")));
         assert!(!references_match_case(None));
+    }
+
+    #[test]
+    fn definitions_stay_among_related_languages() {
+        assert!(looks_in("csharp", "razor", false));
+        assert!(looks_in("razor", "csharp", false));
+        assert!(
+            !looks_in("csharp", "json", false),
+            "a profile in launchSettings.json"
+        );
+        assert!(looks_in("json", "json", true));
+        assert!(!looks_in("json", "json", false), "keys of other files");
+        assert!(!looks_in("xml", "xml", false));
+        assert!(looks_in("css", "css", false));
+        assert!(!looks_in("tsql", "csharp", false));
+        assert!(looks_in("python", "python", false), "a package's language");
     }
 
     fn place(line: usize) -> Place {

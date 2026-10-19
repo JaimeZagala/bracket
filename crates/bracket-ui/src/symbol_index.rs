@@ -10,12 +10,14 @@ use std::time::{Duration, Instant};
 
 use bracket_core::{CancelToken, Document, Rope};
 use bracket_index::project_symbols::{
-    FoundSymbol, MAX_FILE_BYTES, ProjectSymbols, Resolve, SymbolSource,
+    FoundSymbol, Lookup, MAX_FILE_BYTES, ProjectSymbols, Resolve, SymbolSource,
 };
 use bracket_index::rules::RuleSet;
 use bracket_index::symbols;
 use bracket_syntax::LanguageRegistry;
 use eframe::egui;
+
+use crate::navigation;
 
 /// How long a document must stay unchanged before its unsaved text is indexed.
 const UNSAVED_QUIET: Duration = Duration::from_secs(1);
@@ -42,10 +44,12 @@ pub enum SymbolCommand {
         text: String,
         generation: u64,
     },
-    /// Where `name` may be defined, seen from the file `from`; `component`: a Razor component.
+    /// Where `name` may be defined, seen from the file `from` in `language`; `component`: a
+    /// Razor component.
     Definitions {
         name: String,
         from: Option<PathBuf>,
+        language: Option<String>,
         component: bool,
         generation: u64,
     },
@@ -114,9 +118,10 @@ impl SymbolWorker {
                             SymbolCommand::Definitions {
                                 name,
                                 from,
+                                language,
                                 component,
                                 generation,
-                            } => definitions = Some((name, from, component, generation)),
+                            } => definitions = Some((name, from, language, component, generation)),
                         }
                     }
                     let updated = files.is_some() || !unsaved.is_empty();
@@ -146,9 +151,29 @@ impl SymbolWorker {
                         let found = index.search(&text, LIMIT);
                         events.push(SymbolEvent::Results { generation, found });
                     }
-                    if let Some((name, from, component, generation)) = definitions {
+                    if let Some((name, from, language, component, generation)) = definitions {
                         let from = from.as_deref().and_then(|f| index.listed_path(f));
-                        let found = index.definitions(&name, from, component, LIMIT);
+                        // Only files of related languages: never a JSON key for a C# name.
+                        let files = |path: &str| {
+                            let source = resolve(path);
+                            language.as_deref().zip(source).is_some_and(
+                                |(from_language, source)| {
+                                    navigation::looks_in(
+                                        from_language,
+                                        &source.language,
+                                        Some(path) == from,
+                                    )
+                                },
+                            )
+                        };
+                        let lookup = Lookup {
+                            name: &name,
+                            from,
+                            component,
+                            match_case: navigation::references_match_case(language.as_deref()),
+                            files: &files,
+                        };
+                        let found = index.definitions(&lookup, LIMIT);
                         events.push(SymbolEvent::Definitions { generation, found });
                     }
                     for event in events {
@@ -182,12 +207,14 @@ impl SymbolWorker {
         &self,
         name: String,
         from: Option<PathBuf>,
+        language: Option<String>,
         component: bool,
         generation: u64,
     ) {
         let _ = self.commands.send(SymbolCommand::Definitions {
             name,
             from,
+            language,
             component,
             generation,
         });
@@ -378,7 +405,14 @@ mod tests {
         assert_eq!(found.1[0].name, "M");
         assert_eq!(found.1[0].relative, "B.cs");
 
-        worker.definitions("B".to_owned(), Some(root.join("A.cs")), false, 8);
+        let csharp = Some("csharp".to_owned());
+        worker.definitions(
+            "B".to_owned(),
+            Some(root.join("A.cs")),
+            csharp.clone(),
+            false,
+            8,
+        );
         let started = Instant::now();
         let found = loop {
             assert!(

@@ -25,7 +25,7 @@ Symbols are a file's declarations: classes, methods, CSS rules, JSON keys, proce
 - **Outline** (a side panel tab, **View → Outline**): the active document's symbols as a tree.
 - **Ctrl+Shift+O** (`@` in the palette): go to a symbol of the active document.
 - **Ctrl+T** (`#` in the palette): go to a symbol of any file in the project.
-- **F12 and Ctrl+click**: go to the definition of the name at the caret.
+- **F12 and Ctrl+click**: go to the definition of the name at the caret, among the symbols of related languages: C# and Razor with each other; JSON and XML, only in the file itself; the rest, in their language (packages' too).
 
 **Shift+F12** (references) does not use symbols: it searches the project for the name as a whole word, so it works in any language. It matches case except in T-SQL and in text without a language.
 
