@@ -21,6 +21,7 @@ fn folder(c: &mut Criterion) {
         finder: Finder::new("x", FindOptions::default()).unwrap(),
         walk: WalkOptions::default(),
         limit: usize::MAX,
+        replacement: None,
     };
     let mut group = c.benchmark_group("folder");
     group.sample_size(10);

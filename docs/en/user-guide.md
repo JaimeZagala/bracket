@@ -65,7 +65,14 @@ With a project open, the **project panel** on the left shows the folder tree: fo
 - Results appear as they are found, grouped by file (clicking the file collapses it) with the line number and the line of each match. Clicking a match opens the file there.
 - Each file is read with its encoding, as when it is opened. Binary files and files over 10 MB are skipped, and at most 20,000 results are shown; the summary says so.
 
-Replacing across the folder comes in the next step of Phase 2.
+### Replace in folder (Ctrl+Shift+H)
+
+**Ctrl+Shift+H** (or **Edit → Replace in folder…**, or **Replace** next to the options of the Search tab) adds the replace row.
+
+- Each match shows what goes, struck out, and the new text after it. With **.\*** you can use `$1`, `${name}` and `\n`, as in Ctrl+H.
+- The check boxes of each file and each match leave out what you do not want to change.
+- **Replace all** asks for confirmation before touching anything. In files open in a tab, the change goes into the document: it stays unsaved and Ctrl+Z undoes it. The other files are saved at once, with the same encoding, BOM and line breaks, and cannot be undone from Bracket.
+- Read-only files, files that cannot be saved back identical in their encoding and files that changed since the search (also a tab whose unsaved changes no longer match) are left alone. The status bar sums up how many replacements were made and how many files were skipped, and the search runs again.
 
 ## Tabs
 

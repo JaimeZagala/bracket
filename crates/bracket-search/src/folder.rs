@@ -5,17 +5,23 @@
 //! encodings and UTF-16 are searched as text, and searched with the same [`Finder`] as Ctrl+F.
 //! Binary files and files over a size limit are skipped. Several threads search at once and
 //! the results of each file are handed over as soon as it is done.
+//!
+//! Replacing in a closed file reads it again, checks it still has the matches the search
+//! found, replaces the chosen ones and writes it back atomically in the same encoding (BOM and
+//! line breaks included). Files that are read-only, or whose encoding cannot reproduce their
+//! bytes exactly, are left alone.
 
 use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-use bracket_core::CancelToken;
+use bracket_core::document::{FileReplacer, write_bytes_atomic};
 use bracket_core::encoding;
+use bracket_core::{CancelToken, Rope};
 use bracket_index::{BadPattern, WalkOptions, walk};
 
-use crate::find::Finder;
+use crate::find::{Finder, Replacement};
 
 /// Files larger than this are skipped.
 pub const MAX_FILE_SIZE: u64 = 10 << 20;
@@ -34,6 +40,8 @@ pub struct FolderQuery {
     pub walk: WalkOptions,
     /// Matches reported in total before stopping.
     pub limit: usize,
+    /// A replacement template: each match then comes with what would replace it.
+    pub replacement: Option<String>,
 }
 
 /// One match: where it is and the line it is on.
@@ -46,6 +54,8 @@ pub struct LineMatch {
     pub preview: String,
     /// The match within `preview`, in chars.
     pub highlight: Range<usize>,
+    /// What would replace the match, when the query has a replacement.
+    pub replacement: Option<String>,
 }
 
 /// The matches in one file.
@@ -117,7 +127,8 @@ pub fn search_folder(
                         truncated.store(true, Ordering::Relaxed);
                         return;
                     }
-                    let (mut lines, more) = find_lines(&query.finder, &text, room);
+                    let (mut lines, more) =
+                        find_lines(&query.finder, &text, room, query.replacement.as_deref());
                     if more {
                         truncated.store(true, Ordering::Relaxed);
                     }
@@ -170,7 +181,13 @@ fn read_text(path: &Path) -> Option<String> {
 
 /// Up to `limit` matches in `text`, with their line, column and preview; and whether there
 /// were more.
-fn find_lines(finder: &Finder, text: &str, limit: usize) -> (Vec<LineMatch>, bool) {
+fn find_lines(
+    finder: &Finder,
+    text: &str,
+    limit: usize,
+    template: Option<&str>,
+) -> (Vec<LineMatch>, bool) {
+    let replacement = template.map(|t| Replacement::new(t, finder, line_break(text)));
     let mut found = Vec::new();
     // Line number and start of the line of the last match, so lines are counted once.
     let (mut line, mut line_start) = (1, 0);
@@ -196,9 +213,93 @@ fn find_lines(finder: &Finder, text: &str, limit: usize) -> (Vec<LineMatch>, boo
             column: column + 1,
             preview,
             highlight,
+            replacement: replacement
+                .as_ref()
+                .and_then(|r| finder.expand_at(text, range.start, r)),
         });
     }
     (found, false)
+}
+
+/// The text's line break, for `\n` in replacements: the first one found, CRLF if there is none.
+fn line_break(text: &str) -> &'static str {
+    match text.find(['\n', '\r']) {
+        Some(i) if text[i..].starts_with("\r\n") => "\r\n",
+        Some(i) if text[i..].starts_with('\r') => "\r",
+        Some(_) => "\n",
+        None => "\r\n",
+    }
+}
+
+/// A closed file to replace in: the matches the search found in it and the ones chosen.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileReplace {
+    pub path: PathBuf,
+    /// How many matches the search found; if the file has a different number now, it changed.
+    pub expected: usize,
+    /// Indices (in the search's order) of the matches to replace, ascending.
+    pub chosen: Vec<usize>,
+}
+
+/// What replacing in one file did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FileOutcome {
+    /// This many matches were replaced and the file was written.
+    Replaced(usize),
+    ReadOnly,
+    /// Its encoding cannot reproduce its bytes exactly.
+    Inexact,
+    /// It no longer has the matches the search found.
+    Changed,
+    Failed(String),
+}
+
+/// Replaces the chosen matches in a closed file and writes it back atomically, in its own
+/// encoding and with its own line breaks.
+pub fn replace_in_file(
+    finder: &Finder,
+    template: &str,
+    file: &FileReplace,
+    replacer: &dyn FileReplacer,
+) -> FileOutcome {
+    let failed = |err: std::io::Error| FileOutcome::Failed(err.to_string());
+    let metadata = match fs::metadata(&file.path) {
+        Ok(metadata) => metadata,
+        Err(err) => return failed(err),
+    };
+    if metadata.permissions().readonly() {
+        return FileOutcome::ReadOnly;
+    }
+    let bytes = match fs::read(&file.path) {
+        Ok(bytes) => bytes,
+        Err(err) => return failed(err),
+    };
+    let decoded = encoding::decode(bytes);
+    if !decoded.exact {
+        return FileOutcome::Inexact;
+    }
+    let replacement = Replacement::new(template, finder, line_break(&decoded.text));
+    let Some(all) = finder.replace_all(&decoded.text, &replacement, &CancelToken::new()) else {
+        return FileOutcome::Changed;
+    };
+    if all.len() != file.expected || file.chosen.iter().any(|&i| i >= all.len()) {
+        return FileOutcome::Changed;
+    }
+    // From the end, so the earlier char positions stay valid.
+    let mut text = Rope::from_str(&decoded.text);
+    for &i in file.chosen.iter().rev() {
+        let (range, new) = &all[i];
+        text.remove(range.clone());
+        text.insert(range.start, new);
+    }
+    let bytes = match decoded.encoding.encode(&text.to_string()) {
+        Ok(bytes) => bytes,
+        Err(err) => return FileOutcome::Failed(err.to_string()),
+    };
+    match write_bytes_atomic(&file.path, &bytes, replacer) {
+        Ok(()) => FileOutcome::Replaced(file.chosen.len()),
+        Err(err) => failed(err),
+    }
 }
 
 /// The line without its indentation, cut to [`CONTEXT_LENGTH`] chars around the match.
@@ -269,6 +370,7 @@ mod tests {
             finder: Finder::new(text, FindOptions::default()).unwrap(),
             walk: WalkOptions::default(),
             limit: 1000,
+            replacement: None,
         }
     }
 
@@ -349,6 +451,108 @@ mod tests {
         .unwrap();
         assert!(summary.cancelled);
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn matches_come_with_their_replacement_when_asked() {
+        let root = project("preview");
+        let mut q = query(&root, "customer");
+        q.replacement = Some("Client".into());
+        let (files, _) = run(&q);
+        let program = files
+            .iter()
+            .find(|f| f.relative == r"src\Program.cs")
+            .unwrap();
+        assert!(
+            program
+                .matches
+                .iter()
+                .all(|m| m.replacement.as_deref() == Some("Client"))
+        );
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn closed_files_keep_their_encoding_and_only_chosen_matches_change() {
+        use bracket_core::document::RenameReplacer;
+        let root = project("replace");
+        let finder = Finder::new("customer", FindOptions::default()).unwrap();
+        // Program.cs has 3 matches; replace the first and the last.
+        let program = FileReplace {
+            path: root.join(r"src\Program.cs"),
+            expected: 3,
+            chosen: vec![0, 2],
+        };
+        let outcome = replace_in_file(&finder, "Client", &program, &RenameReplacer);
+        assert_eq!(outcome, FileOutcome::Replaced(2));
+        assert_eq!(
+            fs::read_to_string(&program.path).unwrap(),
+            "class Program\r\n{\r\n    // Client list\r\n    var customer = new Client();\r\n}\r\n"
+        );
+        // windows-1252 stays windows-1252: "ñ" is still the single byte 0xF1.
+        let legacy = FileReplace {
+            path: root.join(r"src\legacy.txt"),
+            expected: 1,
+            chosen: vec![0],
+        };
+        assert_eq!(
+            replace_in_file(&finder, "Cliente", &legacy, &RenameReplacer),
+            FileOutcome::Replaced(1)
+        );
+        assert_eq!(fs::read(&legacy.path).unwrap(), b"Se\xf1al Cliente\r\n");
+        // UTF-16 with BOM stays UTF-16 with BOM.
+        let wide = FileReplace {
+            path: root.join(r"src\wide.txt"),
+            expected: 1,
+            chosen: vec![0],
+        };
+        replace_in_file(&finder, "Client", &wide, &RenameReplacer);
+        let bytes = fs::read(&wide.path).unwrap();
+        assert_eq!(&bytes[..2], [0xFF, 0xFE]);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn changed_and_read_only_files_are_left_alone() {
+        use bracket_core::document::RenameReplacer;
+        let root = project("skip");
+        let finder = Finder::new("customer", FindOptions::default()).unwrap();
+        let program = root.join(r"src\Program.cs");
+        let before = fs::read(&program).unwrap();
+        let changed = FileReplace {
+            path: program.clone(),
+            expected: 5,
+            chosen: vec![0],
+        };
+        assert_eq!(
+            replace_in_file(&finder, "Client", &changed, &RenameReplacer),
+            FileOutcome::Changed
+        );
+        let mut permissions = fs::metadata(&program).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&program, permissions.clone()).unwrap();
+        let read_only = FileReplace {
+            path: program.clone(),
+            expected: 3,
+            chosen: vec![0],
+        };
+        assert_eq!(
+            replace_in_file(&finder, "Client", &read_only, &RenameReplacer),
+            FileOutcome::ReadOnly
+        );
+        assert_eq!(fs::read(&program).unwrap(), before);
+        #[allow(clippy::permissions_set_readonly_false)]
+        permissions.set_readonly(false);
+        fs::set_permissions(&program, permissions).unwrap();
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_line_break_follows_the_text() {
+        assert_eq!(line_break("a\r\nb"), "\r\n");
+        assert_eq!(line_break("a\nb\r\n"), "\n");
+        assert_eq!(line_break("a\rb"), "\r");
+        assert_eq!(line_break("one line"), "\r\n");
     }
 
     #[test]

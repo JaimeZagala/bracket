@@ -347,6 +347,51 @@ impl Texts {
         )
     }
 
+    pub fn menu_replace_in_folder(&self) -> &str {
+        self.get("menu_replace_in_folder")
+    }
+
+    pub fn search_replace_toggle(&self) -> &str {
+        self.get("search_replace_toggle")
+    }
+
+    pub fn search_replace_toggle_tip(&self) -> &str {
+        self.get("search_replace_toggle_tip")
+    }
+
+    pub fn search_replace_all_tip(&self) -> &str {
+        self.get("search_replace_all_tip")
+    }
+
+    pub fn folder_replace_title(&self) -> &str {
+        self.get("folder_replace_title")
+    }
+
+    pub fn folder_replace_message(&self, matches: &str, files: &str) -> String {
+        self.fill(
+            "folder_replace_message",
+            &[("matches", &matches), ("files", &files)],
+        )
+    }
+
+    pub fn folder_replaced(&self, matches: &str, files: &str) -> String {
+        self.fill(
+            "folder_replaced",
+            &[("matches", &matches), ("files", &files)],
+        )
+    }
+
+    pub fn folder_replace_skipped(&self, count: &str) -> String {
+        self.fill("folder_replace_skipped", &[("count", &count)])
+    }
+
+    pub fn folder_replace_failed(&self, name: &str, error: &str) -> String {
+        self.fill(
+            "folder_replace_failed",
+            &[("name", &name), ("error", &error)],
+        )
+    }
+
     pub fn menu_recent(&self) -> &str {
         self.get("menu_recent")
     }
@@ -782,6 +827,27 @@ mod tests {
                     t.dialog_open_folder_title().to_owned(),
                 ),
                 ("menu_recent", t.menu_recent().to_owned()),
+                (
+                    "menu_replace_in_folder",
+                    t.menu_replace_in_folder().to_owned(),
+                ),
+                (
+                    "search_replace_toggle",
+                    t.search_replace_toggle().to_owned(),
+                ),
+                (
+                    "search_replace_toggle_tip",
+                    t.search_replace_toggle_tip().to_owned(),
+                ),
+                (
+                    "search_replace_all_tip",
+                    t.search_replace_all_tip().to_owned(),
+                ),
+                ("folder_replace_title", t.folder_replace_title().to_owned()),
+                ("folder_replace_message", t.folder_replace_message("1", "1")),
+                ("folder_replaced", t.folder_replaced("1", "1")),
+                ("folder_replace_skipped", t.folder_replace_skipped("1")),
+                ("folder_replace_failed", t.folder_replace_failed("1", "1")),
                 ("sidebar_explorer", t.sidebar_explorer().to_owned()),
                 ("sidebar_search", t.sidebar_search().to_owned()),
                 ("menu_find_in_folder", t.menu_find_in_folder().to_owned()),

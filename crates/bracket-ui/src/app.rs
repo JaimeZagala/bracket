@@ -15,6 +15,7 @@ use bracket_core::encoding::{self, TextEncoding};
 use bracket_core::movement::{self, Motion};
 use bracket_core::{Selection, Selections};
 use bracket_index::WalkOptions;
+use bracket_search::{FileOutcome, replace_in_file};
 use bracket_session::config::AUTO_THEME;
 use bracket_session::{
     Appearance, Config, ConfigWarning, FileWatcher, Language, LoadedConfig, OpenRequest,
@@ -35,7 +36,7 @@ use crate::fonts::{self, Fallback, FontSource, LoadedFallback};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
 use crate::quick_open::{IndexEvent, IndexWorker, PaletteAction, PaletteCommand, QuickOpen};
-use crate::search_panel::{OpenMatch, SearchPanel};
+use crate::search_panel::{OpenMatch, ReplacePlan, SearchAction, SearchPanel, replace_in_document};
 use crate::session::{self, SessionKeeper};
 use crate::tabs::{self, Loaded, Loading, Tab, TabAction, TabHighlight};
 use crate::tree::{self, ProjectTree, TreeAction};
@@ -125,6 +126,19 @@ impl ProjectWatch {
     }
 }
 
+/// What happened to each closed file of a "Replace all" in the folder.
+type FileOutcomes = Vec<(PathBuf, FileOutcome)>;
+
+/// What "Replace all" in the folder did, for the status bar.
+#[derive(Debug, Default)]
+struct FolderReplaceReport {
+    matches: usize,
+    files: usize,
+    skipped: usize,
+    /// The first file that could not be written, and why.
+    failed: Option<(String, String)>,
+}
+
 /// What the side panel shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 enum SidebarMode {
@@ -160,6 +174,10 @@ pub struct BracketApp {
     /// Find in folder, in the side panel (Ctrl+Shift+F).
     search: SearchPanel,
     sidebar_mode: SidebarMode,
+    /// "Replace all" in the folder, waiting for the user to confirm it.
+    pending_folder_replace: Option<ReplacePlan>,
+    /// Closed files being rewritten on a worker thread, and what was done in open tabs.
+    folder_replace: Option<(Receiver<FileOutcomes>, FolderReplaceReport)>,
     /// Creating, renaming and deleting from the tree, on worker threads.
     file_ops: FileOps,
     /// An entry waiting for the user to confirm it goes to the Recycle Bin.
@@ -304,6 +322,8 @@ impl BracketApp {
             find: FindBar::default(),
             search: SearchPanel::default(),
             sidebar_mode: SidebarMode::Tree,
+            pending_folder_replace: None,
+            folder_replace: None,
             file_ops: FileOps::new(),
             pending_trash: None,
             sidebar: Sidebar::default(),
@@ -1038,6 +1058,14 @@ impl BracketApp {
                     return;
                 }
             }
+            Command::ReplaceInFolder => {
+                if self.project.is_some() {
+                    self.sidebar.visible = true;
+                    self.sidebar_mode = SidebarMode::Search;
+                    self.search.open_replace();
+                    return;
+                }
+            }
             Command::Find => return self.open_find(false),
             Command::Replace => return self.open_find(true),
             Command::FindNext => return self.find_step(ctx, true),
@@ -1298,7 +1326,7 @@ impl BracketApp {
 
     /// Draws the side panel with the project tree, if there is a project and the panel is not
     /// hidden. Remembers its width.
-    fn side_panel(&mut self, ui: &mut egui::Ui) -> (Option<TreeAction>, Option<OpenMatch>) {
+    fn side_panel(&mut self, ui: &mut egui::Ui) -> (Option<TreeAction>, Option<SearchAction>) {
         if !self.sidebar.visible {
             return (None, None);
         }
@@ -1813,6 +1841,130 @@ impl BracketApp {
         self.focus_editor(ctx);
     }
 
+    /// Asks before "Replace all" in the folder, which saves closed files at once.
+    fn folder_replace_dialog(&mut self, ctx: &egui::Context) {
+        let Some(plan) = &self.pending_folder_replace else {
+            return;
+        };
+        let texts = self.texts;
+        let message =
+            texts.folder_replace_message(&plan.matches.to_string(), &plan.files.len().to_string());
+        let mut choice = None;
+        let modal = egui::Modal::new(Id::new("folder-replace-confirm")).show(ctx, |ui| {
+            ui.set_max_width(460.0);
+            ui.heading(texts.folder_replace_title());
+            ui.label(message);
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui.button(texts.replace_all()).clicked() {
+                    choice = Some(true);
+                }
+                if ui.button(texts.cancel()).clicked() {
+                    choice = Some(false);
+                }
+            });
+        });
+        if modal.should_close() && choice.is_none() {
+            choice = Some(false);
+        }
+        let Some(confirmed) = choice else { return };
+        let plan = self.pending_folder_replace.take().expect("checked above");
+        if confirmed {
+            self.replace_in_folder(ctx, plan);
+        }
+    }
+
+    /// Carries out "Replace all" in the folder: open tabs change in their buffer (undoable, not
+    /// saved), closed files are rewritten on a worker thread.
+    fn replace_in_folder(&mut self, ctx: &egui::Context, plan: ReplacePlan) {
+        let mut report = FolderReplaceReport::default();
+        let mut closed = Vec::new();
+        for file in plan.files {
+            let open = self.tabs.iter().position(|t| {
+                t.unloaded.is_none() && t.path().is_some_and(|p| tabs::same_file(p, &file.path))
+            });
+            let Some(index) = open else {
+                closed.push(file);
+                continue;
+            };
+            let tab = &mut self.tabs[index];
+            let replaced = if tab.loading.is_some() {
+                None
+            } else {
+                replace_in_document(&mut tab.doc, &plan.finder, &plan.template, &file)
+            };
+            match replaced {
+                Some(count) => {
+                    report.matches += count;
+                    report.files += 1;
+                }
+                None => report.skipped += 1,
+            }
+        }
+        if closed.is_empty() {
+            self.finish_folder_replace(report);
+            return;
+        }
+        let (tx, rx) = mpsc::channel();
+        let replacer = Arc::clone(&self.replacer);
+        let ctx = ctx.clone();
+        let (finder, template) = (plan.finder, plan.template);
+        thread::spawn(move || {
+            let outcomes = closed
+                .into_iter()
+                .map(|file| {
+                    let outcome = replace_in_file(&finder, &template, &file, replacer.as_ref());
+                    (file.path, outcome)
+                })
+                .collect();
+            let _ = tx.send(outcomes);
+            ctx.request_repaint();
+        });
+        self.folder_replace = Some((rx, report));
+    }
+
+    fn poll_folder_replace(&mut self) {
+        let Some((rx, _)) = &self.folder_replace else {
+            return;
+        };
+        let Ok(outcomes) = rx.try_recv() else { return };
+        let (_, mut report) = self.folder_replace.take().expect("checked above");
+        for (path, outcome) in outcomes {
+            match outcome {
+                FileOutcome::Replaced(count) => {
+                    report.matches += count;
+                    report.files += 1;
+                }
+                FileOutcome::Failed(error) => {
+                    report
+                        .failed
+                        .get_or_insert((tree::display_name(&path), error));
+                }
+                FileOutcome::ReadOnly | FileOutcome::Inexact | FileOutcome::Changed => {
+                    report.skipped += 1;
+                }
+            }
+        }
+        self.finish_folder_replace(report);
+    }
+
+    /// Says what "Replace all" did and searches again.
+    fn finish_folder_replace(&mut self, report: FolderReplaceReport) {
+        let texts = self.texts;
+        let mut message =
+            texts.folder_replaced(&report.matches.to_string(), &report.files.to_string());
+        if report.skipped > 0 {
+            message.push_str(" · ");
+            message.push_str(&texts.folder_replace_skipped(&report.skipped.to_string()));
+        }
+        if let Some((name, error)) = &report.failed {
+            message.push_str(" · ");
+            message.push_str(&texts.folder_replace_failed(name, error));
+        }
+        self.status = Some(message);
+        self.search.refresh();
+    }
+
     /// Asks before moving an entry of the tree to the Recycle Bin.
     fn trash_dialog(&mut self, ctx: &egui::Context) {
         let Some(path) = &self.pending_trash else {
@@ -2015,6 +2167,7 @@ impl eframe::App for BracketApp {
         }
         self.finish_file_ops(ctx);
         self.search.poll();
+        self.poll_folder_replace();
         if let Some(tree) = &mut self.tree
             && let Some(bad) = tree.poll()
         {
@@ -2069,17 +2222,21 @@ impl eframe::App for BracketApp {
             // Give the keyboard back to the editor after using a menu.
             self.focus_editor(&ctx);
         }
-        let (tree_action, search_open) = self.side_panel(ui);
-        if let Some(OpenMatch { path, line, column }) = search_open {
-            self.open_request(
-                &ctx,
-                OpenRequest {
-                    path,
-                    line: Some(line),
-                    column: Some(column),
-                },
-            );
-            self.focus_editor(&ctx);
+        let (tree_action, search_action) = self.side_panel(ui);
+        match search_action {
+            Some(SearchAction::Open(OpenMatch { path, line, column })) => {
+                self.open_request(
+                    &ctx,
+                    OpenRequest {
+                        path,
+                        line: Some(line),
+                        column: Some(column),
+                    },
+                );
+                self.focus_editor(&ctx);
+            }
+            Some(SearchAction::ReplaceAll(plan)) => self.pending_folder_replace = Some(plan),
+            None => {}
         }
         match tree_action {
             Some(TreeAction::Open(path)) => {
@@ -2174,6 +2331,7 @@ impl eframe::App for BracketApp {
         self.quick_open_palette(&ctx, frame);
         self.unsaved_dialog(&ctx, frame);
         self.trash_dialog(&ctx);
+        self.folder_replace_dialog(&ctx);
         self.update_title(&ctx);
         self.maximize_once_shown(&ctx);
 

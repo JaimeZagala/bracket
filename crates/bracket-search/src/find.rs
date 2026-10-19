@@ -142,6 +142,17 @@ impl Finder {
         })
     }
 
+    /// What replaces the match starting at byte `start` of `text`.
+    pub(crate) fn expand_at(
+        &self,
+        text: &str,
+        start: usize,
+        replacement: &Replacement,
+    ) -> Option<String> {
+        let captures = self.regex.captures_at(text, start)?;
+        (captures.get(0)?.start() == start).then(|| replacement.apply(&captures))
+    }
+
     /// Every match in `text` with what replaces it, in order, as char ranges. `None` if
     /// cancelled.
     pub fn replace_all(

@@ -263,3 +263,7 @@ Tamaño del ejecutable: 9.398.784 B (+25 KB frente al paso 11).
 | Arranque (15 rondas intercaladas, mediana, frente al paso 11) | 146,6 → 148,0 ms: ruido |
 
 Los resultados llegan fichero a fichero, así que los primeros se ven mucho antes de que termine.
+
+## Fase 2, paso 14 — reemplazar en la carpeta (2026-10-19, equipo A)
+
+Tamaño del ejecutable: 9.523.200 B (+60 KB frente al paso 13: el reemplazo en ficheros, la vista previa, las casillas y la confirmación).

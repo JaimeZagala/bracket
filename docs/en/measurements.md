@@ -263,3 +263,7 @@ Executable size: 9,398,784 B (+25 KB against step 11).
 | Startup (15 interleaved rounds, median, against step 11) | 146.6 → 148.0 ms: noise |
 
 Results arrive file by file, so the first ones show long before it finishes.
+
+## Phase 2, step 14 — replace in folder (2026-10-19, machine A)
+
+Executable size: 9,523,200 B (+60 KB against step 13: replacing in files, the preview, the check boxes and the confirmation).

@@ -65,7 +65,14 @@ Con un proyecto abierto, el **panel del proyecto** muestra a la izquierda el ár
 - Los resultados aparecen según se encuentran, agrupados por fichero (un clic en el fichero lo pliega) con el número de línea y la línea de cada coincidencia. Un clic en una coincidencia abre el fichero en ese punto.
 - Cada fichero se lee con su codificación, como al abrirlo. Se saltan los ficheros binarios y los de más de 10 MB, y se muestran como mucho 20.000 resultados; el resumen lo indica.
 
-Reemplazar en toda la carpeta llega en el próximo paso de la Fase 2.
+### Reemplazar en la carpeta (Ctrl+Mayús+H)
+
+**Ctrl+Mayús+H** (o **Editar → Reemplazar en la carpeta…**, o **Reemplazar** junto a las opciones de la pestaña Buscar) añade la fila de reemplazo.
+
+- Cada coincidencia muestra lo que se quita, tachado, y detrás el texto nuevo. Con **.\*** valen `$1`, `${nombre}` y `\n`, como en Ctrl+H.
+- Las casillas de cada fichero y de cada coincidencia dejan fuera lo que no quieras cambiar.
+- **Reemplazar todo** pide confirmación antes de tocar nada. En los ficheros abiertos en una pestaña, el cambio va al documento: queda sin guardar y Ctrl+Z lo deshace. Los demás ficheros se guardan en el momento, con su misma codificación, BOM y saltos de línea, y no se pueden deshacer desde Bracket.
+- Se dejan sin tocar los ficheros de solo lectura, los que no se pueden volver a guardar idénticos en su codificación y los que cambiaron desde la búsqueda (también una pestaña con cambios sin guardar que ya no coinciden). La barra de estado resume cuántos reemplazos se hicieron y cuántos ficheros se omitieron, y la búsqueda se repite.
 
 ## Pestañas
 
