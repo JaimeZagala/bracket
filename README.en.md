@@ -62,7 +62,7 @@ cargo build --release -p bracket-app
 | 5 | 0.5.0 → 1.0.0 | Installer, portable zip, updater, signing and publishing | Pending |
 | 6 | 1.1.0 | Optional LSP | Pending |
 
-Details: [docs/en/plan.md](docs/en/plan.md). Architecture: [docs/en/architecture.md](docs/en/architecture.md). Changes: [CHANGELOG.en.md](CHANGELOG.en.md).
+Details: [docs/en/plan.md](docs/en/plan.md). Architecture: [docs/en/architecture.md](docs/en/architecture.md). Languages: [docs/en/languages.md](docs/en/languages.md). Changes: [CHANGELOG.en.md](CHANGELOG.en.md).
 
 ## License
 

@@ -130,7 +130,7 @@ Al cerrar Bracket se guarda la sesión: las pestañas abiertas, cuál estaba act
 
 ## Resaltado de sintaxis
 
-Los ficheros de C#, Razor (`.razor`, `.cshtml`), CSS, T-SQL (`.sql`), JSON, XML (también `.xsig`, `.config`, `.csproj`...) y Rust (`.rs`) se muestran con colores, según la insignia de su pestaña. El resaltado se calcula en segundo plano: al abrir un fichero largo primero se colorea lo que está a la vista.
+Los ficheros de C#, Razor (`.razor`, `.cshtml`), CSS, T-SQL (`.sql`), JSON, XML (también `.xsig`, `.config`, `.csproj`...) y Rust (`.rs`) se muestran con colores, según la insignia de su pestaña ([qué hace Bracket con cada lenguaje](languages.md)). El resaltado se calcula en segundo plano: al abrir un fichero largo primero se colorea lo que está a la vista.
 
 - Los ficheros de más de 16 MB y las líneas de más de 20.000 caracteres (por ejemplo, JSON minificado) se muestran sin colores, para que el editor siga siendo rápido.
 - En Razor se colorean las directivas (`@page`, `@using`...), los comentarios `@* *@`, las expresiones (`@Model.Nombre`, `@(a + b)`) y el C# de `@{ }` y `@code { }`. El HTML dentro de los bloques de código todavía no se reconoce.
@@ -147,43 +147,7 @@ Los cambios se aplican al momento y se guardan en `config.toml`.
 
 ## Lenguajes externos
 
-Se pueden añadir lenguajes, o sustituir uno de los integrados, con una carpeta por lenguaje dentro de `languages`:
-
-- **Instalado:** `%APPDATA%\Bracket\languages\` y, con menos prioridad, `languages\` junto a `bracket.exe`.
-- **Portable:** solo `languages\` junto a `bracket.exe`.
-
-El nombre de la carpeta es el identificador del lenguaje; si coincide con uno integrado (`csharp`, `razor`, `css`, `tsql`, `json`, `xml`), lo sustituye. Dentro va `language.toml`:
-
-```toml
-format_version = 1             # obligatorio: versión del formato
-name = "Python"                # obligatorio
-extensions = ["py", "pyw"]     # obligatorio
-scope = "source.python"        # gramática que ya incluye Bracket (opcional)
-tab_width = 4                  # tabulación para este lenguaje (opcional)
-line_comment = "#"             # opcional, para funciones futuras
-block_comment = ['"""', '"""'] # opcional, para funciones futuras
-pairs = [["(", ")"], ["[", "]"]] # opcional, para funciones futuras
-
-[badge]                        # opcional: por defecto, las dos primeras letras en gris
-text = "Py"                    # de 1 a 3 caracteres
-color = "#3776AB"
-```
-
-- **Gramática:** un `syntax.sublime-syntax` en la misma carpeta (formato de Sublime Text, versión 1; las gramáticas que usan `extends` de Sublime Text 4 y los `.tmLanguage` no son compatibles). Si no hay fichero, `scope` permite usar cualquiera de las gramáticas incluidas, que son las del paquete de syntect: Python, Rust, Go, Java, JavaScript, HTML, Markdown, YAML, Shell, Batch... (unas 75). Sin gramática, el lenguaje se reconoce y lleva insignia, pero sin colores.
-- **Símbolos:** un `symbols.toml` opcional define reglas regex para los símbolos del lenguaje (el esquema y la navegación llegan en los próximos pasos de la Fase 3):
-
-```toml
-format_version = 1
-
-[[symbol]]
-kind = "function"                  # class, method, function, procedure, table, variable…
-pattern = '^def (?<name>\w+)'        # el grupo name (o el primero) es el nombre
-end = '^\S'                           # opcional: dónde termina el símbolo
-strip = "[]"                          # opcional: caracteres que se quitan del nombre
-```
-
-  Los patrones usan la sintaxis de la crate `regex`, con `^` y `$` en cada línea; `(?i)` ignora mayúsculas. Un símbolo llega hasta su `end` o hasta el siguiente símbolo.
-- Si un paquete tiene un problema (falta una clave, `format_version` de otra versión, gramática con errores), se ignora y la barra de estado lo indica. Los cambios en los paquetes se aplican al reiniciar Bracket.
+Se pueden añadir lenguajes, o sustituir uno de los integrados, con un paquete: una carpeta por lenguaje dentro de `languages` (`%APPDATA%\Bracket\languages\`, o junto a `bracket.exe` en modo portable) con un `language.toml`, y si se quiere una gramática `.sublime-syntax` para el resaltado y un `symbols.toml` con reglas para los símbolos. El formato completo, y qué hace Bracket con cada lenguaje integrado, está en [Lenguajes](languages.md). Los cambios en los paquetes se aplican al reiniciar Bracket.
 
 ## Cambios en disco
 

@@ -130,7 +130,7 @@ When Bracket closes it saves the session: the open tabs, which one was active, t
 
 ## Syntax highlighting
 
-C#, Razor (`.razor`, `.cshtml`), CSS, T-SQL (`.sql`), JSON, XML (also `.xsig`, `.config`, `.csproj`...) and Rust (`.rs`) files are shown in colour, matching their tab's badge. Highlighting is computed in the background: when a long file opens, what is in view is coloured first.
+C#, Razor (`.razor`, `.cshtml`), CSS, T-SQL (`.sql`), JSON, XML (also `.xsig`, `.config`, `.csproj`...) and Rust (`.rs`) files are shown in colour, matching their tab's badge ([what Bracket does with each language](languages.md)). Highlighting is computed in the background: when a long file opens, what is in view is coloured first.
 
 - Files over 16 MB and lines over 20,000 characters (minified JSON, for example) are shown without colours, so the editor stays fast.
 - In Razor, directives (`@page`, `@using`...), `@* *@` comments, expressions (`@Model.Name`, `@(a + b)`) and the C# in `@{ }` and `@code { }` are coloured. HTML inside code blocks is not recognised yet.
@@ -147,43 +147,7 @@ Changes apply at once and are saved in `config.toml`.
 
 ## External languages
 
-Languages can be added, or a built-in one replaced, with one folder per language inside `languages`:
-
-- **Installed:** `%APPDATA%\Bracket\languages\` and, with lower priority, `languages\` next to `bracket.exe`.
-- **Portable:** only `languages\` next to `bracket.exe`.
-
-The folder name is the language id; if it matches a built-in one (`csharp`, `razor`, `css`, `tsql`, `json`, `xml`), it replaces it. Inside goes `language.toml`:
-
-```toml
-format_version = 1             # required: format version
-name = "Python"                # required
-extensions = ["py", "pyw"]     # required
-scope = "source.python"        # a grammar Bracket already includes (optional)
-tab_width = 4                  # tab width for this language (optional)
-line_comment = "#"             # optional, for future features
-block_comment = ['"""', '"""'] # optional, for future features
-pairs = [["(", ")"], ["[", "]"]] # optional, for future features
-
-[badge]                        # optional: by default the first two letters on grey
-text = "Py"                    # 1 to 3 characters
-color = "#3776AB"
-```
-
-- **Grammar:** a `syntax.sublime-syntax` in the same folder (Sublime Text format, version 1; grammars using Sublime Text 4's `extends` and `.tmLanguage` files are not supported). Without a file, `scope` can use any of the included grammars, which are syntect's bundle: Python, Rust, Go, Java, JavaScript, HTML, Markdown, YAML, Shell, Batch... (about 75). Without a grammar, the language is recognised and has a badge, but no colours.
-- **Symbols:** an optional `symbols.toml` defines regex rules for the language's symbols (the outline and navigation come in the next steps of Phase 3):
-
-```toml
-format_version = 1
-
-[[symbol]]
-kind = "function"                  # class, method, function, procedure, table, variable…
-pattern = '^def (?<name>\w+)'        # the name group (or the first one) is the name
-end = '^\S'                           # optional: where the symbol ends
-strip = "[]"                          # optional: characters taken out of the name
-```
-
-  Patterns use the `regex` crate's syntax, with `^` and `$` at every line; `(?i)` ignores case. A symbol runs to its `end` or to the next symbol.
-- If a package has a problem (a missing key, a `format_version` from another version, a grammar with errors), it is skipped and the status bar says so. Changes to packages apply when Bracket restarts.
+Languages can be added, or a built-in one replaced, with a package: one folder per language inside `languages` (`%APPDATA%\Bracket\languages\`, or next to `bracket.exe` in portable mode) with a `language.toml`, and optionally a `.sublime-syntax` grammar for highlighting and a `symbols.toml` with rules for the symbols. The full format, and what Bracket does with each built-in language, is in [Languages](languages.md). Changes to packages apply when Bracket restarts.
 
 ## Changes on disk
 
