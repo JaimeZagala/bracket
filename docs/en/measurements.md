@@ -253,3 +253,13 @@ Executable size: 9,291,264 B (+39 KB against step 9: the registry, the palette's
 Executable size: 9,398,784 B (+25 KB against step 11).
 
 `find/replace_all_regex_50mb` (every `new Customer(…)` with its replacement `Customer.Create($1)`, about 10,000 matches in 50 MB): 79.8 ms. In this session the machine was about 7 times slower than at step 11 (in the same run `find/plain_50mb` gave 76 ms against 8.8 ms, and a release build took 6.5 min instead of 1.5), so the figure is pessimistic and will be repeated when the phase closes (step 15). Startup was not measured for the same reason.
+
+## Phase 2, step 13 — find in folder (2026-10-19, machine A)
+
+| Measure | Result |
+|---|---|
+| `folder/search_50k_files`: "x" in the 50,000 files of `target/project-50k` (all of them match), with a warm file cache | 765 ms (about 120 ms of it the walk; reference in the same session: `walk/index_50k_files` 118 ms) |
+| Executable size | 9,461,760 B (+61 KB against step 12) |
+| Startup (15 interleaved rounds, median, against step 11) | 146.6 → 148.0 ms: noise |
+
+Results arrive file by file, so the first ones show long before it finishes.

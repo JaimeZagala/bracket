@@ -11,6 +11,7 @@ pub mod fonts;
 mod i18n;
 mod measure;
 mod quick_open;
+mod search_panel;
 mod session;
 mod tabs;
 mod tree;

@@ -119,6 +119,29 @@ impl Finder {
         })
     }
 
+    /// The non-empty matches in `text`, as byte ranges.
+    pub(crate) fn byte_matches<'t>(
+        &self,
+        text: &'t str,
+    ) -> impl Iterator<Item = Range<usize>> + 't {
+        let regex = self.regex.clone();
+        let mut at = 0;
+        std::iter::from_fn(move || {
+            while at <= text.len() {
+                let found = regex.find_at(text, at)?;
+                at = if found.is_empty() {
+                    found.end() + 1
+                } else {
+                    found.end()
+                };
+                if !found.is_empty() {
+                    return Some(found.range());
+                }
+            }
+            None
+        })
+    }
+
     /// Every match in `text` with what replaces it, in order, as char ranges. `None` if
     /// cancelled.
     pub fn replace_all(

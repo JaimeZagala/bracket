@@ -47,7 +47,7 @@ Measured, not assumed. If a budget cannot be met, it is reported with data and a
 - **Buffer:** ropey. Multiple selections from the start. Custom transactional undo/redo (a multi-cursor edit or a bulk replace is one step).
 - **Highlighting:** syntect with the `default-fancy` feature (no C dependencies), `.sublime-syntax`/`.tmLanguage` grammars.
 - **Symbols:** tree-sitter for C#, CSS, JSON and XML. T-SQL through regex rules (CREATE/ALTER of PROCEDURE, FUNCTION, VIEW, TABLE, TRIGGER; `GO` as separator). Razor in three layers: TextMate highlighting; directive symbols (`@page`, `@inject`, `@using`, `@inherits`) and `@code` blocks passed to the C# extractor; navigation from `<MyComponent />` to `MyComponent.razor` by file name.
-- **Projects and search:** ignore, regex + grep-searcher, our own fuzzy matcher, trash (Recycle Bin).
+- **Projects and search:** ignore, regex, our own fuzzy matcher, trash (Recycle Bin). (`grep-searcher` was planned; it was not needed, see the architecture.)
 - **Other:** notify, similar, encoding_rs + chardetng, toml_edit (configuration: keeps comments when saving and reads key by key; replaces serde + toml since Phase 1), anyhow + thiserror + tracing, crossbeam-channel.
 - **Distribution:** winreg, winresource or embed-resource, ureq, semver, sha2 + ed25519-dalek, self-replace, zip. Inno Setup installer. Publishing with GitHub Actions on a Windows runner.
 - **Testing:** cargo test, proptest, criterion.
@@ -173,7 +173,7 @@ Approved on 2026-10-18. Steps ordered by dependencies; each one builds, has test
 14. Replace in the folder: a preview with checkboxes; in open tabs the change goes into the buffer (undoable, not saved); closed files are rewritten with atomic saving, keeping encoding, BOM and line endings; read-only or inexactly encoded files are skipped; a summary at the end.
 15. Wrap-up: measurements (Ctrl+P with 50,000 files, walking, folder search speed, RAM and startup with a project), documentation, CHANGELOG and a local `v0.2.0` tag.
 
-Planned dependencies, each measured before it goes in: `ignore` and `grep-searcher` + `grep-regex` (Unlicense OR MIT) and `trash` (MIT). The fuzzy matcher is our own, so as not to add another license (`nucleo-matcher` is MPL-2.0); if it missed the budget, `nucleo-matcher` would be measured.
+Planned dependencies, each measured before it goes in: `ignore` and `grep-searcher` + `grep-regex` (Unlicense OR MIT) and `trash` (MIT). In the end `ignore`, `trash` and `regex` went in; `grep-searcher` and `grep-regex` were not needed (step 13). The fuzzy matcher is our own, so as not to add another license (`nucleo-matcher` is MPL-2.0); if it missed the budget, `nucleo-matcher` would be measured.
 
 ## Future improvements without an assigned phase
 

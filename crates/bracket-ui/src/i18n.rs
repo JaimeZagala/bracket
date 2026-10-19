@@ -293,6 +293,60 @@ impl Texts {
         self.fill("replaced_count", &[("count", &count)])
     }
 
+    pub fn sidebar_explorer(&self) -> &str {
+        self.get("sidebar_explorer")
+    }
+
+    pub fn sidebar_search(&self) -> &str {
+        self.get("sidebar_search")
+    }
+
+    pub fn menu_find_in_folder(&self) -> &str {
+        self.get("menu_find_in_folder")
+    }
+
+    pub fn search_hint(&self) -> &str {
+        self.get("search_hint")
+    }
+
+    pub fn search_include(&self) -> &str {
+        self.get("search_include")
+    }
+
+    pub fn search_exclude(&self) -> &str {
+        self.get("search_exclude")
+    }
+
+    pub fn search_searching(&self) -> &str {
+        self.get("search_searching")
+    }
+
+    pub fn search_none(&self) -> &str {
+        self.get("search_none")
+    }
+
+    pub fn search_summary(&self, matches: &str, files: &str) -> String {
+        self.fill(
+            "search_summary",
+            &[("matches", &matches), ("files", &files)],
+        )
+    }
+
+    pub fn search_truncated(&self, limit: &str) -> String {
+        self.fill("search_truncated", &[("limit", &limit)])
+    }
+
+    pub fn search_skipped(&self, count: &str) -> String {
+        self.fill("search_skipped", &[("count", &count)])
+    }
+
+    pub fn search_bad_filter(&self, pattern: &str, error: &str) -> String {
+        self.fill(
+            "search_bad_filter",
+            &[("pattern", &pattern), ("error", &error)],
+        )
+    }
+
     pub fn menu_recent(&self) -> &str {
         self.get("menu_recent")
     }
@@ -728,6 +782,18 @@ mod tests {
                     t.dialog_open_folder_title().to_owned(),
                 ),
                 ("menu_recent", t.menu_recent().to_owned()),
+                ("sidebar_explorer", t.sidebar_explorer().to_owned()),
+                ("sidebar_search", t.sidebar_search().to_owned()),
+                ("menu_find_in_folder", t.menu_find_in_folder().to_owned()),
+                ("search_hint", t.search_hint().to_owned()),
+                ("search_include", t.search_include().to_owned()),
+                ("search_exclude", t.search_exclude().to_owned()),
+                ("search_searching", t.search_searching().to_owned()),
+                ("search_none", t.search_none().to_owned()),
+                ("search_summary", t.search_summary("1", "1")),
+                ("search_truncated", t.search_truncated("1")),
+                ("search_skipped", t.search_skipped("1")),
+                ("search_bad_filter", t.search_bad_filter("1", "1")),
                 ("menu_replace", t.menu_replace().to_owned()),
                 ("replace_hint", t.replace_hint().to_owned()),
                 ("replace_one", t.replace_one().to_owned()),

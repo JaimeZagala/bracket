@@ -35,6 +35,7 @@ use crate::fonts::{self, Fallback, FontSource, LoadedFallback};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
 use crate::quick_open::{IndexEvent, IndexWorker, PaletteAction, PaletteCommand, QuickOpen};
+use crate::search_panel::{OpenMatch, SearchPanel};
 use crate::session::{self, SessionKeeper};
 use crate::tabs::{self, Loaded, Loading, Tab, TabAction, TabHighlight};
 use crate::tree::{self, ProjectTree, TreeAction};
@@ -124,6 +125,14 @@ impl ProjectWatch {
     }
 }
 
+/// What the side panel shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum SidebarMode {
+    #[default]
+    Tree,
+    Search,
+}
+
 /// What waits for the user to deal with unsaved changes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingAction {
@@ -148,6 +157,9 @@ pub struct BracketApp {
     quick_open: Option<QuickOpen>,
     /// The find bar above the editor (Ctrl+F).
     find: FindBar,
+    /// Find in folder, in the side panel (Ctrl+Shift+F).
+    search: SearchPanel,
+    sidebar_mode: SidebarMode,
     /// Creating, renaming and deleting from the tree, on worker threads.
     file_ops: FileOps,
     /// An entry waiting for the user to confirm it goes to the Recycle Bin.
@@ -290,6 +302,8 @@ impl BracketApp {
             indexed: None,
             quick_open: None,
             find: FindBar::default(),
+            search: SearchPanel::default(),
+            sidebar_mode: SidebarMode::Tree,
             file_ops: FileOps::new(),
             pending_trash: None,
             sidebar: Sidebar::default(),
@@ -1011,7 +1025,16 @@ impl BracketApp {
             Command::FocusTree => {
                 if let Some(tree) = &mut self.tree {
                     self.sidebar.visible = true;
+                    self.sidebar_mode = SidebarMode::Tree;
                     tree.focus(ctx);
+                    return;
+                }
+            }
+            Command::FindInFolder => {
+                if self.project.is_some() {
+                    self.sidebar.visible = true;
+                    self.sidebar_mode = SidebarMode::Search;
+                    self.search.focus();
                     return;
                 }
             }
@@ -1113,6 +1136,7 @@ impl BracketApp {
         let folder = folder.map(|f| std::path::absolute(&f).unwrap_or(f));
         let options = WalkOptions {
             exclude: self.config.project_exclude.clone(),
+            ..WalkOptions::default()
         };
         self.tree = folder.as_ref().map(|root| {
             let ctx = ctx.clone();
@@ -1123,6 +1147,7 @@ impl BracketApp {
             IndexWorker::start(root.clone(), options.clone(), move || ctx.request_repaint())
         });
         self.indexed = None;
+        self.search.reset();
         self.project_watch = folder
             .as_ref()
             .and_then(|root| ProjectWatch::start(ctx, root));
@@ -1273,11 +1298,16 @@ impl BracketApp {
 
     /// Draws the side panel with the project tree, if there is a project and the panel is not
     /// hidden. Remembers its width.
-    fn side_panel(&mut self, ui: &mut egui::Ui) -> Option<TreeAction> {
+    fn side_panel(&mut self, ui: &mut egui::Ui) -> (Option<TreeAction>, Option<OpenMatch>) {
         if !self.sidebar.visible {
-            return None;
+            return (None, None);
         }
-        let tree = self.tree.as_mut()?;
+        let (Some(tree), Some(root)) = (self.tree.as_mut(), self.project.as_deref()) else {
+            return (None, None);
+        };
+        let (languages, texts) = (&self.languages, self.texts);
+        let exclude = &self.config.project_exclude;
+        let (mode, search) = (&mut self.sidebar_mode, &mut self.search);
         let frame =
             egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(0, 6));
         let panel = egui::Panel::left("project-panel")
@@ -1285,7 +1315,30 @@ impl BracketApp {
             .frame(frame)
             .default_size(self.sidebar.width as f32)
             .size_range(Sidebar::MIN_WIDTH as f32..=Sidebar::MAX_WIDTH as f32)
-            .show(ui, |ui| tree.show(ui, &self.languages, self.texts));
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.add_space(6.0);
+                    let explorer = *mode == SidebarMode::Tree;
+                    if ui
+                        .selectable_label(explorer, texts.sidebar_explorer())
+                        .clicked()
+                    {
+                        *mode = SidebarMode::Tree;
+                    }
+                    if ui
+                        .selectable_label(!explorer, texts.sidebar_search())
+                        .clicked()
+                    {
+                        *mode = SidebarMode::Search;
+                        search.focus();
+                    }
+                });
+                ui.separator();
+                match *mode {
+                    SidebarMode::Tree => (tree.show(ui, languages, texts), None),
+                    SidebarMode::Search => (None, search.show(ui, root, exclude, languages, texts)),
+                }
+            });
         self.sidebar.width = panel.response.rect.width().round() as u32;
         panel.inner
     }
@@ -1961,6 +2014,7 @@ impl eframe::App for BracketApp {
             }
         }
         self.finish_file_ops(ctx);
+        self.search.poll();
         if let Some(tree) = &mut self.tree
             && let Some(bad) = tree.poll()
         {
@@ -2015,7 +2069,19 @@ impl eframe::App for BracketApp {
             // Give the keyboard back to the editor after using a menu.
             self.focus_editor(&ctx);
         }
-        match self.side_panel(ui) {
+        let (tree_action, search_open) = self.side_panel(ui);
+        if let Some(OpenMatch { path, line, column }) = search_open {
+            self.open_request(
+                &ctx,
+                OpenRequest {
+                    path,
+                    line: Some(line),
+                    column: Some(column),
+                },
+            );
+            self.focus_editor(&ctx);
+        }
+        match tree_action {
             Some(TreeAction::Open(path)) => {
                 self.open_file(&ctx, path);
                 self.focus_editor(&ctx);

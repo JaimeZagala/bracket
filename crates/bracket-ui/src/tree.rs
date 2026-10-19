@@ -1174,6 +1174,7 @@ mod tests {
         let root = project("bad");
         let options = WalkOptions {
             exclude: vec!["src/[".into()],
+            ..WalkOptions::default()
         };
         let mut tree = ProjectTree::new(root.clone(), options, || {});
         tree.expand([root.join("src")]);

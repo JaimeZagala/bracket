@@ -47,7 +47,7 @@ Se miden, no se suponen. Si alguno no es alcanzable, se informa con datos y alte
 - **Buffer:** ropey. Selección múltiple desde el inicio. Deshacer/rehacer propio por transacciones (un multicursor o un reemplazo masivo es un solo paso).
 - **Resaltado:** syntect con la feature `default-fancy` (sin dependencias de C), gramáticas `.sublime-syntax`/`.tmLanguage`.
 - **Símbolos:** tree-sitter para C#, CSS, JSON y XML. T-SQL por reglas regex (CREATE/ALTER de PROCEDURE, FUNCTION, VIEW, TABLE, TRIGGER; `GO` como separador). Razor en tres capas: resaltado TextMate; símbolos de directivas (`@page`, `@inject`, `@using`, `@inherits`) y bloques `@code` pasados al extractor de C#; navegación de `<MiComponente />` a `MiComponente.razor` por nombre de fichero.
-- **Proyecto y búsqueda:** ignore, regex + grep-searcher, emparejador difuso propio, trash (Papelera de reciclaje).
+- **Proyecto y búsqueda:** ignore, regex, emparejador difuso propio, trash (Papelera de reciclaje). (`grep-searcher` estaba previsto; no hizo falta, ver la arquitectura.)
 - **Otros:** notify, similar, encoding_rs + chardetng, toml_edit (configuración: conserva comentarios al guardar y lee clave a clave; sustituye a serde + toml desde la Fase 1), anyhow + thiserror + tracing, crossbeam-channel.
 - **Distribución:** winreg, winresource o embed-resource, ureq, semver, sha2 + ed25519-dalek, self-replace, zip. Instalador con Inno Setup. Publicación con GitHub Actions en runner de Windows.
 - **Pruebas:** cargo test, proptest, criterion.
@@ -173,7 +173,7 @@ Aprobada el 2026-10-18. Pasos ordenados por dependencias; cada uno compila, tien
 14. Reemplazar en la carpeta: vista previa con casillas; en las pestañas abiertas el cambio va al buffer (deshacible, sin guardar); los ficheros cerrados se reescriben con guardado atómico conservando codificación, BOM y saltos de línea; se saltan los de solo lectura o codificación inexacta; resumen al final.
 15. Cierre: mediciones (Ctrl+P con 50.000 ficheros, recorrido, velocidad de búsqueda en carpeta, RAM y arranque con proyecto), documentación, CHANGELOG y etiqueta local `v0.2.0`.
 
-Dependencias previstas, cada una medida antes de entrar: `ignore` y `grep-searcher` + `grep-regex` (Unlicense OR MIT) y `trash` (MIT). El emparejador difuso es propio, para no añadir otra licencia (`nucleo-matcher` es MPL-2.0); si no cumpliera el presupuesto, se mediría `nucleo-matcher`.
+Dependencias previstas, cada una medida antes de entrar: `ignore` y `grep-searcher` + `grep-regex` (Unlicense OR MIT) y `trash` (MIT). Al final entraron `ignore`, `trash` y `regex`; `grep-searcher` y `grep-regex` no hicieron falta (paso 13). El emparejador difuso es propio, para no añadir otra licencia (`nucleo-matcher` es MPL-2.0); si no cumpliera el presupuesto, se mediría `nucleo-matcher`.
 
 ## Mejoras futuras sin fase asignada
 

@@ -56,7 +56,16 @@ With a project open, the **project panel** on the left shows the folder tree: fo
 - With **.\*** on, the replacement can use the expression's groups: `$1`, `$2`… or `${name}` for `(?<name>…)`, and `$$` for a `$`. `\n` inserts a line break (the document's: CRLF or LF), `\t` a tab and `\\` a backslash. Without regular expressions, the text is inserted as it is.
 - In files over 1 MB the search runs in the background and the bar shows "Searching…" meanwhile.
 
-Text search in the project comes in the next steps of Phase 2.
+### Find in folder (Ctrl+Shift+F)
+
+**Ctrl+Shift+F** (or **Edit → Find in folder…**) opens the **Search** tab of the side panel; **Explorer** goes back to the tree (also Ctrl+Shift+E).
+
+- Type what you are looking for: the search starts when you stop typing (or press Enter) and is cancelled if you change anything. **Aa**, **ab** and **.\*** work as in Ctrl+F.
+- **Files to include** and **Files to exclude** take comma-separated patterns, as in `.gitignore`: `*.cs, *.razor`, `src/**`, `bin/`. Files the project excludes (`.gitignore`, `.ignore` and `[project] exclude`) are always left out.
+- Results appear as they are found, grouped by file (clicking the file collapses it) with the line number and the line of each match. Clicking a match opens the file there.
+- Each file is read with its encoding, as when it is opened. Binary files and files over 10 MB are skipped, and at most 20,000 results are shown; the summary says so.
+
+Replacing across the folder comes in the next step of Phase 2.
 
 ## Tabs
 

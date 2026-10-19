@@ -253,3 +253,13 @@ Tamaño del ejecutable: 9.291.264 B (+39 KB frente al paso 9: el registro, el mo
 Tamaño del ejecutable: 9.398.784 B (+25 KB frente al paso 11).
 
 `find/replace_all_regex_50mb` (cada `new Customer(…)` con su reemplazo `Customer.Create($1)`, unas 10.000 coincidencias en 50 MB): 79,8 ms. En esta sesión el equipo iba unas 7 veces más lento que en el paso 11 (en la misma ejecución, `find/plain_50mb` dio 76 ms frente a 8,8 ms y una compilación release tardó 6,5 min en lugar de 1,5), así que la cifra es pesimista y se repetirá en el cierre de la fase (paso 15). El arranque no se midió por lo mismo.
+
+## Fase 2, paso 13 — buscar en la carpeta (2026-10-19, equipo A)
+
+| Medida | Resultado |
+|---|---|
+| `folder/search_50k_files`: «x» en los 50.000 ficheros de `target/project-50k` (todos coinciden), con la caché de ficheros caliente | 765 ms (de ellos, unos 120 ms el recorrido; referencia en la misma sesión: `walk/index_50k_files` 118 ms) |
+| Tamaño del ejecutable | 9.461.760 B (+61 KB frente al paso 12) |
+| Arranque (15 rondas intercaladas, mediana, frente al paso 11) | 146,6 → 148,0 ms: ruido |
+
+Los resultados llegan fichero a fichero, así que los primeros se ven mucho antes de que termine.

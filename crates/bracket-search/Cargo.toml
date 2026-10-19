@@ -10,6 +10,7 @@ publish.workspace = true
 
 [dependencies]
 bracket-core.workspace = true
+bracket-index.workspace = true
 regex.workspace = true
 
 [dev-dependencies]
@@ -17,6 +18,10 @@ criterion.workspace = true
 
 [[bench]]
 name = "find"
+harness = false
+
+[[bench]]
+name = "folder"
 harness = false
 
 [lints]

@@ -22,6 +22,9 @@ const VCS_FOLDERS: [&str; 3] = [".git", ".svn", ".hg"];
 pub struct WalkOptions {
     /// Extra exclusions, like `.gitignore` lines (`bin/`, `*.log`, `docs/old/**`).
     pub exclude: Vec<String>,
+    /// If not empty, only the files matching one of these globs (`*.cs`, `src/**`). They only
+    /// narrow the walk: ignored files stay out even if they match.
+    pub include: Vec<String>,
 }
 
 /// The files of a project, as paths relative to its root.
@@ -68,24 +71,37 @@ fn builder(root: &Path, start: &Path, options: &WalkOptions) -> Result<WalkBuild
     Ok(builder)
 }
 
-/// The project's exclusions. In `ignore`'s overrides a plain glob means "only these", so every
-/// exclusion is written as `!glob`.
+/// The project's exclusions. In `ignore`'s overrides a plain glob means "only these" (and wins
+/// over the ignore files), so every exclusion is written as `!glob`.
 fn exclusions(root: &Path, options: &WalkOptions) -> Result<Override, BadPattern> {
+    globs(root, &options.exclude, "!")
+}
+
+/// The inclusions, as a separate matcher applied to the files the walk keeps: as overrides
+/// they would bring back ignored files. `None` if there are none.
+fn inclusions(root: &Path, options: &WalkOptions) -> Result<Option<Override>, BadPattern> {
+    if options.include.iter().all(|p| p.trim().is_empty()) {
+        return Ok(None);
+    }
+    globs(root, &options.include, "").map(Some)
+}
+
+fn globs(root: &Path, patterns: &[String], prefix: &str) -> Result<Override, BadPattern> {
     let mut overrides = OverrideBuilder::new(root);
-    for pattern in &options.exclude {
+    for pattern in patterns {
         let pattern = pattern.trim();
         if pattern.is_empty() {
             continue;
         }
         overrides
-            .add(&format!("!{pattern}"))
+            .add(&format!("{prefix}{pattern}"))
             .map_err(|e| BadPattern {
                 pattern: pattern.to_owned(),
                 error: e.to_string(),
             })?;
     }
     overrides.build().map_err(|e| BadPattern {
-        pattern: options.exclude.join(", "),
+        pattern: patterns.join(", "),
         error: e.to_string(),
     })
 }
@@ -119,8 +135,10 @@ fn entries_under(
     cancel: &CancelToken,
 ) -> Result<Option<Walked>, BadPattern> {
     let found = Mutex::new((Vec::new(), Vec::new()));
+    let include = inclusions(root, options)?;
     builder(root, start, options)?.build_parallel().run(|| {
         let found = &found;
+        let include = &include;
         Box::new(move |entry| {
             if cancel.is_cancelled() {
                 return WalkState::Quit;
@@ -131,9 +149,14 @@ fn entries_under(
             let Some(kind) = entry.file_type() else {
                 return WalkState::Continue;
             };
+            let included = |path: &Path| {
+                include
+                    .as_ref()
+                    .is_none_or(|i| i.matched(path, false).is_whitelist())
+            };
             if let Ok(relative) = entry.path().strip_prefix(root)
                 && !relative.as_os_str().is_empty()
-                && (kind.is_file() || kind.is_dir())
+                && (kind.is_dir() || (kind.is_file() && included(entry.path())))
             {
                 let relative = relative.to_string_lossy().into_owned();
                 let mut found = found.lock().expect("no panics while holding it");
@@ -320,6 +343,7 @@ mod tests {
         let root = project("exclude");
         let options = WalkOptions {
             exclude: vec!["docs/".into(), "*.razor".into()],
+            ..WalkOptions::default()
         };
         let index = walk(&root, &options, &CancelToken::new()).unwrap().unwrap();
         assert!(!index.files.iter().any(|f| f.starts_with("docs")));
@@ -329,10 +353,29 @@ mod tests {
     }
 
     #[test]
+    fn inclusions_keep_only_matching_files() {
+        let root = project("include");
+        let options = WalkOptions {
+            include: vec!["*.cs".into()],
+            ..WalkOptions::default()
+        };
+        let index = walk(&root, &options, &CancelToken::new()).unwrap().unwrap();
+        assert_eq!(index.files, [r"src\Program.cs"]);
+        let options = WalkOptions {
+            include: vec!["src/**".into()],
+            exclude: vec!["*.razor".into()],
+        };
+        let index = walk(&root, &options, &CancelToken::new()).unwrap().unwrap();
+        assert_eq!(index.files, [r"src\.ignore", r"src\Program.cs"]);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn a_bad_pattern_is_reported() {
         let root = project("bad");
         let options = WalkOptions {
             exclude: vec!["src/[".into()],
+            ..WalkOptions::default()
         };
         let error = walk(&root, &options, &CancelToken::new()).unwrap_err();
         assert_eq!(error.pattern, "src/[");

@@ -20,6 +20,7 @@ pub enum Command {
     FindNext,
     FindPrevious,
     Replace,
+    FindInFolder,
     Palette,
     ToggleSidebar,
     QuickOpen,
@@ -52,7 +53,7 @@ const CTRL_SHIFT: Modifiers = Modifiers::COMMAND.plus(Modifiers::SHIFT);
 
 impl Command {
     /// In menu order.
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 20] = [
         Self::New,
         Self::Open,
         Self::OpenFolder,
@@ -65,6 +66,7 @@ impl Command {
         Self::FindNext,
         Self::FindPrevious,
         Self::Replace,
+        Self::FindInFolder,
         Self::Palette,
         Self::ToggleSidebar,
         Self::QuickOpen,
@@ -89,6 +91,7 @@ impl Command {
             Self::FindNext => "edit.findNext",
             Self::FindPrevious => "edit.findPrevious",
             Self::Replace => "edit.replace",
+            Self::FindInFolder => "edit.findInFolder",
             Self::Palette => "view.commandPalette",
             Self::ToggleSidebar => "view.toggleSidebar",
             Self::QuickOpen => "go.file",
@@ -109,7 +112,11 @@ impl Command {
             | Self::SaveAs
             | Self::CloseTab
             | Self::Exit => Menu::File,
-            Self::Find | Self::FindNext | Self::FindPrevious | Self::Replace => Menu::Edit,
+            Self::Find
+            | Self::FindNext
+            | Self::FindPrevious
+            | Self::Replace
+            | Self::FindInFolder => Menu::Edit,
             Self::Palette | Self::ToggleSidebar => Menu::View,
             Self::QuickOpen
             | Self::GoToLine
@@ -133,6 +140,7 @@ impl Command {
             Self::FindNext => texts.menu_find_next(),
             Self::FindPrevious => texts.menu_find_previous(),
             Self::Replace => texts.menu_replace(),
+            Self::FindInFolder => texts.menu_find_in_folder(),
             Self::Palette => texts.menu_command_palette(),
             Self::ToggleSidebar => texts.menu_sidebar(),
             Self::QuickOpen => texts.menu_quick_open(),
@@ -174,6 +182,7 @@ impl Command {
             Self::FindNext => keys!(Modifiers::NONE, F3),
             Self::FindPrevious => keys!(Modifiers::SHIFT, F3),
             Self::Replace => keys!(CTRL, H),
+            Self::FindInFolder => keys!(CTRL_SHIFT, F),
             Self::Palette => keys!(CTRL_SHIFT, P; Modifiers::NONE, F1),
             Self::ToggleSidebar => keys!(CTRL, B),
             Self::QuickOpen => keys!(CTRL, P),
@@ -191,7 +200,9 @@ impl Command {
 
     pub fn is_available(self, state: &State) -> bool {
         match self {
-            Self::CloseFolder | Self::ToggleSidebar | Self::FocusTree => state.has_project,
+            Self::CloseFolder | Self::ToggleSidebar | Self::FocusTree | Self::FindInFolder => {
+                state.has_project
+            }
             Self::Save
             | Self::SaveAs
             | Self::GoToLine

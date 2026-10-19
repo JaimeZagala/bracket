@@ -557,6 +557,7 @@ name = "bracket-search"
 version = "0.1.0"
 dependencies = [
  "bracket-core",
+ "bracket-index",
  "criterion",
  "regex",
 ]

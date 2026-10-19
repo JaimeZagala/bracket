@@ -56,7 +56,16 @@ Con un proyecto abierto, el **panel del proyecto** muestra a la izquierda el ár
 - Con **.\*** activado, el reemplazo puede usar los grupos de la expresión: `$1`, `$2`… o `${nombre}` para `(?<nombre>…)`, y `$$` para un `$`. `\n` inserta un salto de línea (el del documento: CRLF o LF), `\t` un tabulador y `\\` una barra invertida. Sin expresiones regulares, el texto se inserta tal cual.
 - En ficheros de más de 1 MB la búsqueda va en segundo plano y la barra muestra «Buscando…» mientras tanto.
 
-La búsqueda de texto en el proyecto llega en los próximos pasos de la Fase 2.
+### Buscar en la carpeta (Ctrl+Mayús+F)
+
+**Ctrl+Mayús+F** (o **Editar → Buscar en la carpeta…**) abre la pestaña **Buscar** del panel lateral; **Explorador** vuelve al árbol (también Ctrl+Mayús+E).
+
+- Escribe lo que buscas: la búsqueda empieza al dejar de escribir (o al pulsar Intro) y se cancela si cambias algo. **Aa**, **ab** y **.\*** funcionan como en Ctrl+F.
+- **Ficheros a incluir** y **Ficheros a excluir** aceptan patrones separados por comas, como en `.gitignore`: `*.cs, *.razor`, `src/**`, `bin/`. Siempre se dejan fuera los ficheros que excluye el proyecto (`.gitignore`, `.ignore` y `[project] exclude`).
+- Los resultados aparecen según se encuentran, agrupados por fichero (un clic en el fichero lo pliega) con el número de línea y la línea de cada coincidencia. Un clic en una coincidencia abre el fichero en ese punto.
+- Cada fichero se lee con su codificación, como al abrirlo. Se saltan los ficheros binarios y los de más de 10 MB, y se muestran como mucho 20.000 resultados; el resumen lo indica.
+
+Reemplazar en toda la carpeta llega en el próximo paso de la Fase 2.
 
 ## Pestañas
 
