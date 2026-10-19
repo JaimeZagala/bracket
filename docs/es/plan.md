@@ -173,6 +173,8 @@ Aprobada el 2026-10-18. Pasos ordenados por dependencias; cada uno compila, tien
 14. Reemplazar en la carpeta: vista previa con casillas; en las pestañas abiertas el cambio va al buffer (deshacible, sin guardar); los ficheros cerrados se reescriben con guardado atómico conservando codificación, BOM y saltos de línea; se saltan los de solo lectura o codificación inexacta; resumen al final.
 15. Cierre: mediciones (Ctrl+P con 50.000 ficheros, recorrido, velocidad de búsqueda en carpeta, RAM y arranque con proyecto), documentación, CHANGELOG y etiqueta local `v0.2.0`.
 
+Completada el 2026-10-19 (0.2.0, etiqueta local `v0.2.0`); resultados en [mediciones](measurements.md).
+
 Dependencias previstas, cada una medida antes de entrar: `ignore` y `grep-searcher` + `grep-regex` (Unlicense OR MIT) y `trash` (MIT). Al final entraron `ignore`, `trash` y `regex`; `grep-searcher` y `grep-regex` no hicieron falta (paso 13). El emparejador difuso es propio, para no añadir otra licencia (`nucleo-matcher` es MPL-2.0); si no cumpliera el presupuesto, se mediría `nucleo-matcher`.
 
 ## Mejoras futuras sin fase asignada

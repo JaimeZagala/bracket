@@ -267,3 +267,35 @@ Results arrive file by file, so the first ones show long before it finishes.
 ## Phase 2, step 14 — replace in folder (2026-10-19, machine A)
 
 Executable size: 9,523,200 B (+60 KB against step 13: replacing in files, the preview, the check boxes and the confirmation).
+
+## Phase 2 — close, 0.2.0 (2026-10-19, machine A)
+
+`./scripts/measure.ps1` (a temporary portable copy, without the user's session) and `cargo bench`. Budgets from the plan:
+
+| Measure | Budget | 0.1.0 | 0.2.0 | How |
+|---|---|---|---|---|
+| Executable size | < 15 MB | 8,454,144 B | 9,523,712 B (9.08 MB) | Release with LTO |
+| Startup to the first frame | < 150 ms | 126.1 ms | 123.5 ms (minimum 115.2) | `-Runs 12`, no file |
+| Startup opening a project | < 150 ms | — | 129.6 ms (minimum 120.4) | `-Runs 15 -Arguments target\project-50k` |
+| Idle memory, no files | — | 30.4 MB | 30.2 MB | Private working set after 3 s |
+| Memory with 10 tabs | < 80 MB | 33.6 MB | 34.0 MB | 10 files (48 KB): C#, Razor, T-SQL, XML, CSS, Markdown, TOML, Rust, text and JSON (active); after 5 s |
+| Memory with the 50,000-file project | — | — | 37.1 MB (private bytes 53.7 MB) | Tree and index built; after 5 s |
+| 100 MB file visible | < 1 s | 334 ms | Not measured again | Phase 2 did not change loading |
+| Ctrl+P with 50,000 files | < 50 ms | — | 7.0 ms (worst query, `file`) | `fuzzy/word` |
+
+Project benchmarks (`target/project-50k`, warm file cache):
+
+| Benchmark | Time (median) |
+|---|---|
+| `walk/index_50k_files`: whole index | 121.1 ms |
+| `walk/resync_root` / `walk/resync_deep_folder`: updating the index after a change | 10.5 ms / 0.76 ms |
+| `fuzzy/one_letter` … `fuzzy/no_match`: Ctrl+P | 0.74–7.0 ms |
+| `folder/search_50k_files`: searching the 50,000 files (all of them match) | 940 ms |
+| `find/plain_50mb` / `find/regex_50mb`: Ctrl+F in 50 MB | 10.3 ms / 100.3 ms |
+| `find/replace_all_regex_50mb`: "Replace all" with groups in 50 MB | 14.2 ms (repeats step 12's pessimistic measure) |
+
+Phase 1 benchmarks, no regression: `open/rope_from_str_1m_lines` 24.2 ms (was 23), `open/load_file_1m_lines` 45.2 ms (was 50), `insert_char_middle_1m_lines` 1.2 µs (was 1.6). Viewport painting, compared on the same day with 0.1.0 built separately: unchanged frame 110.6 µs against 102.5 µs and scrolling frame 542.6 µs against 505.4 µs (+7–8 %, about the noise between builds). A first round of benchmarks, run back to back with others, gave figures 3–4 times worse; repeated on its own, it did not reproduce.
+
+During the close, opening the 50,000-file project at startup raised startup to 151.6 ms: the index walk on every core competed with the first frame. The index now starts after the first frame (commit `perf(ui): start the file index after the first frame`) and startup with a project stays at 129.6 ms.
+
+The first run of each measurement (1.2–2.0 s) is that of a freshly copied exe: it includes Windows Defender's scan.

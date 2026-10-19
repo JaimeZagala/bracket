@@ -8,6 +8,10 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-19
+
+Proyectos (Fase 2). Sin publicar: solo existe la etiqueta local `v0.2.0`.
+
 ### Added
 
 - Abrir una carpeta como proyecto: Archivo → Abrir carpeta, `bracket <carpeta>`, arrastrar la carpeta a la ventana o pasársela a un Bracket abierto. El título de la ventana muestra el proyecto y la sesión lo recuerda; Archivo → Cerrar carpeta lo cierra sin tocar las pestañas.

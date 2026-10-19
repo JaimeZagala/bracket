@@ -4,7 +4,7 @@
 
 Editor de código nativo y ligero para Windows 10/11 (x64), escrito en Rust. Pensado para quien quiere algo más que Notepad++ (proyecto, símbolos, búsqueda en carpeta) sin el peso de VS Code, y sigue usando un IDE completo para el trabajo de fondo.
 
-> **Estado: Fase 1 (editor base, 0.1.0) completada; sin publicar.** Todavía no hay nada que instalar: se compila desde el código. Este README describe el objetivo; la sección [Hoja de ruta](#hoja-de-ruta) dice qué existe ya y la [guía de usuario](docs/es/user-guide.md) cómo se usa.
+> **Estado: Fase 2 (proyectos, 0.2.0) completada; sin publicar.** Todavía no hay nada que instalar: se compila desde el código. Este README describe el objetivo; la sección [Hoja de ruta](#hoja-de-ruta) dice qué existe ya y la [guía de usuario](docs/es/user-guide.md) cómo se usa.
 
 **No es Brackets.** Bracket (en singular) no tiene relación con Brackets, el editor de Adobe ya descontinuado, ni con sus sucesores Brackets Continued y Phoenix Code.
 
@@ -26,15 +26,15 @@ Desarrolladores en Windows que abren muchos ficheros sueltos y carpetas de proye
 
 ## Objetivos de rendimiento
 
-Resultados de la 0.1.0 en un portátil Intel Core i7-13620H con gráfica integrada y Windows 11 (método y detalle en [mediciones](docs/es/measurements.md)).
+Resultados de la 0.2.0 en un portátil Intel Core i7-13620H con gráfica integrada y Windows 11 (método y detalle en [mediciones](docs/es/measurements.md)).
 
-| Medida | Objetivo | 0.1.0 |
+| Medida | Objetivo | 0.2.0 |
 |---|---|---|
-| Tamaño del ejecutable | < 15 MB | 8,1 MB |
-| Arranque hasta poder escribir | < 150 ms | 126 ms (en caliente; la primera ejecución tras compilar incluye el análisis de Windows Defender) |
-| RAM en reposo con 10 pestañas | < 80 MB | 34–49 MB |
+| Tamaño del ejecutable | < 15 MB | 9,1 MB |
+| Arranque hasta poder escribir | < 150 ms | 124 ms; 130 ms abriendo un proyecto de 50.000 ficheros (en caliente; la primera ejecución tras compilar incluye el análisis de Windows Defender) |
+| RAM en reposo con 10 pestañas | < 80 MB | 34 MB (37 MB con el proyecto de 50.000 ficheros indexado) |
 | Fichero de 100 MB | visible en < 1 s sin bloquear la interfaz | 0,33 s |
-| Ctrl+P en un proyecto de 50.000 ficheros | < 50 ms por pulsación | Fase 2 |
+| Ctrl+P en un proyecto de 50.000 ficheros | < 50 ms por pulsación | 7 ms |
 
 Límites conocidos: sin sistema de extensiones y sin LSP de serie (LSP opcional previsto para la 1.1.0).
 
@@ -56,7 +56,7 @@ cargo build --release -p bracket-app
 |---|---|---|---|
 | 0 | — | Cimientos y prototipo del editor | Completada |
 | 1 | 0.1.0 | Editor base: pestañas, sesión, codificaciones, resaltado, temas, configuración, idiomas | Completada (sin publicar) |
-| 2 | 0.2.0 | Proyectos: árbol de carpetas, Ctrl+P, paleta, buscar y reemplazar en carpeta | Pendiente |
+| 2 | 0.2.0 | Proyectos: árbol de carpetas, Ctrl+P, paleta, buscar y reemplazar en carpeta | Completada (sin publicar) |
 | 3 | 0.3.0 | Símbolos y navegación | Pendiente |
 | 4 | 0.4.0 | Edición avanzada: multicursor, plegado, diff, ficheros grandes | Pendiente |
 | 5 | 0.5.0 → 1.0.0 | Instalador, zip portable, actualizador, firma y publicación | Pendiente |

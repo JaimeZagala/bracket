@@ -2,7 +2,7 @@
 
 # Arquitectura
 
-Estado: Fase 1 completada (0.1.0). Este documento describe la estructura acordada; cada sección indica qué está implementado.
+Estado: Fase 2 completada (0.2.0). Este documento describe la estructura acordada; cada sección indica qué está implementado.
 
 ## Crates del workspace
 
@@ -12,7 +12,7 @@ Estado: Fase 1 completada (0.1.0). Este documento describe la estructura acordad
 | `bracket-syntax` | Carga de lenguajes integrados y externos, resaltado incremental por líneas con caché, temas. | `bracket-core` | Fase 1: registro de lenguajes (los seis integrados, extensiones, insignia y gramática) y resaltado con syntect. Fase 2: Rust como séptimo lenguaje integrado |
 | `bracket-index` | Recorrido de proyecto, extracción de símbolos (tree-sitter y regex), índice incremental, búsqueda difusa, referencias por nombre. | `bracket-core` | Fase 2: recorrido del proyecto con `ignore` (índice de ficheros y listado de una carpeta) |
 | `bracket-search` | Buscar y reemplazar con regex en fichero y carpeta, cancelable, con resultados en streaming. | `bracket-core`, `bracket-index` | Fase 2: buscar y reemplazar en un documento (`find.rs`) y buscar en la carpeta (`folder.rs`) |
-| `bracket-session` | Configuración TOML, modo portable, sesión recuperable, recientes, vigilancia de ficheros, registro de comandos. | `bracket-core` | Fase 1: rutas (modo portable o `%APPDATA%`), configuración TOML, sesión recuperable y vigilancia de ficheros |
+| `bracket-session` | Configuración TOML, modo portable, sesión recuperable, recientes, vigilancia de ficheros, registro de comandos. | `bracket-core` | Fase 1: rutas (modo portable o `%APPDATA%`), configuración TOML, sesión recuperable y vigilancia de ficheros. Fase 2: recientes, panel del proyecto en la sesión y vigilancia recursiva del proyecto |
 | `bracket-update` | Comprobación de versiones por canal, descarga, verificación de suma y firma, aplicación y vuelta atrás. | — | Vacía |
 | `bracket-ui` | Interfaz egui: vista del editor, pestañas, árbol de proyecto, paleta, barra de estado. | `bracket-core`, `bracket-index`, `bracket-session`, `bracket-syntax` | Fase 1: pestañas, menú Archivo, barra de estado, fuentes del sistema, catálogos de textos. Fase 2: árbol del proyecto en el panel lateral |
 | `bracket-app` | Binario `bracket.exe`: arranque, instancia única, argumentos, manifiesto de Windows, registro en HKCU. | `bracket-ui`, `bracket-session`, `bracket-syntax`, `bracket-update` | Fase 0: arranque y fichero por argumento. Fase 1: resuelve rutas, carga la configuración y los paquetes de lenguaje, instancia única y línea de comandos |
@@ -155,7 +155,7 @@ Pendiente de resolver; cada punto indica la fase prevista.
 
 - **Memoria de las fuentes de respaldo:** egui ocupa unas dos veces el tamaño de cada fuente cargada; con texto japonés o chino en pantalla, Microsoft YaHei añade unos 42 MB. Alternativa si molesta: una fuente CJK más pequeña con menos cobertura (MS Gothic, 9 MB).
 - **Sin fuentes del sistema:** si no se encontrara ninguna fuente (Consolas y Segoe UI vienen con Windows), la aplicación termina sin mostrar ningún mensaje.
-- **Arranque (todas las fases):** 120–135 ms sin carga en la 0.1.0; unos 60 ms son la inicialización de OpenGL en Windows y ninguna opción de eframe lo reduce (ver [measurements.md](measurements.md)). Quedan unos 15–25 ms de margen: lo nuevo debe ir fuera del camino del primer frame, y `check.ps1 -Perf` vigila las regresiones.
+- **Arranque (todas las fases):** 120–135 ms sin carga en la 0.1.0 y 124 ms en la 0.2.0 (130 ms abriendo un proyecto de 50.000 ficheros: el índice empieza después del primer fotograma); unos 60 ms son la inicialización de OpenGL en Windows y ninguna opción de eframe lo reduce (ver [measurements.md](measurements.md)). Quedan unos 15–25 ms de margen: lo nuevo debe ir fuera del camino del primer frame, y `check.ps1 -Perf` vigila las regresiones.
 - **Licencias en la distribución (Fase 5):** el aviso BSD-3-Clause de encoding_rs (y los de las demás dependencias) debe acompañar al instalador y al zip.
 - **Guardado desde el diálogo de cambios sin guardar:** se hace en el hilo de interfaz y la bloquea mientras dura (normalmente milisegundos). Los hard links del fichero original no se conservan al guardar (es inherente al guardado atómico).
 - **Unidades de texto (Fase 4):** los clústeres de grafemas no se tratan como unidad y los caracteres anchos (CJK) cuentan como una columna.

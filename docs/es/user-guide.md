@@ -2,7 +2,7 @@
 
 # Guía de usuario
 
-Bracket 0.1.0 (Fase 1, editor base). Esta guía describe lo que ya funciona y crece con cada fase.
+Bracket 0.2.0 (Fase 2, proyectos). Esta guía describe lo que ya funciona y crece con cada fase.
 
 ## Abrir y guardar
 

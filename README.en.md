@@ -4,7 +4,7 @@
 
 A lightweight native code editor for Windows 10/11 (x64), written in Rust. Built for people who want more than Notepad++ (projects, symbols, folder search) without the weight of VS Code, and who still use a full IDE for in-depth work.
 
-> **Status: Phase 1 (base editor, 0.1.0) complete; not published.** There is nothing to install yet: it is built from source. This README describes the goal; the [Roadmap](#roadmap) section says what exists today and the [user guide](docs/en/user-guide.md) how to use it.
+> **Status: Phase 2 (projects, 0.2.0) complete; not published.** There is nothing to install yet: it is built from source. This README describes the goal; the [Roadmap](#roadmap) section says what exists today and the [user guide](docs/en/user-guide.md) how to use it.
 
 **This is not Brackets.** Bracket (singular) is unrelated to Brackets, Adobe's discontinued editor, and to its successors Brackets Continued and Phoenix Code.
 
@@ -26,15 +26,15 @@ Windows developers who open many loose files and project folders (C#, Razor, CSS
 
 ## Performance goals
 
-Results of 0.1.0 on an Intel Core i7-13620H laptop with integrated graphics and Windows 11 (method and details in [measurements](docs/en/measurements.md)).
+Results of 0.2.0 on an Intel Core i7-13620H laptop with integrated graphics and Windows 11 (method and details in [measurements](docs/en/measurements.md)).
 
-| Measure | Goal | 0.1.0 |
+| Measure | Goal | 0.2.0 |
 |---|---|---|
-| Executable size | < 15 MB | 8.1 MB |
-| Startup until typing is possible | < 150 ms | 126 ms (warm; the first run after building includes Windows Defender's scan) |
-| Idle RAM with 10 tabs | < 80 MB | 34–49 MB |
+| Executable size | < 15 MB | 9.1 MB |
+| Startup until typing is possible | < 150 ms | 124 ms; 130 ms opening a 50,000-file project (warm; the first run after building includes Windows Defender's scan) |
+| Idle RAM with 10 tabs | < 80 MB | 34 MB (37 MB with the 50,000-file project indexed) |
 | 100 MB file | visible in < 1 s without blocking the interface | 0.33 s |
-| Ctrl+P in a 50,000-file project | < 50 ms per keystroke | Phase 2 |
+| Ctrl+P in a 50,000-file project | < 50 ms per keystroke | 7 ms |
 
 Known limits: no extension system and no built-in LSP (optional LSP planned for 1.1.0).
 
@@ -56,7 +56,7 @@ cargo build --release -p bracket-app
 |---|---|---|---|
 | 0 | — | Foundations and editor prototype | Done |
 | 1 | 0.1.0 | Base editor: tabs, session, encodings, highlighting, themes, configuration, languages | Complete (not published) |
-| 2 | 0.2.0 | Projects: folder tree, Ctrl+P, palette, find and replace in folder | Pending |
+| 2 | 0.2.0 | Projects: folder tree, Ctrl+P, palette, find and replace in folder | Complete (not published) |
 | 3 | 0.3.0 | Symbols and navigation | Pending |
 | 4 | 0.4.0 | Advanced editing: multi-cursor, folding, diff, large files | Pending |
 | 5 | 0.5.0 → 1.0.0 | Installer, portable zip, updater, signing and publishing | Pending |

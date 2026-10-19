@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-19
+
+Projects (Phase 2). Not published: only the local `v0.2.0` tag exists.
+
 ### Added
 
 - Open a folder as a project: File → Open Folder, `bracket <folder>`, dropping the folder on the window or handing it to an open Bracket. The window title shows the project and the session remembers it; File → Close Folder closes it without touching the tabs.

@@ -173,6 +173,8 @@ Approved on 2026-10-18. Steps ordered by dependencies; each one builds, has test
 14. Replace in the folder: a preview with checkboxes; in open tabs the change goes into the buffer (undoable, not saved); closed files are rewritten with atomic saving, keeping encoding, BOM and line endings; read-only or inexactly encoded files are skipped; a summary at the end.
 15. Wrap-up: measurements (Ctrl+P with 50,000 files, walking, folder search speed, RAM and startup with a project), documentation, CHANGELOG and a local `v0.2.0` tag.
 
+Completed on 2026-10-19 (0.2.0, local `v0.2.0` tag); results in [measurements](measurements.md).
+
 Planned dependencies, each measured before it goes in: `ignore` and `grep-searcher` + `grep-regex` (Unlicense OR MIT) and `trash` (MIT). In the end `ignore`, `trash` and `regex` went in; `grep-searcher` and `grep-regex` were not needed (step 13). The fuzzy matcher is our own, so as not to add another license (`nucleo-matcher` is MPL-2.0); if it missed the budget, `nucleo-matcher` would be measured.
 
 ## Future improvements without an assigned phase

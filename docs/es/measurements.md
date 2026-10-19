@@ -267,3 +267,35 @@ Los resultados llegan fichero a fichero, así que los primeros se ven mucho ante
 ## Fase 2, paso 14 — reemplazar en la carpeta (2026-10-19, equipo A)
 
 Tamaño del ejecutable: 9.523.200 B (+60 KB frente al paso 13: el reemplazo en ficheros, la vista previa, las casillas y la confirmación).
+
+## Fase 2 — cierre, 0.2.0 (2026-10-19, equipo A)
+
+`./scripts/measure.ps1` (copia portable temporal, sin la sesión del usuario) y `cargo bench`. Presupuestos del plan:
+
+| Medida | Presupuesto | 0.1.0 | 0.2.0 | Cómo |
+|---|---|---|---|---|
+| Tamaño del ejecutable | < 15 MB | 8.454.144 B | 9.523.712 B (9,08 MB) | Release con LTO |
+| Arranque hasta el primer fotograma | < 150 ms | 126,1 ms | 123,5 ms (mínimo 115,2) | `-Runs 12`, sin fichero |
+| Arranque abriendo un proyecto | < 150 ms | — | 129,6 ms (mínimo 120,4) | `-Runs 15 -Arguments target\project-50k` |
+| Memoria en reposo, sin ficheros | — | 30,4 MB | 30,2 MB | Conjunto de trabajo privado a los 3 s |
+| Memoria con 10 pestañas | < 80 MB | 33,6 MB | 34,0 MB | 10 ficheros (48 KB): C#, Razor, T-SQL, XML, CSS, Markdown, TOML, Rust, texto y JSON (activa); a los 5 s |
+| Memoria con el proyecto de 50.000 ficheros | — | — | 37,1 MB (bytes privados 53,7 MB) | Árbol e índice construidos; a los 5 s |
+| Fichero de 100 MB visible | < 1 s | 334 ms | No medido de nuevo | La Fase 2 no cambió la carga |
+| Ctrl+P con 50.000 ficheros | < 50 ms | — | 7,0 ms (peor consulta, `file`) | `fuzzy/word` |
+
+Benchmarks del proyecto (`target/project-50k`, caché de ficheros caliente):
+
+| Benchmark | Tiempo (mediana) |
+|---|---|
+| `walk/index_50k_files`: índice completo | 121,1 ms |
+| `walk/resync_root` / `walk/resync_deep_folder`: actualizar el índice tras un cambio | 10,5 ms / 0,76 ms |
+| `fuzzy/one_letter` … `fuzzy/no_match`: Ctrl+P | 0,74–7,0 ms |
+| `folder/search_50k_files`: buscar en los 50.000 ficheros (todos coinciden) | 940 ms |
+| `find/plain_50mb` / `find/regex_50mb`: Ctrl+F en 50 MB | 10,3 ms / 100,3 ms |
+| `find/replace_all_regex_50mb`: «Reemplazar todo» con grupos en 50 MB | 14,2 ms (repite la medida pesimista del paso 12) |
+
+Benchmarks de la Fase 1, sin regresión: `open/rope_from_str_1m_lines` 24,2 ms (antes 23), `open/load_file_1m_lines` 45,2 ms (antes 50), `insert_char_middle_1m_lines` 1,2 µs (antes 1,6). El pintado del viewport, comparado el mismo día con la 0.1.0 compilada aparte: frame sin cambios 110,6 µs frente a 102,5 µs y frame con scroll 542,6 µs frente a 505,4 µs (+7–8 %, del orden del ruido entre compilaciones). Una primera tanda de benchmarks, lanzada seguida de otras, dio cifras 3–4 veces peores; repetida a solas, no se reprodujo.
+
+Durante el cierre, abrir el proyecto de 50.000 ficheros al arrancar subía el arranque a 151,6 ms: el recorrido del índice en todos los núcleos competía con el primer fotograma. Ahora el índice empieza después del primer fotograma (commit `perf(ui): start the file index after the first frame`) y el arranque con proyecto queda en 129,6 ms.
+
+La primera ejecución de cada medición (1,2–2,0 s) es la de un exe recién copiado: incluye el análisis de Windows Defender.
