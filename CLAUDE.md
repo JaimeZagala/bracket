@@ -21,6 +21,7 @@ cargo bench --workspace                     # benchmarks (criterion)
 ./scripts/compare-startup.ps1 -A <exe anterior> -B target/release/bracket.exe   # regresiones de arranque
 cargo run --release -p bracket-core --example generate_large_file   # target/large-1m.txt
 cargo run --release -p bracket-index --example generate_project     # target/project-50k (50.000 ficheros)
+cargo run --release -p bracket-index --example project_symbols      # target/project-cs (2.000 ficheros C#) e índice de símbolos
 ```
 
 Las mediciones se anotan en `docs/es/measurements.md` y `docs/en/measurements.md` con fecha, versión y equipo.

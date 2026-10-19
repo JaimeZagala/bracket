@@ -119,7 +119,10 @@ pub struct DiskStamp {
 
 impl DiskStamp {
     pub fn of(path: &Path) -> io::Result<Self> {
-        let metadata = fs::metadata(path)?;
+        Self::from_metadata(&fs::metadata(path)?)
+    }
+
+    pub fn from_metadata(metadata: &fs::Metadata) -> io::Result<Self> {
         Ok(Self {
             modified: metadata.modified()?,
             len: metadata.len(),

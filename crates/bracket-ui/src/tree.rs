@@ -1113,7 +1113,7 @@ mod tests {
                 root.join(r"src\Models\Order.cs"),
             ]
             .into(),
-            rescan: false,
+            ..ProjectChanges::default()
         };
         tree.apply_changes(&changes);
         assert!(
@@ -1136,7 +1136,7 @@ mod tests {
         fs::write(root.join(".gitignore"), "*.md\n").unwrap();
         let changes = ProjectChanges {
             paths: [root.join(".gitignore")].into(),
-            rescan: false,
+            ..ProjectChanges::default()
         };
         tree.apply_changes(&changes);
         settle(&mut tree);

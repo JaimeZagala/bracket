@@ -40,6 +40,7 @@ use crate::outline::{self, Outline, SymbolList};
 use crate::quick_open::{IndexEvent, IndexWorker, PaletteAction, PaletteCommand, QuickOpen};
 use crate::search_panel::{OpenMatch, ReplacePlan, SearchAction, SearchPanel, replace_in_document};
 use crate::session::{self, SessionKeeper};
+use crate::symbol_index::{self, SymbolCommand, SymbolEvent, SymbolWorker, UnsavedTexts};
 use crate::tabs::{self, Loaded, Loading, Tab, TabAction, TabHighlight};
 use crate::tree::{self, ProjectTree, TreeAction};
 use crate::{Launch, RestoredSession};
@@ -174,6 +175,11 @@ pub struct BracketApp {
     /// on every core would otherwise slow startup down.
     index_pending: Option<(PathBuf, WalkOptions)>,
     indexed: Option<usize>,
+    /// The project's symbol index, fed by the file index.
+    symbol_index: Option<SymbolWorker>,
+    /// The number of symbols in it, once it is up to date.
+    symbols_indexed: Option<usize>,
+    unsaved_texts: UnsavedTexts,
     /// The Ctrl+P palette, while it is open.
     quick_open: Option<QuickOpen>,
     /// The find bar above the editor (Ctrl+F).
@@ -334,6 +340,9 @@ impl BracketApp {
             index: None,
             index_pending: None,
             indexed: None,
+            symbol_index: None,
+            symbols_indexed: None,
+            unsaved_texts: UnsavedTexts::default(),
             quick_open: None,
             find: FindBar::default(),
             search: SearchPanel::default(),
@@ -1180,9 +1189,22 @@ impl BracketApp {
         }
         let (root, options) = self.index_pending.take().expect("checked above");
         let repaint = ctx.clone();
-        self.index = Some(IndexWorker::start(root, options, move || {
-            repaint.request_repaint();
-        }));
+        let symbols = SymbolWorker::start(
+            root.clone(),
+            symbol_index::resolver(&self.languages, &self.symbol_rules),
+            move || repaint.request_repaint(),
+        );
+        let to_symbols = symbols.sender();
+        let repaint = ctx.clone();
+        self.index = Some(IndexWorker::start(
+            root,
+            options,
+            move || repaint.request_repaint(),
+            move |change| {
+                let _ = to_symbols.send(SymbolCommand::Files(change));
+            },
+        ));
+        self.symbol_index = Some(symbols);
     }
 
     /// Opens the palette: for files, for commands (`>`) or for a line (`:`).
@@ -1218,6 +1240,9 @@ impl BracketApp {
         self.index = None;
         self.index_pending = folder.as_ref().map(|root| (root.clone(), options.clone()));
         self.indexed = None;
+        self.symbol_index = None;
+        self.symbols_indexed = None;
+        self.unsaved_texts = UnsavedTexts::default();
         self.start_index(ctx);
         self.search.reset();
         self.project_watch = folder
@@ -1887,6 +1912,7 @@ impl BracketApp {
             self.project.as_deref(),
             self.index.as_ref(),
             self.indexed,
+            self.symbols_indexed,
             &commands,
             lines,
             symbols,
@@ -2228,13 +2254,23 @@ impl eframe::App for BracketApp {
         self.start_index(ctx);
         if let Some(watch) = &self.project_watch {
             while let Ok(changes) = watch.changes.try_recv() {
-                if let Some(tree) = &mut self.tree {
+                if let Some(tree) = &mut self.tree
+                    && changes.changes_listing()
+                {
                     tree.apply_changes(&changes);
                 }
                 if let Some(index) = &self.index {
                     index.changes(changes);
                 }
             }
+        }
+        if let Some(symbols) = &self.symbol_index {
+            for SymbolEvent::Ready(count) in symbols.events() {
+                self.symbols_indexed = Some(count);
+            }
+            let documents = self.tabs.iter().filter(|t| t.loading.is_none());
+            let documents = documents.filter_map(|t| Some((t.path()?, &t.doc)));
+            self.unsaved_texts.update(ctx, symbols, documents);
         }
         if let Some(index) = &self.index {
             for event in index.events() {

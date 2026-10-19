@@ -1,6 +1,7 @@
 //! Project walking, symbol extraction, incremental in-memory index and fuzzy search.
 
 pub mod fuzzy;
+pub mod project_symbols;
 pub mod rules;
 pub mod symbols;
 pub mod walk;

@@ -334,3 +334,24 @@ Breakdown measured in release: tree-sitter parsing 297 ms, query 96 ms, building
 | Startup (`compare-startup.ps1`, 15 interleaved rounds, median) | 168.1 ms | 169.9 ms | Noise; both figures are high because the machine was busy |
 
 The budget is 15 MB (as in every other measurement, 1 MB = 2²⁰ bytes: 15,728,640 B): 446,464 B (436 KB) are left for the coming phases.
+
+## Phase 3, step 7 — project symbol index (2026-10-19, machine A)
+
+`cargo run --release -p bracket-index --example project_symbols` on `target/project-cs`: 2,000 C# files (16.6 MiB, 210,000 symbols), with a warm file cache; 16 logical threads, the index uses 15.
+
+| Measure | Result |
+|---|---|
+| Building the index | 522–553 ms (30–32 MiB/s). The first pass after generating the project took 6.1 s: freshly written files, probably scanned by the antivirus |
+| Checking it again with no changes (date and size of each file) | 7.8–8.8 ms |
+| Reading one file again | 2.2–2.9 ms |
+| Estimated memory of the structure | 6.4 MiB |
+
+In the application (`measure.ps1 -Runs 5 -IdleSeconds 6 -Arguments <project>`), against step 6:
+
+| Measure | Step 6 | Step 7 | Change |
+|---|---|---|---|
+| Executable size | 15,296,000 B (14.59 MB) | 15,374,848 B (14.66 MB) | +77 KB; 353,792 B (345 KB) left up to the 15 MB budget |
+| Private working set at 6 s, `target/project-cs` | 31.6 MB | 45.4 MB | +13.8 MB: 210,000 symbols |
+| Private working set at 6 s, `target/project-50k` | 37.8 MB | 58.9 MB | +21.1 MB: 33,000 tiny files in a symbol language (one entry per file, a second copy of the path list and the memory the heap keeps after extracting on 15 threads) |
+| Startup with `target/project-cs` (warm median) | 134.0 ms | 137.4 ms | Noise: the index starts after the first frame |
+| Startup with `target/project-50k` (warm median) | 140.1 ms | 135.0 ms | Noise |

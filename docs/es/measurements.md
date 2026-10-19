@@ -334,3 +334,24 @@ Desglose medido en release: análisis de tree-sitter 297 ms, consulta 96 ms, con
 | Arranque (`compare-startup.ps1`, 15 rondas intercaladas, mediana) | 168,1 ms | 169,9 ms | Ruido; las dos cifras son altas porque el equipo iba cargado |
 
 El presupuesto es de 15 MB (como en el resto de mediciones, 1 MB = 2²⁰ bytes: 15.728.640 B): quedan 446.464 B (436 KB) de margen para las fases siguientes.
+
+## Fase 3, paso 7 — índice de símbolos del proyecto (2026-10-19, equipo A)
+
+`cargo run --release -p bracket-index --example project_symbols` sobre `target/project-cs`: 2.000 ficheros C# (16,6 MiB, 210.000 símbolos), con la caché de ficheros caliente; 16 hilos lógicos, el índice usa 15.
+
+| Medida | Resultado |
+|---|---|
+| Construir el índice | 522–553 ms (30–32 MiB/s). La primera pasada tras generar el proyecto tardó 6,1 s: ficheros recién escritos, probablemente analizados por el antivirus |
+| Volver a comprobarlo sin cambios (fecha y tamaño de cada fichero) | 7,8–8,8 ms |
+| Volver a leer un fichero | 2,2–2,9 ms |
+| Memoria estimada de la estructura | 6,4 MiB |
+
+En la aplicación (`measure.ps1 -Runs 5 -IdleSeconds 6 -Arguments <proyecto>`), frente al paso 6:
+
+| Medida | Paso 6 | Paso 7 | Cambio |
+|---|---|---|---|
+| Tamaño del ejecutable | 15.296.000 B (14,59 MB) | 15.374.848 B (14,66 MB) | +77 KB; quedan 353.792 B (345 KB) hasta el presupuesto de 15 MB |
+| Conjunto de trabajo privado a los 6 s, `target/project-cs` | 31,6 MB | 45,4 MB | +13,8 MB: 210.000 símbolos |
+| Conjunto de trabajo privado a los 6 s, `target/project-50k` | 37,8 MB | 58,9 MB | +21,1 MB: 33.000 ficheros diminutos con lenguaje de símbolos (una entrada por fichero, una segunda copia de la lista de rutas y la memoria que el montón conserva tras extraer en 15 hilos) |
+| Arranque con `target/project-cs` (mediana en caliente) | 134,0 ms | 137,4 ms | Ruido: el índice empieza después del primer fotograma |
+| Arranque con `target/project-50k` (mediana en caliente) | 140,1 ms | 135,0 ms | Ruido |

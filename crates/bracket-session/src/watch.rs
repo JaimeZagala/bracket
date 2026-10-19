@@ -70,11 +70,29 @@ impl FileWatcher {
 /// Changes inside a project folder, gathered until they settle.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ProjectChanges {
-    /// Files and folders created, deleted or renamed. Content changes are not included: they
-    /// change neither the tree nor the file index.
+    /// Files and folders created, deleted or renamed.
     pub paths: HashSet<PathBuf>,
+    /// Files whose content changed. They change neither the tree nor the file index, only what
+    /// is read from the files (their symbols).
+    pub modified: HashSet<PathBuf>,
     /// Notifications were lost (too many at once): everything should be listed again.
     pub rescan: bool,
+}
+
+impl ProjectChanges {
+    /// Whether folder listings may have changed: something was created, deleted or renamed, or
+    /// notifications were lost.
+    pub fn changes_listing(&self) -> bool {
+        self.rescan || !self.paths.is_empty()
+    }
+}
+
+/// One change, as the watcher passes it to the thread that gathers them.
+enum Change {
+    Listing(PathBuf),
+    Content(PathBuf),
+    /// Notifications were lost.
+    Rescan,
 }
 
 /// How long the project must stay quiet before its changes are reported.
@@ -93,22 +111,26 @@ impl ProjectWatcher {
         root: &Path,
         on_changes: impl Fn(ProjectChanges) + Send + 'static,
     ) -> notify::Result<Self> {
-        // `None` asks for a rescan.
-        let (tx, rx) = mpsc::channel::<Option<PathBuf>>();
+        let (tx, rx) = mpsc::channel::<Change>();
         let mut watcher =
             notify::recommended_watcher(move |event: notify::Result<notify::Event>| match event {
                 Ok(event) if event.need_rescan() => {
-                    let _ = tx.send(None);
+                    let _ = tx.send(Change::Rescan);
                 }
                 Ok(event) => {
-                    if changes_the_listing(event.kind) {
-                        for path in event.paths {
-                            let _ = tx.send(Some(path));
-                        }
+                    let change: fn(PathBuf) -> Change = if changes_the_listing(event.kind) {
+                        Change::Listing
+                    } else if changes_the_content(event.kind) {
+                        Change::Content
+                    } else {
+                        return;
+                    };
+                    for path in event.paths {
+                        let _ = tx.send(change(path));
                     }
                 }
                 Err(_) => {
-                    let _ = tx.send(None);
+                    let _ = tx.send(Change::Rescan);
                 }
             })?;
         watcher.watch(root, RecursiveMode::Recursive)?;
@@ -132,14 +154,25 @@ fn changes_the_listing(kind: EventKind) -> bool {
     )
 }
 
+/// Whether an event changes what a file holds: on Windows, `Modify(Any)`.
+fn changes_the_content(kind: EventKind) -> bool {
+    matches!(
+        kind,
+        EventKind::Modify(ModifyKind::Any | ModifyKind::Data(_))
+    )
+}
+
 /// Collects changes until none arrive for [`PROJECT_QUIET`] (or [`PROJECT_MAX_WAIT`] passes),
 /// then reports them. Ends when the watcher is dropped.
-fn gather(rx: &Receiver<Option<PathBuf>>, on_changes: impl Fn(ProjectChanges)) {
-    let add = |changes: &mut ProjectChanges, change: Option<PathBuf>| match change {
-        Some(path) => {
+fn gather(rx: &Receiver<Change>, on_changes: impl Fn(ProjectChanges)) {
+    let add = |changes: &mut ProjectChanges, change: Change| match change {
+        Change::Listing(path) => {
             changes.paths.insert(path);
         }
-        None => changes.rescan = true,
+        Change::Content(path) => {
+            changes.modified.insert(path);
+        }
+        Change::Rescan => changes.rescan = true,
     };
     while let Ok(first) = rx.recv() {
         let mut changes = ProjectChanges::default();
@@ -269,7 +302,7 @@ mod tests {
     }
 
     #[test]
-    fn content_changes_alone_are_not_reported() {
+    fn content_changes_are_reported_apart() {
         let root = temp_dir("content");
         let file = root.join("Program.cs");
         fs::write(&file, "one").unwrap();
@@ -279,8 +312,11 @@ mod tests {
         })
         .unwrap();
         fs::write(&file, "two").unwrap();
-        let quiet = PROJECT_QUIET + Duration::from_millis(600);
-        assert_eq!(rx.recv_timeout(quiet).ok(), None);
+        let changes = rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("a content change is reported");
+        assert!(changes.modified.contains(&file));
+        assert!(!changes.changes_listing(), "the listing stays as it was");
         drop(watcher);
         fs::remove_dir_all(&root).unwrap();
     }

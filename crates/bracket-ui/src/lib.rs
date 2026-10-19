@@ -14,6 +14,7 @@ mod outline;
 mod quick_open;
 mod search_panel;
 mod session;
+mod symbol_index;
 mod tabs;
 mod tree;
 

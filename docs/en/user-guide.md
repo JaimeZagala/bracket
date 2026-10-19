@@ -37,6 +37,7 @@ With a project open, the **project panel** on the left shows the folder tree: fo
 - With no text it shows the recently opened files.
 - `Program.cs:42` opens the file at line 42 and `Program.cs:42:7` also at column 7. `:120` goes to line 120 of the active document.
 - It searches the project's files, with the same exclusions as the tree. The index is prepared when the folder opens (a tenth of a second with 50,000 files) and updates by itself. Without a project, it searches the recent files.
+- At the foot, how many files the project has and, once the symbol index is ready, how many symbols (extracted in the background from files up to 1 MB, and kept up to date even when another program changes them).
 
 ### Command palette, Go to line and Go to symbol
 

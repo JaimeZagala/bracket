@@ -161,6 +161,13 @@ impl Texts {
         self.fill("quick_open_go_to_line", &[("line", &line)])
     }
 
+    pub fn quick_open_count_symbols(&self, files: &str, symbols: &str) -> String {
+        self.fill(
+            "quick_open_count_symbols",
+            &[("files", &files), ("symbols", &symbols)],
+        )
+    }
+
     pub fn quick_open_count(&self, count: &str) -> String {
         self.fill("quick_open_count", &[("count", &count)])
     }
@@ -949,6 +956,10 @@ mod tests {
                 ),
                 ("quick_open_go_to_line", t.quick_open_go_to_line("1")),
                 ("quick_open_count", t.quick_open_count("1")),
+                (
+                    "quick_open_count_symbols",
+                    t.quick_open_count_symbols("1", "2"),
+                ),
                 ("menu_recent_clear", t.menu_recent_clear().to_owned()),
                 ("recent_empty", t.recent_empty().to_owned()),
                 ("menu_save", t.menu_save().to_owned()),

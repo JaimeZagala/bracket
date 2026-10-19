@@ -37,6 +37,7 @@ Con un proyecto abierto, el **panel del proyecto** muestra a la izquierda el ár
 - Sin texto muestra los ficheros abiertos recientemente.
 - `Program.cs:42` abre el fichero en la línea 42 y `Program.cs:42:7`, también en la columna 7. `:120` va a la línea 120 del documento activo.
 - Busca en los ficheros del proyecto, con las mismas exclusiones que el árbol. El índice se prepara al abrir la carpeta (con 50.000 ficheros, una décima de segundo) y se actualiza solo. Sin proyecto, busca entre los recientes.
+- Al pie, cuántos ficheros tiene el proyecto y, cuando el índice de símbolos está listo, cuántos símbolos (se extraen en segundo plano de los ficheros de hasta 1 MB, y se mantienen al día aunque otro programa los cambie).
 
 ### Paleta de comandos, Ir a línea e Ir a símbolo
 

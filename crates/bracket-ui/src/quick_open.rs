@@ -7,6 +7,7 @@
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
@@ -24,6 +25,7 @@ use eframe::egui::{
 use crate::commands::Command;
 use crate::i18n::Texts;
 use crate::outline::{PaletteSymbol, SymbolList, kind_badge};
+use crate::symbol_index::FilesChanged;
 use crate::tabs;
 
 /// Results kept for one query.
@@ -60,8 +62,14 @@ pub struct IndexWorker {
 }
 
 impl IndexWorker {
-    /// Starts building the index of `root`. `notify` is called whenever an event is ready.
-    pub fn start(root: PathBuf, options: WalkOptions, notify: impl Fn() + Send + 'static) -> Self {
+    /// Starts building the index of `root`. `notify` is called whenever an event is ready;
+    /// `on_files` with the list once built and with every change after that.
+    pub fn start(
+        root: PathBuf,
+        options: WalkOptions,
+        notify: impl Fn() + Send + 'static,
+        on_files: impl Fn(FilesChanged) + Send + 'static,
+    ) -> Self {
         let (commands, command_rx) = mpsc::channel();
         let (event_tx, events) = mpsc::channel();
         let cancel = CancelToken::new();
@@ -80,14 +88,32 @@ impl IndexWorker {
                 if !send(IndexEvent::Ready(index.files.len())) {
                     return;
                 }
+                let mut files = Arc::new(index.files.clone());
+                on_files(FilesChanged {
+                    files: files.clone(),
+                    changed: Vec::new(),
+                    full: true,
+                });
                 while let Ok(first) = command_rx.recv() {
                     let mut query = None;
+                    // Whether the list changed, and the paths to read again.
                     let mut changed = false;
+                    let mut touched = None::<FilesChanged>;
                     for command in std::iter::once(first).chain(command_rx.try_iter()) {
                         match command {
                             IndexCommand::Changes(changes) => {
-                                apply(&mut index, &options, &changes, &worker_cancel);
-                                changed = true;
+                                let full = changes.changes_listing()
+                                    && apply(&mut index, &options, &changes, &worker_cancel);
+                                changed |= changes.changes_listing();
+                                let touched = touched.get_or_insert_with(|| FilesChanged {
+                                    files: files.clone(),
+                                    changed: Vec::new(),
+                                    full: false,
+                                });
+                                touched.full |= full;
+                                touched
+                                    .changed
+                                    .extend(changes.paths.into_iter().chain(changes.modified));
                             }
                             IndexCommand::Query { text, generation } => {
                                 query = Some((text, generation));
@@ -97,8 +123,15 @@ impl IndexWorker {
                     if worker_cancel.is_cancelled() {
                         return;
                     }
-                    if changed && !send(IndexEvent::Ready(index.files.len())) {
-                        return;
+                    if changed {
+                        files = Arc::new(index.files.clone());
+                        if !send(IndexEvent::Ready(index.files.len())) {
+                            return;
+                        }
+                    }
+                    if let Some(mut touched) = touched {
+                        touched.files = files.clone();
+                        on_files(touched);
                     }
                     if let Some((text, generation)) = query {
                         let found = search(&index.files, &text);
@@ -147,13 +180,13 @@ fn build(root: &Path, options: &WalkOptions, cancel: &CancelToken) -> Option<Fil
 }
 
 /// Brings the index up to date: folder by folder, or entirely again when the ignore rules
-/// changed or notifications were lost.
+/// changed or notifications were lost. Returns whether it was built again.
 fn apply(
     index: &mut FileIndex,
     options: &WalkOptions,
     changes: &ProjectChanges,
     cancel: &CancelToken,
-) {
+) -> bool {
     let rules_changed = changes.paths.iter().any(|path| {
         path.file_name().is_some_and(|n| {
             n.eq_ignore_ascii_case(".gitignore") || n.eq_ignore_ascii_case(".ignore")
@@ -163,7 +196,7 @@ fn apply(
         if let Some(fresh) = build(&index.root, options, cancel) {
             *index = fresh;
         }
-        return;
+        return true;
     }
     // Parents first: a new folder is walked from its parent, and then its own changes are
     // already in.
@@ -178,6 +211,7 @@ fn apply(
             .resync_dir(&dir, options)
             .or_else(|_| index.resync_dir(&dir, &WalkOptions::default()));
     }
+    false
 }
 
 fn search(files: &[String], text: &str) -> Vec<Found> {
@@ -340,6 +374,7 @@ impl QuickOpen {
         root: Option<&Path>,
         index: Option<&IndexWorker>,
         indexed: Option<usize>,
+        symbols_indexed: Option<usize>,
         commands: &[PaletteCommand],
         lines: Option<usize>,
         symbols: SymbolList<'_>,
@@ -562,7 +597,13 @@ impl QuickOpen {
                                 });
                             if let (Some(count), true) = (indexed, root.is_some()) {
                                 ui.add_space(2.0);
-                                ui.weak(texts.quick_open_count(&count.to_string()));
+                                ui.weak(match symbols_indexed {
+                                    Some(symbols) => texts.quick_open_count_symbols(
+                                        &count.to_string(),
+                                        &symbols.to_string(),
+                                    ),
+                                    None => texts.quick_open_count(&count.to_string()),
+                                });
                             }
                         }
                     }
@@ -899,7 +940,15 @@ mod tests {
         fs::write(root.join(r"src\Program.cs"), "x").unwrap();
         fs::write(root.join("README.md"), "x").unwrap();
 
-        let worker = IndexWorker::start(root.clone(), WalkOptions::default(), || {});
+        let (files_tx, files_rx) = mpsc::channel();
+        let worker = IndexWorker::start(
+            root.clone(),
+            WalkOptions::default(),
+            || {},
+            move |c| {
+                let _ = files_tx.send(c);
+            },
+        );
         wait_for(&worker, |e| matches!(e, IndexEvent::Ready(2)));
         worker.query("prog".into(), 1);
         wait_for(&worker, |e| match e {
@@ -912,13 +961,30 @@ mod tests {
         fs::write(root.join(r"src\Startup.cs"), "x").unwrap();
         worker.changes(ProjectChanges {
             paths: [root.join(r"src\Startup.cs")].into(),
-            rescan: false,
+            ..ProjectChanges::default()
         });
         worker.query("startup".into(), 2);
         wait_for(&worker, |e| match e {
             IndexEvent::Results { generation, found } => *generation == 2 && found.len() == 1,
             _ => false,
         });
+
+        // The symbol index gets the list, then each change with the list as it is after it.
+        let built = files_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(built.full && built.files.len() == 2);
+        let added = files_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(!added.full && added.files.len() == 3);
+        assert_eq!(added.changed, [root.join(r"src\Startup.cs")]);
+        worker.changes(ProjectChanges {
+            modified: [root.join(r"src\Program.cs")].into(),
+            ..ProjectChanges::default()
+        });
+        let modified = files_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(modified.changed, [root.join(r"src\Program.cs")]);
+        assert!(
+            Arc::ptr_eq(&modified.files, &added.files),
+            "the list is not copied again"
+        );
         drop(worker);
         fs::remove_dir_all(&root).unwrap();
     }
