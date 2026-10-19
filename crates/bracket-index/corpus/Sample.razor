@@ -1,0 +1,28 @@
+@page "/invoices/{Id:int}"
+@using Demo.Billing
+@inject IInvoiceStore Store
+@inherits ComponentBase
+
+<h1>Invoice @Id</h1>
+<p>Braces in markup { are not code }</p>
+
+@code {
+    [Parameter] public int Id { get; set; }
+    private string title = "{ not a block }";
+
+    protected override void OnInitialized()
+    {
+        title = $"Invoice {Id}";
+    }
+
+    private sealed class Row
+    {
+        public string Sku { get; set; } = "";
+    }
+}
+
+<footer>@title</footer>
+
+@functions {
+    private int Count() => 1;
+}

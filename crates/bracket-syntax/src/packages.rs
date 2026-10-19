@@ -3,6 +3,7 @@
 //! ```text
 //! languages/<id>/language.toml          required: format_version, name, extensions...
 //! languages/<id>/syntax.sublime-syntax  optional: the grammar (Sublime Text format, version 1)
+//! languages/<id>/symbols.toml           optional: regex symbol rules, read by bracket-index
 //! ```
 //!
 //! ```toml
@@ -35,6 +36,7 @@ use crate::languages::{Badge, Language};
 pub const FORMAT_VERSION: i64 = 1;
 pub const MANIFEST: &str = "language.toml";
 pub const GRAMMAR: &str = "syntax.sublime-syntax";
+pub const SYMBOLS: &str = "symbols.toml";
 const TAB_WIDTH_MAX: i64 = 16;
 const DEFAULT_BADGE_COLOR: [u8; 3] = [0x6E, 0x76, 0x81];
 
@@ -190,6 +192,18 @@ fn load_package(folder: &Path) -> Result<(Language, Option<PathBuf>), PackageWar
         (manifest.string("scope")?.unwrap_or_default(), None)
     };
 
+    let symbols_path = folder.join(SYMBOLS);
+    let symbols = if symbols_path.is_file() {
+        Some(
+            fs::read_to_string(&symbols_path).map_err(|e| PackageWarning::Unreadable {
+                path: symbols_path.clone(),
+                error: e.to_string(),
+            })?,
+        )
+    } else {
+        None
+    };
+
     let id = folder
         .file_name()
         .map(|n| n.to_string_lossy().to_lowercase())
@@ -205,6 +219,7 @@ fn load_package(folder: &Path) -> Result<(Language, Option<PathBuf>), PackageWar
         block_comment,
         pairs,
         package: Some(folder.to_path_buf()),
+        symbols,
     };
     Ok((language, grammar))
 }
@@ -379,6 +394,30 @@ color = "#3776AB"
         assert_eq!(python.badge.color, [0x37, 0x76, 0xAB]);
         assert_eq!(python.pairs.len(), 2);
         assert!(packages.grammars.is_empty());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn symbol_rules_are_read_as_text() {
+        let root = temp_dir("symbols");
+        let folder = package(&root, "python", PYTHON);
+        let rules =
+            "format_version = 1\n[[symbol]]\nkind = \"function\"\npattern = '^def (?<name>\\w+)'\n";
+        fs::write(folder.join(SYMBOLS), rules).unwrap();
+        package(
+            &root,
+            "ini",
+            "format_version = 1\nname = \"INI\"\nextensions = [\"ini\"]\n",
+        );
+        let packages = load(std::slice::from_ref(&root));
+        let python = packages
+            .languages
+            .iter()
+            .find(|l| l.id == "python")
+            .unwrap();
+        assert_eq!(python.symbols.as_deref(), Some(rules));
+        let ini = packages.languages.iter().find(|l| l.id == "ini").unwrap();
+        assert_eq!(ini.symbols, None);
         fs::remove_dir_all(&root).unwrap();
     }
 

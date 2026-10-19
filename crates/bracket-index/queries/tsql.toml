@@ -1,0 +1,41 @@
+# Symbols of T-SQL, in the symbols.toml format external packages use. A symbol runs until the
+# next GO (the batch separator) or the next symbol. Brackets are taken out of names:
+# [dbo].[GetInvoice] becomes dbo.GetInvoice.
+format_version = 1
+
+[[symbol]]
+kind = "procedure"
+pattern = '(?i)^[ \t]*(?:CREATE(?:[ \t]+OR[ \t]+ALTER)?|ALTER)[ \t]+PROC(?:EDURE)?[ \t]+(?<name>(?:\[[^\]\r\n]+\]|[\w@#$]+)(?:\.(?:\[[^\]\r\n]+\]|[\w@#$]+))*)'
+end = '(?i)^[ \t]*GO[ \t]*$'
+strip = "[]"
+
+[[symbol]]
+kind = "function"
+pattern = '(?i)^[ \t]*(?:CREATE(?:[ \t]+OR[ \t]+ALTER)?|ALTER)[ \t]+FUNCTION[ \t]+(?<name>(?:\[[^\]\r\n]+\]|[\w@#$]+)(?:\.(?:\[[^\]\r\n]+\]|[\w@#$]+))*)'
+end = '(?i)^[ \t]*GO[ \t]*$'
+strip = "[]"
+
+[[symbol]]
+kind = "view"
+pattern = '(?i)^[ \t]*(?:CREATE(?:[ \t]+OR[ \t]+ALTER)?|ALTER)[ \t]+VIEW[ \t]+(?<name>(?:\[[^\]\r\n]+\]|[\w@#$]+)(?:\.(?:\[[^\]\r\n]+\]|[\w@#$]+))*)'
+end = '(?i)^[ \t]*GO[ \t]*$'
+strip = "[]"
+
+[[symbol]]
+kind = "trigger"
+pattern = '(?i)^[ \t]*(?:CREATE(?:[ \t]+OR[ \t]+ALTER)?|ALTER)[ \t]+TRIGGER[ \t]+(?<name>(?:\[[^\]\r\n]+\]|[\w@#$]+)(?:\.(?:\[[^\]\r\n]+\]|[\w@#$]+))*)'
+end = '(?i)^[ \t]*GO[ \t]*$'
+strip = "[]"
+
+# Tables and types are declared with CREATE; ALTER TABLE changes one, it does not declare it.
+[[symbol]]
+kind = "table"
+pattern = '(?i)^[ \t]*CREATE[ \t]+TABLE[ \t]+(?<name>(?:\[[^\]\r\n]+\]|[\w@#$]+)(?:\.(?:\[[^\]\r\n]+\]|[\w@#$]+))*)'
+end = '(?i)^[ \t]*GO[ \t]*$'
+strip = "[]"
+
+[[symbol]]
+kind = "type"
+pattern = '(?i)^[ \t]*CREATE[ \t]+TYPE[ \t]+(?<name>(?:\[[^\]\r\n]+\]|[\w@#$]+)(?:\.(?:\[[^\]\r\n]+\]|[\w@#$]+))*)'
+end = '(?i)^[ \t]*GO[ \t]*$'
+strip = "[]"

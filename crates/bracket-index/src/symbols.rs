@@ -7,12 +7,19 @@
 //! end of the document (a C# file-scoped namespace). The queries are in `queries/`. tree-sitter works in bytes; positions are turned into
 //! chars, the editor's unit, before they leave this module. Nesting comes from the ranges:
 //! a symbol inside another one's range is its child.
+//!
+//! T-SQL uses regex rules (`queries/tsql.toml`, the format of the packages' `symbols.toml`, see
+//! `rules.rs`). Razor lists its directives and parses its `@code` and `@functions` blocks with
+//! the C# grammar.
 
 use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::OnceLock;
 
+use regex::Regex;
 use tree_sitter::{Language, Parser, Query, QueryCursor, StreamingIterator};
+
+use crate::rules::RuleSet;
 
 /// Symbols kept for one document at most; a huge generated file stops here.
 pub const MAX_SYMBOLS: usize = 50_000;
@@ -154,16 +161,113 @@ fn grammar(language: &str) -> Option<&'static Grammar> {
     GRAMMARS.iter().find(|g| g.id == language)
 }
 
-/// Whether `language` (a `bracket-syntax` id) has a symbol extractor.
+/// Languages with symbols that are not parsed with a grammar of their own.
+const OTHER_LANGUAGES: [&str; 2] = ["tsql", "razor"];
+
+/// Whether `language` (a `bracket-syntax` id) has a built-in symbol extractor.
 pub fn has_symbols(language: &str) -> bool {
-    grammar(language).is_some()
+    grammar(language).is_some() || OTHER_LANGUAGES.contains(&language)
 }
 
 /// The symbols of `text` in `language`, in document order; `None` if the language has no
-/// extractor.
+/// built-in extractor.
 pub fn extract(language: &str, text: &str) -> Option<Vec<Symbol>> {
-    let grammar = grammar(language)?;
-    Some(run_query(&(grammar.language)(), grammar.query()?, text))
+    match language {
+        "tsql" => Some(extract_with_rules(tsql_rules(), text)),
+        "razor" => Some(razor(text)),
+        _ => {
+            let grammar = grammar(language)?;
+            Some(run_query(&(grammar.language)(), grammar.query()?, text))
+        }
+    }
+}
+
+/// The symbols that a language package's rules (its `symbols.toml`) find in `text`.
+pub fn extract_with_rules(rules: &RuleSet, text: &str) -> Vec<Symbol> {
+    let found = rules
+        .find(text, MAX_SYMBOLS)
+        .into_iter()
+        .map(|m| Found {
+            kind: m.kind,
+            range: m.range,
+            name_range: m.name_range,
+            name: m.name,
+        })
+        .collect();
+    symbols(text, found)
+}
+
+/// The built-in T-SQL rules, compiled once.
+fn tsql_rules() -> &'static RuleSet {
+    static RULES: OnceLock<RuleSet> = OnceLock::new();
+    RULES.get_or_init(|| {
+        RuleSet::parse(include_str!("../queries/tsql.toml"))
+            .expect("the built-in T-SQL rules are valid")
+    })
+}
+
+/// Razor: its directives (`@page`, `@inject`…) and the members of its `@code` and `@functions`
+/// blocks, found with the C# grammar. Each block is parsed as the body of a class, so the
+/// grammar itself finds where it ends, past strings and comments with braces in them.
+fn razor(text: &str) -> Vec<Symbol> {
+    static DIRECTIVE: OnceLock<Regex> = OnceLock::new();
+    static BLOCK: OnceLock<Regex> = OnceLock::new();
+    let directive = DIRECTIVE.get_or_init(|| {
+        Regex::new(
+            r"(?m)^[ \t]*(@(?:page|inject|using|inherits|implements|layout|attribute|namespace|model|typeparam|rendermode))\b[^\r\n]*",
+        )
+        .expect("valid pattern")
+    });
+    let block = BLOCK.get_or_init(|| Regex::new(r"@(code|functions)\s*\{").expect("valid pattern"));
+    let mut found = Vec::new();
+    for captures in directive.captures_iter(text) {
+        let (whole, keyword) = (captures.get(0).expect("whole match"), &captures[1]);
+        let at = whole.start() + whole.as_str().find('@').unwrap_or(0);
+        found.push(Found {
+            kind: SymbolKind::Directive,
+            range: at..whole.end(),
+            name_range: at..at + keyword.len(),
+            name: tidy_name(&text[at..whole.end()]),
+        });
+    }
+    let Some(csharp) = grammar("csharp") else {
+        return symbols(text, found);
+    };
+    let Some(query) = csharp.query() else {
+        return symbols(text, found);
+    };
+    const WRAPPER: &str = "class R ";
+    for captures in block.captures_iter(text) {
+        let (m, keyword) = (captures.get(0).expect("whole match"), &captures[1]);
+        let brace = m.end() - 1;
+        let wrapped = format!("{WRAPPER}{}", &text[brace..]);
+        let inner = find(&(csharp.language)(), query, &wrapped);
+        let Some(class) = inner
+            .iter()
+            .find(|f| f.range.start == 0 && f.kind == SymbolKind::Class)
+        else {
+            continue;
+        };
+        let class_end = class.range.end;
+        let back = |byte: usize| byte - WRAPPER.len() + brace;
+        found.push(Found {
+            kind: SymbolKind::Directive,
+            range: m.start()..back(class_end),
+            name_range: m.start()..m.start() + 1 + keyword.len(),
+            name: format!("@{keyword}"),
+        });
+        found.extend(
+            inner
+                .into_iter()
+                .filter(|f| f.range.start > WRAPPER.len() && f.range.end <= class_end)
+                .map(|f| Found {
+                    range: back(f.range.start)..back(f.range.end),
+                    name_range: back(f.name_range.start)..back(f.name_range.end),
+                    ..f
+                }),
+        );
+    }
+    symbols(text, found)
 }
 
 /// A declaration found by a query, in bytes, with its name already worked out.
@@ -193,12 +297,17 @@ fn parse_capture(name: &str) -> Option<Capture> {
     })
 }
 
-/// Parses `text` and runs `query` over it.
+/// Parses `text`, runs `query` over it and builds the symbols.
+fn run_query(language: &Language, query: &Query, text: &str) -> Vec<Symbol> {
+    symbols(text, find(language, query, text))
+}
+
+/// Parses `text` and runs `query` over it: the declarations, in bytes.
 ///
 /// Besides `@definition.<kind>` and `@name`, a query may capture `@detail`: text added to the
 /// name (an XML element's `id="…"`). Without `@name`, the name is the declaration's first line
 /// up to `{` (a CSS `@media (…)` rule).
-fn run_query(language: &Language, query: &Query, text: &str) -> Vec<Symbol> {
+fn find(language: &Language, query: &Query, text: &str) -> Vec<Found> {
     let mut parser = Parser::new();
     if parser.set_language(language).is_err() {
         return Vec::new();
@@ -277,7 +386,7 @@ fn run_query(language: &Language, query: &Query, text: &str) -> Vec<Symbol> {
             break;
         }
     }
-    symbols(text, found)
+    found
 }
 
 /// Builds the symbols from what the query found: char positions and nesting.
@@ -435,7 +544,7 @@ mod tests {
             assert!(grammar.query().is_some(), "{} query", grammar.id);
             assert!(extract(grammar.id, "").is_some());
         }
-        assert!(extract("tsql", "CREATE TABLE t (id int)").is_none());
+        assert!(extract("python", "def x(): pass").is_none());
         assert!(has_symbols("csharp") && !has_symbols("rust"));
     }
 
@@ -561,6 +670,67 @@ Invoice id=\"INV-1\" Element
         let text = "<a id=\"x\"/>";
         let symbols = extract("xml", text).unwrap();
         assert_eq!(symbols[0].name_range, 1..2);
+    }
+
+    #[test]
+    fn tsql_objects_by_rules() {
+        let text = include_str!("../corpus/Sample.sql");
+        let expected = "\
+dbo.Invoice Table
+dbo.GetInvoice Procedure
+dbo.InvoiceTotal Function
+Reporting.OpenInvoices View
+trg_Invoice_Insert Trigger
+dbo.InvoiceIds Type
+";
+        assert_eq!(outline("tsql", text), expected);
+        // A procedure ends at its GO; its name range is the name as written.
+        let symbols = extract("tsql", text).unwrap();
+        let chars: Vec<char> = text.chars().collect();
+        let procedure = &symbols[1];
+        let body: String = chars[procedure.range.clone()].iter().collect();
+        assert!(body.starts_with("CREATE PROCEDURE") && body.trim_end().ends_with("END"));
+        let name: String = chars[procedure.name_range.clone()].iter().collect();
+        assert_eq!(name, "[dbo].[GetInvoice]");
+    }
+
+    #[test]
+    fn razor_directives_and_code_blocks() {
+        let text = include_str!("../corpus/Sample.razor");
+        let expected = "\
+@page \"/invoices/{Id:int}\" Directive
+@using Demo.Billing Directive
+@inject IInvoiceStore Store Directive
+@inherits ComponentBase Directive
+@code Directive
+  Id Property
+  title Field
+  OnInitialized Method
+  Row Class
+    Sku Property
+@functions Directive
+  Count Method
+";
+        assert_eq!(outline("razor", text), expected);
+        // The @code block ends at its own closing brace, not at a brace in a string.
+        let symbols = extract("razor", text).unwrap();
+        let code = symbols.iter().find(|s| s.name == "@code").unwrap();
+        let chars: Vec<char> = text.chars().collect();
+        let block: String = chars[code.range.clone()].iter().collect();
+        assert!(block.ends_with("}\n}") || block.ends_with('}'));
+        assert!(!block.contains("<footer>"));
+    }
+
+    #[test]
+    fn package_rules_find_symbols_too() {
+        let rules = RuleSet::parse(
+            "format_version = 1\n[[symbol]]\nkind = \"function\"\npattern = '^def (?<name>\\w+)'\n",
+        )
+        .unwrap();
+        let symbols = extract_with_rules(&rules, "def run():\n    pass\ndef stop():\n");
+        let names: Vec<&str> = symbols.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["run", "stop"]);
+        assert!(has_symbols("tsql") && has_symbols("razor"));
     }
 
     #[test]

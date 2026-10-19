@@ -148,6 +148,19 @@ color = "#3776AB"
 ```
 
 - **Gramática:** un `syntax.sublime-syntax` en la misma carpeta (formato de Sublime Text, versión 1; las gramáticas que usan `extends` de Sublime Text 4 y los `.tmLanguage` no son compatibles). Si no hay fichero, `scope` permite usar cualquiera de las gramáticas incluidas, que son las del paquete de syntect: Python, Rust, Go, Java, JavaScript, HTML, Markdown, YAML, Shell, Batch... (unas 75). Sin gramática, el lenguaje se reconoce y lleva insignia, pero sin colores.
+- **Símbolos:** un `symbols.toml` opcional define reglas regex para los símbolos del lenguaje (el esquema y la navegación llegan en los próximos pasos de la Fase 3):
+
+```toml
+format_version = 1
+
+[[symbol]]
+kind = "function"                  # class, method, function, procedure, table, variable…
+pattern = '^def (?<name>\w+)'        # el grupo name (o el primero) es el nombre
+end = '^\S'                           # opcional: dónde termina el símbolo
+strip = "[]"                          # opcional: caracteres que se quitan del nombre
+```
+
+  Los patrones usan la sintaxis de la crate `regex`, con `^` y `$` en cada línea; `(?i)` ignora mayúsculas. Un símbolo llega hasta su `end` o hasta el siguiente símbolo.
 - Si un paquete tiene un problema (falta una clave, `format_version` de otra versión, gramática con errores), se ignora y la barra de estado lo indica. Los cambios en los paquetes se aplican al reiniciar Bracket.
 
 ## Cambios en disco

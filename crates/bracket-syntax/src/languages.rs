@@ -34,6 +34,8 @@ pub struct Language {
     pub pairs: Vec<(String, String)>,
     /// The package folder it comes from; `None` for a built-in language.
     pub package: Option<PathBuf>,
+    /// The package's `symbols.toml` (regex symbol rules), as text: `bracket-index` reads it.
+    pub symbols: Option<String>,
 }
 
 /// Brackets and quotes closed in pairs, for the built-in languages.
@@ -71,6 +73,7 @@ impl From<Builtin<'_>> for Language {
             block_comment: b.block_comment.map(|(a, z)| (a.to_owned(), z.to_owned())),
             pairs: common_pairs(),
             package: None,
+            symbols: None,
         }
     }
 }

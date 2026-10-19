@@ -550,6 +550,8 @@ dependencies = [
  "bracket-core",
  "criterion",
  "ignore",
+ "regex",
+ "toml_edit",
  "tree-sitter",
  "tree-sitter-c-sharp",
  "tree-sitter-css",

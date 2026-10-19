@@ -11,6 +11,8 @@ publish.workspace = true
 [dependencies]
 bracket-core.workspace = true
 ignore.workspace = true
+regex.workspace = true
+toml_edit.workspace = true
 tree-sitter.workspace = true
 tree-sitter-c-sharp.workspace = true
 tree-sitter-css.workspace = true

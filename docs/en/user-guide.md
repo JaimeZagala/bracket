@@ -148,6 +148,19 @@ color = "#3776AB"
 ```
 
 - **Grammar:** a `syntax.sublime-syntax` in the same folder (Sublime Text format, version 1; grammars using Sublime Text 4's `extends` and `.tmLanguage` files are not supported). Without a file, `scope` can use any of the included grammars, which are syntect's bundle: Python, Rust, Go, Java, JavaScript, HTML, Markdown, YAML, Shell, Batch... (about 75). Without a grammar, the language is recognised and has a badge, but no colours.
+- **Symbols:** an optional `symbols.toml` defines regex rules for the language's symbols (the outline and navigation come in the next steps of Phase 3):
+
+```toml
+format_version = 1
+
+[[symbol]]
+kind = "function"                  # class, method, function, procedure, table, variable…
+pattern = '^def (?<name>\w+)'        # the name group (or the first one) is the name
+end = '^\S'                           # optional: where the symbol ends
+strip = "[]"                          # optional: characters taken out of the name
+```
+
+  Patterns use the `regex` crate's syntax, with `^` and `$` at every line; `(?i)` ignores case. A symbol runs to its `end` or to the next symbol.
 - If a package has a problem (a missing key, a `format_version` from another version, a grammar with errors), it is skipped and the status bar says so. Changes to packages apply when Bracket restarts.
 
 ## Changes on disk
