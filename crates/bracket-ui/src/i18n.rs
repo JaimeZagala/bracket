@@ -216,6 +216,10 @@ impl Texts {
         self.get("project_symbols_no_project")
     }
 
+    pub fn project_symbols_disabled(&self) -> &str {
+        self.get("project_symbols_disabled")
+    }
+
     pub fn project_symbols_indexing(&self) -> &str {
         self.get("project_symbols_indexing")
     }
@@ -1005,6 +1009,10 @@ mod tests {
                 (
                     "project_symbols_indexing",
                     t.project_symbols_indexing().to_owned(),
+                ),
+                (
+                    "project_symbols_disabled",
+                    t.project_symbols_disabled().to_owned(),
                 ),
                 ("project_symbols_hint", t.project_symbols_hint("1")),
                 ("symbols_pending", t.symbols_pending().to_owned()),

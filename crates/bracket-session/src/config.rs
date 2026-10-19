@@ -111,6 +111,9 @@ pub struct Config {
     pub encoding: TextEncoding,
     /// Left out of every project, written like `.gitignore` lines.
     pub project_exclude: Vec<String>,
+    /// Experimental and off by default: the project's symbol index, with Ctrl+T, go to
+    /// definition across files and find references.
+    pub project_navigation: bool,
 }
 
 impl Default for Config {
@@ -125,6 +128,7 @@ impl Default for Config {
             line_ending: LineEnding::CrLf,
             encoding: TextEncoding::UTF8,
             project_exclude: Vec::new(),
+            project_navigation: false,
         }
     }
 }
@@ -227,6 +231,9 @@ pub fn parse(text: &str) -> LoadedConfig {
                     .and_then(TextEncoding::from_code)
                     .map(|v| config.encoding = v),
                 ("project", "exclude") => string_list(item).map(|v| config.project_exclude = v),
+                ("experimental", "project_navigation") => {
+                    item.as_bool().map(|v| config.project_navigation = v)
+                }
                 _ => {
                     warnings.push(ConfigWarning::UnknownKey { key: full_key });
                     continue;
@@ -374,6 +381,12 @@ pub fn save(config: &Config, path: &Path) -> Result<(), SaveError> {
                 .collect::<Array>(),
         ),
     );
+    set(
+        &mut doc,
+        "experimental",
+        "project_navigation",
+        config.project_navigation.into(),
+    );
 
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(SaveError::Io)?;
@@ -429,7 +442,8 @@ mod tests {
             "[interface]\nlanguage = \"en\"\nappearance = \"dark\"\n[editor]\n\
              font_family = \" Fira Code \"\ntheme = \"Solarized (dark)\"\n\
              font_size = 16\ntab_width = 2\n[files]\nline_ending = \"lf\"\n\
-             [project]\nexclude = [\"bin/\", \" \", \"*.log\"]\n",
+             [project]\nexclude = [\"bin/\", \" \", \"*.log\"]\n\
+             [experimental]\nproject_navigation = true\n",
         );
         assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
         assert_eq!(
@@ -444,6 +458,7 @@ mod tests {
                 line_ending: LineEnding::Lf,
                 encoding: TextEncoding::UTF8,
                 project_exclude: vec!["bin/".into(), "*.log".into()],
+                project_navigation: true,
             }
         );
     }
@@ -518,6 +533,7 @@ mod tests {
             line_ending: LineEnding::Cr,
             encoding: TextEncoding::UTF8_BOM,
             project_exclude: vec!["obj/".into(), "docs/old/**".into()],
+            project_navigation: true,
         };
         save(&config, &path).unwrap();
         let loaded = load(&path);

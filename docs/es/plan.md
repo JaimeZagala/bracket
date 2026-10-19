@@ -197,6 +197,8 @@ Aprobada el 2026-10-19, con tree-sitter para los símbolos ([decisions/0003-symb
 12. `languages.md` (es/en): lenguajes integrados, extensiones, símbolos que extrae cada uno y formato de los paquetes, `symbols.toml` incluido.
 13. Cierre: mediciones (tamaño frente al presupuesto, extracción en MB/s, índice de símbolos del proyecto sintético en tiempo y RAM, Ctrl+T, arranque con proyecto), documentación, CHANGELOG y etiqueta local `v0.3.0`.
 
+Decisión del 2026-10-19: el índice de símbolos del proyecto (paso 7), Ctrl+T (paso 8), ir a definición en otros ficheros (paso 9) y las referencias (paso 10) quedan como función experimental desactivada por defecto (`[experimental] project_navigation`): Bracket se usa sobre todo como visor ligero, y esas funciones ya las da Visual Studio. El código se mantiene como base por si se recuperan.
+
 Dependencias previstas, cada una medida antes de entrar: `tree-sitter` 0.27, `tree-sitter-c-sharp` 0.23, `tree-sitter-css` 0.25, `tree-sitter-json` 0.24 y `tree-sitter-xml` 0.7 (todas MIT).
 
 ## Mejoras futuras sin fase asignada

@@ -57,6 +57,8 @@ pub struct State {
     /// The navigation history has places behind or ahead.
     pub can_go_back: bool,
     pub can_go_forward: bool,
+    /// The experimental project navigation is on, with a project open.
+    pub project_navigation: bool,
 }
 
 const CTRL: Modifiers = Modifiers::COMMAND;
@@ -249,11 +251,9 @@ impl Command {
 
     pub fn is_available(self, state: &State) -> bool {
         match self {
-            Self::CloseFolder
-            | Self::FocusTree
-            | Self::GoToProjectSymbol
-            | Self::FindInFolder
-            | Self::ReplaceInFolder => state.has_project,
+            Self::CloseFolder | Self::FocusTree | Self::FindInFolder | Self::ReplaceInFolder => {
+                state.has_project
+            }
             Self::Save
             | Self::SaveAs
             | Self::GoToLine
@@ -264,7 +264,8 @@ impl Command {
             | Self::Replace => state.active_loaded,
             Self::NextTab | Self::PreviousTab => state.tabs > 1,
             Self::GoToDefinition => state.active_loaded,
-            Self::FindReferences => state.has_project && state.active_loaded,
+            Self::GoToProjectSymbol => state.project_navigation,
+            Self::FindReferences => state.project_navigation && state.active_loaded,
             Self::NavigateBack => state.can_go_back,
             Self::NavigateForward => state.can_go_forward,
             _ => true,
@@ -348,6 +349,7 @@ mod tests {
             tabs: 2,
             can_go_back: true,
             can_go_forward: true,
+            project_navigation: true,
         };
         for command in [
             Command::CloseFolder,
@@ -365,6 +367,13 @@ mod tests {
             assert!(!command.is_available(&none), "{}", command.id());
             assert!(command.is_available(&full), "{}", command.id());
         }
+        let without_navigation = State {
+            project_navigation: false,
+            ..full
+        };
+        assert!(!Command::GoToProjectSymbol.is_available(&without_navigation));
+        assert!(!Command::FindReferences.is_available(&without_navigation));
+        assert!(Command::GoToDefinition.is_available(&without_navigation));
         assert!(Command::New.is_available(&none));
         assert!(Command::Palette.is_available(&none));
     }

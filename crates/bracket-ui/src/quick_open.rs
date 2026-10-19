@@ -599,6 +599,9 @@ impl QuickOpen {
                             let name = self.text[1..].trim();
                             let message = match (root, symbols_indexed) {
                                 (None, _) => Some(texts.project_symbols_no_project().to_owned()),
+                                (Some(_), None) if symbol_index.is_none() => {
+                                    Some(texts.project_symbols_disabled().to_owned())
+                                }
                                 (Some(_), None) => {
                                     Some(texts.project_symbols_indexing().to_owned())
                                 }

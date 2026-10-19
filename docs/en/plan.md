@@ -197,6 +197,8 @@ Approved on 2026-10-19, with tree-sitter for symbols ([decisions/0003-symbols.md
 12. `languages.md` (es/en): built-in languages, extensions, the symbols each one extracts and the package format, `symbols.toml` included.
 13. Close: measurements (size against the budget, extraction in MB/s, symbol index of the synthetic project in time and RAM, Ctrl+T, startup with a project), documentation, CHANGELOG and local `v0.3.0` tag.
 
+Decision of 2026-10-19: the project symbol index (step 7), Ctrl+T (step 8), go to definition in other files (step 9) and references (step 10) stay as an experimental feature, off by default (`[experimental] project_navigation`): Bracket is mostly used as a lightweight viewer, and Visual Studio already gives those features. The code is kept as a base in case they come back.
+
 Planned dependencies, each measured before it goes in: `tree-sitter` 0.27, `tree-sitter-c-sharp` 0.23, `tree-sitter-css` 0.25, `tree-sitter-json` 0.24 and `tree-sitter-xml` 0.7 (all MIT).
 
 ## Future improvements without an assigned phase

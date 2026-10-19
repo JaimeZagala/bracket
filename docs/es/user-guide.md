@@ -37,14 +37,14 @@ Con un proyecto abierto, el **panel del proyecto** muestra a la izquierda el ár
 - Sin texto muestra los ficheros abiertos recientemente.
 - `Program.cs:42` abre el fichero en la línea 42 y `Program.cs:42:7`, también en la columna 7. `:120` va a la línea 120 del documento activo.
 - Busca en los ficheros del proyecto, con las mismas exclusiones que el árbol. El índice se prepara al abrir la carpeta (con 50.000 ficheros, una décima de segundo) y se actualiza solo. Sin proyecto, busca entre los recientes.
-- Al pie, cuántos ficheros tiene el proyecto y, cuando el índice de símbolos está listo, cuántos símbolos (se extraen en segundo plano de los ficheros de hasta 1 MB, y se mantienen al día aunque otro programa los cambie).
+- Al pie, cuántos ficheros tiene el proyecto y, con el índice de símbolos activado y listo, cuántos símbolos (se extraen en segundo plano de los ficheros de hasta 1 MB, y se mantienen al día aunque otro programa los cambie).
 
 ### Paleta de comandos, Ir a línea e Ir a símbolo
 
 - **Ctrl+Mayús+P** o **F1** (o **Ver → Paleta de comandos…**) abre el mismo cuadro con `>` delante: lista los comandos disponibles, como «Archivo: Guardar», con su atajo a la derecha, y se filtran escribiendo como en Ctrl+P. Al pasar el ratón por un comando se ve su identificador (por ejemplo `file.save`).
 - **Ctrl+G** (o **Ir → Ir a línea…**) abre el cuadro con `:` delante: escribe la línea, o `línea:columna`, e Intro. También funciona escribir `:` en Ctrl+P.
 - **Ctrl+Mayús+O** (o **Ir → Ir a símbolo en el fichero…**) abre el cuadro con `@` delante: lista los símbolos del documento activo (los mismos del esquema) en orden, con su tipo, el símbolo donde están declarados y su línea. Escribir filtra por nombre como en Ctrl+P; Intro selecciona el nombre del símbolo en el editor.
-- **Ctrl+T** (o **Ir → Ir a símbolo del proyecto…**) abre el cuadro con `#` delante: busca por nombre, como Ctrl+P, entre los símbolos de todos los ficheros del proyecto. Cada resultado muestra su tipo, el símbolo donde está declarado y, a la derecha, su fichero y línea (la ruta completa al pasar el ratón); Intro abre el fichero con el cursor en el símbolo. Necesita una carpeta abierta, y mientras se preparan los símbolos lo indica.
+- **Ctrl+T** (o **Ir → Ir a símbolo del proyecto…**) abre el cuadro con `#` delante: busca por nombre, como Ctrl+P, entre los símbolos de todos los ficheros del proyecto. Cada resultado muestra su tipo, el símbolo donde está declarado y, a la derecha, su fichero y línea (la ruta completa al pasar el ratón); Intro abre el fichero con el cursor en el símbolo. Necesita una carpeta abierta, y mientras se preparan los símbolos lo indica. *Experimental y desactivado por defecto: se activa con `project_navigation = true` en `[experimental]` (ver [Configuración](#configuración)).*
 - Los menús muestran los mismos comandos y atajos; los que no se pueden usar en ese momento (por ejemplo, Cerrar carpeta sin proyecto) salen desactivados.
 
 ### Buscar en el fichero (Ctrl+F)
@@ -91,10 +91,10 @@ La pestaña **Esquema** del panel lateral muestra los símbolos del documento ac
 
 - **F12**, **Ctrl+clic** sobre un nombre o **Ir → Ir a definición** buscan dónde se declara el nombre que hay en el cursor (con Ctrl pulsado, el puntero es una mano). Primero en el mismo fichero, después en los de su carpeta o de su espacio de nombres, y luego en el resto del proyecto. Solo busca en lenguajes relacionados: desde C# o Razor, en C# y Razor; desde JSON o XML, solo en el propio fichero; desde los demás, en los ficheros de su lenguaje. El nombre tiene que coincidir exactamente, salvo en T-SQL, donde no importan las mayúsculas. Si no hay ninguno, lo dice en la barra de estado en vez de saltar a otro sitio. Si hay uno, va directamente; si hay varios, se elige en la paleta (escribir sigue buscando como Ctrl+T).
 - En Razor, sobre `<MiComponente />` o `</MiComponente>` abre `MiComponente.razor`.
-- Sin proyecto, o en un fichero de fuera de él, busca entre los símbolos del propio documento.
+- Sin proyecto, en un fichero de fuera de él o sin la navegación por el proyecto activada (es experimental y está desactivada por defecto; ver [Configuración](#configuración)), busca solo entre los símbolos del propio documento.
 - Es aproximado: compara nombres, sin compilar. Un espacio de nombres se declara con su nombre completo (`Demo.Billing`), así que una de sus partes no lleva a ningún sitio. Un método con sobrecargas, o dos clases con el mismo nombre en espacios de nombres distintos, dan varios resultados.
 - **Alt+←** (**Ir → Atrás**) vuelve a donde estaba el cursor antes del último salto (ir a definición, a un símbolo, a una línea, a un fichero de Ctrl+P, a un resultado de búsqueda o a un símbolo del esquema) y **Alt+→** (**Ir → Adelante**) deshace la vuelta. Si la pestaña se cerró, el fichero se abre de nuevo. Se recuerdan los últimos 50 sitios.
-- **Mayús+F12** (**Ir → Buscar referencias**) busca el nombre del cursor como palabra completa en todo el proyecto y muestra los resultados en la pestaña **Buscar**. Distingue mayúsculas salvo en T-SQL y en texto sin lenguaje; quita el filtro de ficheros a incluir (las exclusiones se mantienen). Encuentra también comentarios, textos y otros símbolos con el mismo nombre: compara nombres, sin compilar.
+- **Mayús+F12** (**Ir → Buscar referencias**) busca el nombre del cursor como palabra completa en todo el proyecto y muestra los resultados en la pestaña **Buscar**. Distingue mayúsculas salvo en T-SQL y en texto sin lenguaje; quita el filtro de ficheros a incluir (las exclusiones se mantienen). Encuentra también comentarios, textos y otros símbolos con el mismo nombre: compara nombres, sin compilar. *Experimental y desactivado por defecto: se activa con `project_navigation = true` en `[experimental]` (ver [Configuración](#configuración)).*
 
 ## Pestañas
 
@@ -206,7 +206,12 @@ encoding = "utf-8"   # codificación de los ficheros nuevos: "utf-8", "utf-8-bom
 
 [project]
 exclude = ["bin/", "obj/"] # se dejan fuera de todos los proyectos, como líneas de .gitignore
+
+[experimental]
+project_navigation = false # índice de símbolos del proyecto: Ctrl+T, ir a definición en otros ficheros y Mayús+F12
 ```
+
+`[experimental]` reúne funciones que no se usan a diario y quedan desactivadas para que Bracket siga siendo ligero. Con `project_navigation = true`, al abrir una carpeta se extraen en segundo plano los símbolos de todos sus ficheros (con 2.000 ficheros de C#, en torno a un segundo y unos 9 MB de memoria) para Ctrl+T, ir a definición en todo el proyecto y Mayús+F12.
 
 En los proyectos se dejan fuera también los ficheros que excluyen `.gitignore` e `.ignore` (aunque la carpeta no sea un repositorio Git) y las carpetas `.git`, `.svn` y `.hg`; los ficheros ocultos sí aparecen.
 

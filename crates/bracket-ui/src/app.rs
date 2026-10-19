@@ -1306,7 +1306,7 @@ impl BracketApp {
     /// Shift+F12: the name at the caret, as a whole word, in the folder search.
     fn find_references(&mut self) {
         let tab = &self.tabs[self.active];
-        if self.project.is_none() || tab.loading.is_some() {
+        if self.project.is_none() || !self.config.project_navigation || tab.loading.is_some() {
             return;
         }
         let caret = tab.doc.buffer.selections().primary().head;
@@ -1408,22 +1408,27 @@ impl BracketApp {
         }
         let (root, options) = self.index_pending.take().expect("checked above");
         let repaint = ctx.clone();
-        let symbols = SymbolWorker::start(
-            root.clone(),
-            symbol_index::resolver(&self.languages, &self.symbol_rules),
-            move || repaint.request_repaint(),
-        );
-        let to_symbols = symbols.sender();
+        // The symbol index is experimental: only with [experimental] project_navigation.
+        let symbols = self.config.project_navigation.then(|| {
+            SymbolWorker::start(
+                root.clone(),
+                symbol_index::resolver(&self.languages, &self.symbol_rules),
+                move || repaint.request_repaint(),
+            )
+        });
+        let to_symbols = symbols.as_ref().map(SymbolWorker::sender);
         let repaint = ctx.clone();
         self.index = Some(IndexWorker::start(
             root,
             options,
             move || repaint.request_repaint(),
             move |change| {
-                let _ = to_symbols.send(SymbolCommand::Files(change));
+                if let Some(to_symbols) = &to_symbols {
+                    let _ = to_symbols.send(SymbolCommand::Files(change));
+                }
             },
         ));
-        self.symbol_index = Some(symbols);
+        self.symbol_index = symbols;
     }
 
     /// Opens the palette: for files, for commands (`>`) or for a line (`:`).
@@ -1444,6 +1449,7 @@ impl BracketApp {
             tabs: self.tabs.len(),
             can_go_back: self.history.can_go_back(),
             can_go_forward: self.history.can_go_forward(),
+            project_navigation: self.project.is_some() && self.config.project_navigation,
         }
     }
 

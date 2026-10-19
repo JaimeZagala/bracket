@@ -37,14 +37,14 @@ With a project open, the **project panel** on the left shows the folder tree: fo
 - With no text it shows the recently opened files.
 - `Program.cs:42` opens the file at line 42 and `Program.cs:42:7` also at column 7. `:120` goes to line 120 of the active document.
 - It searches the project's files, with the same exclusions as the tree. The index is prepared when the folder opens (a tenth of a second with 50,000 files) and updates by itself. Without a project, it searches the recent files.
-- At the foot, how many files the project has and, once the symbol index is ready, how many symbols (extracted in the background from files up to 1 MB, and kept up to date even when another program changes them).
+- At the foot, how many files the project has and, with the symbol index on and ready, how many symbols (extracted in the background from files up to 1 MB, and kept up to date even when another program changes them).
 
 ### Command palette, Go to line and Go to symbol
 
 - **Ctrl+Shift+P** or **F1** (or **View → Command palette…**) opens the same box with `>` in front: it lists the available commands, like "File: Save", with their shortcut on the right, filtered by typing as in Ctrl+P. Hovering over a command shows its identifier (for example `file.save`).
 - **Ctrl+G** (or **Go → Go to line…**) opens the box with `:` in front: type the line, or `line:column`, and Enter. Typing `:` in Ctrl+P works too.
 - **Ctrl+Shift+O** (or **Go → Go to symbol in file…**) opens the box with `@` in front: it lists the active document's symbols (the same as the outline) in order, with their kind, the symbol they are declared in and their line. Typing filters by name as in Ctrl+P; Enter selects the symbol's name in the editor.
-- **Ctrl+T** (or **Go → Go to symbol in project…**) opens the box with `#` in front: it searches by name, like Ctrl+P, among the symbols of every file in the project. Each result shows its kind, the symbol it is declared in and, on the right, its file and line (the full path on hover); Enter opens the file with the caret at the symbol. It needs an open folder, and says so while the symbols are being prepared.
+- **Ctrl+T** (or **Go → Go to symbol in project…**) opens the box with `#` in front: it searches by name, like Ctrl+P, among the symbols of every file in the project. Each result shows its kind, the symbol it is declared in and, on the right, its file and line (the full path on hover); Enter opens the file with the caret at the symbol. It needs an open folder, and says so while the symbols are being prepared. *Experimental and off by default: turn it on with `project_navigation = true` in `[experimental]` (see [Configuration](#configuration)).*
 - The menus show the same commands and shortcuts; the ones that cannot be used at the moment (for example, Close folder without a project) are disabled.
 
 ### Find in file (Ctrl+F)
@@ -91,10 +91,10 @@ The **Outline** tab of the side panel shows the active document's symbols as a t
 
 - **F12**, **Ctrl+click** on a name or **Go → Go to definition** look for where the name at the caret is declared (with Ctrl held, the pointer is a hand). First in the same file, then in the files of its folder or of its namespace, and then in the rest of the project. It only looks in related languages: from C# or Razor, in C# and Razor; from JSON or XML, only in the file itself; from the rest, in the files of their language. The name has to match exactly, except in T-SQL, where case does not matter. If there is none, the status bar says so instead of jumping elsewhere. If there is one, it goes straight there; if there are several, they are chosen in the palette (typing goes on searching like Ctrl+T).
 - In Razor, on `<MyComponent />` or `</MyComponent>` it opens `MyComponent.razor`.
-- Without a project, or in a file outside it, it looks among the document's own symbols.
+- Without a project, in a file outside it or without project navigation turned on (it is experimental and off by default; see [Configuration](#configuration)), it looks only among the document's own symbols.
 - It is approximate: it compares names, without compiling. A namespace is declared with its full name (`Demo.Billing`), so one of its parts leads nowhere. A method with overloads, or two classes with the same name in different namespaces, give several results.
 - **Alt+←** (**Go → Back**) goes back to where the caret was before the last jump (go to definition, to a symbol, to a line, to a file from Ctrl+P, to a search result or to a symbol in the outline) and **Alt+→** (**Go → Forward**) undoes going back. If the tab was closed, the file opens again. The last 50 places are remembered.
-- **Shift+F12** (**Go → Find references**) searches the whole project for the name at the caret as a whole word and shows the results in the **Search** tab. It matches case except in T-SQL and in text without a language; it clears the filter of files to include (the exclusions stay). It also finds comments, strings and other symbols with the same name: it compares names, without compiling.
+- **Shift+F12** (**Go → Find references**) searches the whole project for the name at the caret as a whole word and shows the results in the **Search** tab. It matches case except in T-SQL and in text without a language; it clears the filter of files to include (the exclusions stay). It also finds comments, strings and other symbols with the same name: it compares names, without compiling. *Experimental and off by default: turn it on with `project_navigation = true` in `[experimental]` (see [Configuration](#configuration)).*
 
 ## Tabs
 
@@ -206,7 +206,12 @@ encoding = "utf-8"   # encoding of new files: "utf-8", "utf-8-bom" or another on
 
 [project]
 exclude = ["bin/", "obj/"] # left out of every project, like .gitignore lines
+
+[experimental]
+project_navigation = false # project symbol index: Ctrl+T, go to definition in other files and Shift+F12
 ```
+
+`[experimental]` gathers features that are not used every day and stay off so Bracket keeps light. With `project_navigation = true`, opening a folder extracts the symbols of all its files in the background (with 2,000 C# files, about a second and some 9 MB of memory) for Ctrl+T, go to definition across the project and Shift+F12.
 
 Projects also leave out the files excluded by `.gitignore` and `.ignore` (even if the folder is not a Git repository) and the `.git`, `.svn` and `.hg` folders; hidden files do appear.
 

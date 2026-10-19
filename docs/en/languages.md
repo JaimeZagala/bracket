@@ -24,10 +24,10 @@ Symbols are a file's declarations: classes, methods, CSS rules, JSON keys, proce
 
 - **Outline** (a side panel tab, **View → Outline**): the active document's symbols as a tree.
 - **Ctrl+Shift+O** (`@` in the palette): go to a symbol of the active document.
-- **Ctrl+T** (`#` in the palette): go to a symbol of any file in the project.
-- **F12 and Ctrl+click**: go to the definition of the name at the caret, among the symbols of related languages: C# and Razor with each other; JSON and XML, only in the file itself; the rest, in their language (packages' too).
+- **Ctrl+T** (`#` in the palette): go to a symbol of any file in the project. *Experimental and off by default: turn it on with `project_navigation = true` in `[experimental]` (see the [user guide](user-guide.md#configuration)).*
+- **F12 and Ctrl+click**: go to the definition of the name at the caret (in other files, only with project navigation on), among the symbols of related languages: C# and Razor with each other; JSON and XML, only in the file itself; the rest, in their language (packages' too).
 
-**Shift+F12** (references) does not use symbols: it searches the project for the name as a whole word, so it works in any language. It matches case except in T-SQL and in text without a language.
+**Shift+F12** (references) does not use symbols: it searches the project for the name as a whole word, so it works in any language. It matches case except in T-SQL and in text without a language. *Experimental and off by default: turn it on with `project_navigation = true` in `[experimental]` (see the [user guide](user-guide.md#configuration)).*
 
 Limits: the outline and the path at the caret, documents up to 10 MB; the project index, files up to 1 MB; at most 50,000 symbols per file.
 
