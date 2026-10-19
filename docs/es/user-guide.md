@@ -199,6 +199,7 @@ De izquierda a derecha:
 
 - **Mensajes:** el resultado de la última acción (guardado, recarga...), avisos de configuración o de paquetes de lenguaje, o una pista para abrir ficheros.
 - **Posición:** `Lín 12, Col 5` (la columna cuenta las tabulaciones hasta su tope). Con texto seleccionado añade cuántos caracteres (`(25 seleccionados)`), y con varias selecciones muestra cuántas hay (`3 selecciones`).
+- **Ruta:** en XML y XSIG, la XPath del elemento del cursor (`/Invoice/Lines/Line[3]/Amount`, con la posición entre hermanos del mismo nombre cuando hay varios, y `/@id` dentro de un atributo); en JSON, la ruta del valor (`$.items[2].name`, o `$['otra clave']` si la clave no es un identificador). Aparece a la izquierda un momento después de mover el cursor; un clic la copia al portapapeles. Los documentos de más de 10 MB no la tienen.
 - **Salto de línea** y **codificación:** ver abajo. «Solo lectura» aparece junto a la codificación cuando el fichero no se puede guardar sin alterar sus bytes.
 - **Lenguaje del documento:** el detectado por la extensión. Pulsando se elige otro para esta pestaña, o «Texto sin formato»; la elección se recuerda en la sesión. Guardar con otro nombre vuelve a detectarlo por la extensión.
 - **Idioma de la interfaz.**

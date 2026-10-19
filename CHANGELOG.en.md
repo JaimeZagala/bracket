@@ -15,6 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Go to symbol in project: Ctrl+T (or `#` in the palette) searches by name among the symbols of every file in the project, with their kind, where they are declared and their file, and opens the file at the symbol.
 - Go to definition: F12 or Ctrl+click on a name looks for where it is declared, first in the same file, then in its folder or namespace and then in the rest of the project; if there are several, they are chosen in the palette. In Razor, `<MyComponent />` opens `MyComponent.razor`. Without a project, it looks in the document itself. Navigation history: Alt+← and Alt+→ go back to where the caret was before each jump.
 - Find references: Shift+F12 searches the whole project for the name at the caret as a whole word, with the results in the Search tab; it matches case except in T-SQL and in text without a language. It is approximate: it compares names, without compiling.
+- Path at the caret in the status bar: XPath in XML and XSIG (`/Invoice/Lines/Line[3]/@id`) and JSON path (`$.items[2].name`); a click copies it. For documents up to 10 MB.
 - Project symbol index: when a folder is opened, the symbols of all its files (up to 1 MB each) are extracted in the background, in parallel, and kept up to date as files change, also when another program modifies them. Tabs with unsaved changes lend their text. The foot of Ctrl+P shows how many symbols there are. It is the base for Ctrl+T and go to definition.
 
 ## [0.2.0] - 2026-10-19

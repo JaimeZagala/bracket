@@ -279,7 +279,7 @@ impl SymbolParser {
 
 /// The single edit that turns `old` into `new`: everything between their common start and their
 /// common end. Both ends fall on char boundaries.
-fn edit_between(old: &str, new: &str) -> InputEdit {
+pub(crate) fn edit_between(old: &str, new: &str) -> InputEdit {
     let (a, b) = (old.as_bytes(), new.as_bytes());
     let mut start = a.iter().zip(b).take_while(|(x, y)| x == y).count();
     while !old.is_char_boundary(start) || !new.is_char_boundary(start) {

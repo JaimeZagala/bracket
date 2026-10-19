@@ -392,3 +392,7 @@ Ctrl+P no cambia con el emparejador genérico: 6,3 ms con una letra y 7,0 ms con
 ## Fase 3, paso 9 — ir a definición (2026-10-19, equipo A)
 
 Ejecutable: 15.452.160 B (14,74 MB), +39 KB; quedan 276.480 B (270 KB) hasta el presupuesto de 15 MB. Buscar una definición (`cargo bench -p bracket-index --bench fuzzy`, `fuzzy_symbols/definitions`: `Compute3` entre los 210.000 símbolos de `target/project-cs`, con 8.000 coincidencias y 200 resultados) tarda 2,2 ms.
+
+## Fase 3, paso 11 — ruta bajo el cursor (2026-10-19, equipo A)
+
+Con un XML generado de 5,0 MiB (64.344 elementos `Line` hermanos), en el hilo de la ruta: primera vez (análisis completo) 945 ms; mover el cursor (sin análisis; contar los hermanos del mismo nombre) 41 ms; insertar un elemento en medio (análisis incremental) 153 ms. Ejecutable: 15.500.288 B (14,78 MB), +48 KB; quedan 228.352 B (223 KB) hasta el presupuesto de 15 MB.

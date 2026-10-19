@@ -392,3 +392,7 @@ Ctrl+P does not change with the generic matcher: 6.3 ms with one letter and 7.0 
 ## Phase 3, step 9 — go to definition (2026-10-19, machine A)
 
 Executable: 15,452,160 B (14.74 MB), +39 KB; 276,480 B (270 KB) left up to the 15 MB budget. Looking up a definition (`cargo bench -p bracket-index --bench fuzzy`, `fuzzy_symbols/definitions`: `Compute3` among the 210,000 symbols of `target/project-cs`, with 8,000 matches and 200 results) takes 2.2 ms.
+
+## Phase 3, step 11 — path at the caret (2026-10-19, machine A)
+
+With a generated 5.0 MiB XML (64,344 sibling `Line` elements), on the path thread: first time (full parse) 945 ms; moving the caret (no parse; counting the siblings of the same name) 41 ms; inserting an element in the middle (incremental parse) 153 ms. Executable: 15,500,288 B (14.78 MB), +48 KB; 228,352 B (223 KB) left up to the 15 MB budget.

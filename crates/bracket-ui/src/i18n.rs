@@ -93,6 +93,14 @@ impl Texts {
         self.get("read_only")
     }
 
+    pub fn caret_path_tooltip(&self) -> &str {
+        self.get("caret_path_tooltip")
+    }
+
+    pub fn caret_path_copied(&self) -> &str {
+        self.get("caret_path_copied")
+    }
+
     pub fn drop_hint(&self) -> &str {
         self.get("drop_hint")
     }
@@ -891,6 +899,8 @@ mod tests {
                 ("loading", t.loading().to_owned()),
                 ("read_only", t.read_only().to_owned()),
                 ("drop_hint", t.drop_hint().to_owned()),
+                ("caret_path_tooltip", t.caret_path_tooltip().to_owned()),
+                ("caret_path_copied", t.caret_path_copied().to_owned()),
                 ("position", t.position(1, 2)),
                 ("selections", t.selections(3)),
                 ("selected_chars", t.selected_chars(12)),

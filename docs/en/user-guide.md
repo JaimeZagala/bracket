@@ -199,6 +199,7 @@ From left to right:
 
 - **Messages:** the result of the last action (saved, reloaded...), configuration or language package warnings, or a hint for opening files.
 - **Position:** `Ln 12, Col 5` (the column counts tabs up to their stop). With selected text it adds how many characters (`(25 selected)`), and with several selections it shows how many (`3 selections`).
+- **Path:** in XML and XSIG, the XPath of the element at the caret (`/Invoice/Lines/Line[3]/Amount`, with the position among siblings of the same name when there are several, and `/@id` inside an attribute); in JSON, the path of the value (`$.items[2].name`, or `$['other key']` if the key is not an identifier). It appears on the left a moment after the caret moves; a click copies it to the clipboard. Documents over 10 MB do not have it.
 - **Line ending** and **encoding:** see below. "Read-only" appears next to the encoding when the file cannot be saved without altering its bytes.
 - **Document language:** the one detected from the extension. Click it to pick another one for this tab, or "Plain Text"; the session remembers the choice. Saving under another name detects it from the extension again.
 - **Interface language.**

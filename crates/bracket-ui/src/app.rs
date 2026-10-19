@@ -28,6 +28,7 @@ use bracket_syntax::highlight::{self, MAX_HIGHLIGHT_BYTES};
 use bracket_syntax::{LanguageRegistry, PackageWarning};
 use eframe::egui::{self, Id, ViewportCommand};
 
+use crate::caret_path::CaretPath;
 use crate::commands::{self, Command, Menu};
 use crate::dialogs;
 use crate::disk::{self, DiskNotice, DiskState, DiskWatch, NoticeAction};
@@ -67,6 +68,8 @@ enum StatusAction {
     ConvertLineEndings(LineEnding),
     ReopenWith(TextEncoding),
     SaveWith(TextEncoding),
+    /// The caret path was clicked: to the clipboard.
+    CopyPath(String),
 }
 
 /// Something picked in a menu that is not a plain command.
@@ -205,6 +208,8 @@ pub struct BracketApp {
     sidebar_mode: SidebarMode,
     /// The active document's outline, in the side panel.
     outline: Outline,
+    /// The path to the caret in XML and JSON, for the status bar.
+    caret_path: CaretPath,
     /// The `symbols.toml` rules of language packages, by language id.
     symbol_rules: HashMap<String, Arc<RuleSet>>,
     /// "Replace all" in the folder, waiting for the user to confirm it.
@@ -367,6 +372,7 @@ impl BracketApp {
             search: SearchPanel::default(),
             sidebar_mode: SidebarMode::Tree,
             outline: Outline::default(),
+            caret_path: CaretPath::default(),
             symbol_rules,
             pending_folder_replace: None,
             folder_replace: None,
@@ -1861,9 +1867,22 @@ impl BracketApp {
                     let (family, used) = self.missing_font.as_ref()?;
                     Some(self.texts.font_missing(family, used))
                 });
-                ui.with_layout(
-                    egui::Layout::left_to_right(egui::Align::Center),
-                    |ui| match self.status.as_ref().or(notice.as_ref()) {
+                let caret_path = self.caret_path.path(tab.id);
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    if let Some(path) = caret_path {
+                        let label = egui::Label::new(egui::RichText::new(path).monospace())
+                            .sense(egui::Sense::click())
+                            .truncate();
+                        if ui
+                            .add(label)
+                            .on_hover_text(self.texts.caret_path_tooltip())
+                            .clicked()
+                        {
+                            picked = Some(StatusAction::CopyPath(path.to_owned()));
+                        }
+                        ui.separator();
+                    }
+                    match self.status.as_ref().or(notice.as_ref()) {
                         Some(message) => {
                             ui.add(egui::Label::new(message.as_str()).truncate());
                         }
@@ -1876,14 +1895,19 @@ impl BracketApp {
                             );
                         }
                         None => {}
-                    },
-                );
+                    }
+                });
             });
         });
         picked
     }
 
     fn run_status_action(&mut self, ctx: &egui::Context, action: StatusAction) {
+        if let StatusAction::CopyPath(path) = action {
+            ctx.copy_text(path);
+            self.status = Some(self.texts.caret_path_copied().to_owned());
+            return;
+        }
         let index = self.active;
         if let StatusAction::DocumentLanguage(id) = action {
             let tab = &mut self.tabs[index];
@@ -1896,7 +1920,7 @@ impl BracketApp {
         let doc = &mut self.tabs[index].doc;
         match action {
             StatusAction::InterfaceLanguage(language) => self.set_language(ctx, language),
-            StatusAction::DocumentLanguage(_) => {} // handled above
+            StatusAction::DocumentLanguage(_) | StatusAction::CopyPath(_) => {} // handled above
             StatusAction::ConvertLineEndings(line_ending) => {
                 if !doc.is_read_only() {
                     doc.convert_line_endings(line_ending);
@@ -2549,6 +2573,11 @@ impl eframe::App for BracketApp {
         }
         if local_definition {
             self.local_definition(ctx);
+        }
+        let tab = &self.tabs[self.active];
+        if tab.loading.is_none() {
+            self.caret_path
+                .update(ctx, tab.id, &tab.doc, tab.language.as_deref());
         }
         if let Some(tree) = &mut self.tree
             && let Some(bad) = tree.poll()
