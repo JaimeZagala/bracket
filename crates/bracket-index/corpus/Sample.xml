@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Synthetic XML for the symbol tests. -->
+<Invoice id="INV-1" version="2">
+  <Header>
+    <Number>1</Number>
+    <Customer name="Demo" />
+  </Header>
+  <Lines>
+    <Line id="1"><Sku>A-1</Sku></Line>
+    <Line ID="2" />
+    <Line><Sku>C-3</Sku></Line>
+  </Lines>
+</Invoice>

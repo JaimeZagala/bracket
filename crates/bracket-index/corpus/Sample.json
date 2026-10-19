@@ -1,0 +1,14 @@
+{
+  "name": "demo",
+  "version": "1.0.0",
+  "settings": {
+    "theme": "dark",
+    "font": { "family": "Consolas", "size": 14 }
+  },
+  "items": [
+    { "id": 1, "tags": ["a", "b"] },
+    { "id": 2 },
+    [3, 4]
+  ],
+  "ñandú": true
+}

@@ -8,6 +8,7 @@
 //! chars, the editor's unit, before they leave this module. Nesting comes from the ranges:
 //! a symbol inside another one's range is its child.
 
+use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::OnceLock;
 
@@ -53,6 +54,7 @@ impl SymbolKind {
     pub fn from_capture(capture: &str) -> Option<Self> {
         let kind = capture.strip_prefix("definition.")?;
         let kind = kind.strip_suffix("_to_end").unwrap_or(kind);
+        let kind = kind.strip_suffix("_index").unwrap_or(kind);
         Some(match kind {
             "namespace" => Self::Namespace,
             "class" => Self::Class,
@@ -131,19 +133,19 @@ static GRAMMARS: [Grammar; 4] = [
     Grammar {
         id: "css",
         language: || tree_sitter_css::LANGUAGE.into(),
-        query: "",
+        query: include_str!("../queries/css.scm"),
         compiled: OnceLock::new(),
     },
     Grammar {
         id: "json",
         language: || tree_sitter_json::LANGUAGE.into(),
-        query: "",
+        query: include_str!("../queries/json.scm"),
         compiled: OnceLock::new(),
     },
     Grammar {
         id: "xml",
         language: || tree_sitter_xml::LANGUAGE_XML.into(),
-        query: "",
+        query: include_str!("../queries/xml.scm"),
         compiled: OnceLock::new(),
     },
 ];
@@ -164,7 +166,38 @@ pub fn extract(language: &str, text: &str) -> Option<Vec<Symbol>> {
     Some(run_query(&(grammar.language)(), grammar.query()?, text))
 }
 
+/// A declaration found by a query, in bytes, with its name already worked out.
+#[derive(Debug, PartialEq, Eq)]
+struct Found {
+    kind: SymbolKind,
+    range: Range<usize>,
+    name_range: Range<usize>,
+    name: String,
+}
+
+/// How a `@definition.<kind>` capture reads its name and range.
+struct Capture {
+    kind: SymbolKind,
+    /// `_to_end`: the declaration runs to the end of the document.
+    to_end: bool,
+    /// `_index`: named after its position in its parent, like `[2]` in a JSON array.
+    index: bool,
+}
+
+fn parse_capture(name: &str) -> Option<Capture> {
+    let kind = SymbolKind::from_capture(name)?;
+    Some(Capture {
+        kind,
+        to_end: name.ends_with("_to_end"),
+        index: name.ends_with("_index"),
+    })
+}
+
 /// Parses `text` and runs `query` over it.
+///
+/// Besides `@definition.<kind>` and `@name`, a query may capture `@detail`: text added to the
+/// name (an XML element's `id="…"`). Without `@name`, the name is the declaration's first line
+/// up to `{` (a CSS `@media (…)` rule).
 fn run_query(language: &Language, query: &Query, text: &str) -> Vec<Symbol> {
     let mut parser = Parser::new();
     if parser.set_language(language).is_err() {
@@ -175,74 +208,131 @@ fn run_query(language: &Language, query: &Query, text: &str) -> Vec<Symbol> {
     };
     let names = query.capture_names();
     let name_index = names.iter().position(|n| *n == "name");
-    // Byte ranges first; chars once all positions are known.
-    let mut found: Vec<(SymbolKind, Range<usize>, Range<usize>)> = Vec::new();
+    let detail_index = names.iter().position(|n| *n == "detail");
+    // The position of each child in its parent, worked out once per parent.
+    let mut positions: HashMap<usize, HashMap<usize, usize>> = HashMap::new();
+    let mut found: Vec<Found> = Vec::new();
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(query, tree.root_node(), text.as_bytes());
     while let Some(m) = matches.next() {
         let mut definition = None;
         let mut name = None;
+        let mut detail = None;
         for capture in m.captures() {
-            let index = capture.index as usize;
-            if Some(index) == name_index {
+            let index = Some(capture.index as usize);
+            if index == name_index {
                 name = Some(capture.node.byte_range());
-            } else if let Some(capture_name) = names.get(index)
-                && let Some(kind) = SymbolKind::from_capture(capture_name)
+            } else if index == detail_index {
+                detail = Some(capture.node.byte_range());
+            } else if let Some(parsed) = names
+                .get(capture.index as usize)
+                .and_then(|n| parse_capture(n))
             {
-                let mut range = capture.node.byte_range();
-                if capture_name.ends_with("_to_end") {
-                    range.end = text.len();
-                }
-                definition = Some((kind, range));
+                definition = Some((parsed, capture.node));
             }
         }
-        if let Some((kind, range)) = definition {
-            let name = name.unwrap_or(range.clone());
-            found.push((kind, range, name));
-            if found.len() == MAX_SYMBOLS {
-                break;
+        let Some((capture, node)) = definition else {
+            continue;
+        };
+        let mut range = node.byte_range();
+        if capture.to_end {
+            range.end = text.len();
+        }
+        let (name_range, name) = if capture.index {
+            let position = node.parent().map_or(0, |parent| {
+                let children = positions.entry(parent.id()).or_insert_with(|| {
+                    let mut walk = parent.walk();
+                    parent
+                        .named_children(&mut walk)
+                        .enumerate()
+                        .map(|(i, child)| (child.id(), i))
+                        .collect()
+                });
+                children.get(&node.id()).copied().unwrap_or(0)
+            });
+            (range.start..range.start, format!("[{position}]"))
+        } else if let Some(name) = name {
+            let mut label = tidy_name(text.get(name.clone()).unwrap_or_default());
+            if let Some(detail) = detail {
+                label.push(' ');
+                label.push_str(&tidy_name(text.get(detail).unwrap_or_default()));
             }
+            (name, label)
+        } else {
+            let declaration = text.get(range.clone()).unwrap_or_default();
+            let header = declaration
+                .split(['{', '\n'])
+                .next()
+                .unwrap_or_default()
+                .trim_end();
+            (range.start..range.start + header.len(), tidy_name(header))
+        };
+        found.push(Found {
+            kind: capture.kind,
+            range,
+            name_range,
+            name,
+        });
+        if found.len() == MAX_SYMBOLS {
+            break;
         }
     }
     symbols(text, found)
 }
 
-/// Builds the symbols from byte ranges: names, char positions and nesting.
-fn symbols(text: &str, mut found: Vec<(SymbolKind, Range<usize>, Range<usize>)>) -> Vec<Symbol> {
-    // Outer declarations before the ones they contain; the same declaration once.
-    found.sort_by(|a, b| a.1.start.cmp(&b.1.start).then(b.1.end.cmp(&a.1.end)));
-    // "int a, b;" is one declaration with two names: two symbols.
-    found.dedup_by(|a, b| a == b);
+/// Builds the symbols from what the query found: char positions and nesting.
+fn symbols(text: &str, mut found: Vec<Found>) -> Vec<Symbol> {
+    // Outer declarations before the ones they contain.
+    found.sort_by(|a, b| {
+        a.range
+            .start
+            .cmp(&b.range.start)
+            .then(b.range.end.cmp(&a.range.end))
+    });
+    // The same declaration once ("int a, b;" has two names, so two symbols). When several
+    // patterns matched it, the longest name wins: it has the detail.
+    found.dedup_by(|later, kept| {
+        let same = later.kind == kept.kind
+            && later.range == kept.range
+            && later.name_range == kept.name_range;
+        if same && later.name.len() > kept.name.len() {
+            std::mem::swap(&mut later.name, &mut kept.name);
+        }
+        same
+    });
     let chars = CharPositions::new(
         text,
-        found
-            .iter()
-            .flat_map(|(_, r, n)| [r.start, r.end, n.start, n.end]),
+        found.iter().flat_map(|f| {
+            [
+                f.range.start,
+                f.range.end,
+                f.name_range.start,
+                f.name_range.end,
+            ]
+        }),
     );
     let mut symbols: Vec<Symbol> = Vec::with_capacity(found.len());
     // The open declarations that may contain the next one, with their byte range. One with the
     // same range is a sibling ("int a, b;"), not a parent.
     let mut open: Vec<(usize, Range<usize>)> = Vec::new();
-    for (kind, range, name) in found {
+    for f in found {
         while open
             .last()
-            .is_some_and(|(_, last)| range.start >= last.end || *last == range)
+            .is_some_and(|(_, last)| f.range.start >= last.end || *last == f.range)
         {
             open.pop();
         }
         let parent = open.last().map(|(index, _)| *index);
         let depth = parent.map_or(0, |p| symbols[p].depth + 1);
-        let name_text = text.get(name.clone()).unwrap_or_default();
-        let byte_range = range.clone();
         symbols.push(Symbol {
-            name: tidy_name(name_text),
-            kind,
-            range: chars.of(range.start)..chars.of(range.end),
-            name_range: chars.of(name.start)..chars.of(name.end),
+            name: f.name,
+            kind: f.kind,
+            range: chars.of(f.range.start)..chars.of(f.range.end),
+            name_range: chars.of(f.name_range.start)..chars.of(f.name_range.end),
             parent,
             depth,
         });
-        open.push((symbols.len() - 1, byte_range));
+        open.push((symbols.len() - 1, f.range));
     }
     symbols
 }
@@ -401,6 +491,88 @@ mod tests {
 ";
         let text = include_str!("../corpus/Sample.cs");
         assert_eq!(outline("csharp", text), expected);
+    }
+
+    #[test]
+    fn css_rules_at_rules_and_variables() {
+        let expected = "\
+:root Selector
+  --accent Variable
+  --gap Variable
+body, html Selector
+.card > .title:hover Selector
+@media (max-width: 600px) AtRule
+  .card Selector
+  @supports (display: grid) AtRule
+    .grid Selector
+fade-in Keyframes
+@font-face AtRule
+";
+        assert_eq!(
+            outline("css", include_str!("../corpus/Sample.css")),
+            expected
+        );
+    }
+
+    #[test]
+    fn json_keys_and_array_items() {
+        let expected = "\
+name Key
+version Key
+settings Key
+  theme Key
+  font Key
+    family Key
+    size Key
+items Key
+  [0] Key
+    id Key
+    tags Key
+  [1] Key
+    id Key
+  [2] Key
+ñandú Key
+";
+        assert_eq!(
+            outline("json", include_str!("../corpus/Sample.json")),
+            expected
+        );
+    }
+
+    #[test]
+    fn xml_elements_with_their_id_or_name() {
+        let expected = "\
+Invoice id=\"INV-1\" Element
+  Header Element
+    Number Element
+    Customer name=\"Demo\" Element
+  Lines Element
+    Line id=\"1\" Element
+      Sku Element
+    Line ID=\"2\" Element
+    Line Element
+      Sku Element
+";
+        assert_eq!(
+            outline("xml", include_str!("../corpus/Sample.xml")),
+            expected
+        );
+        // The name range is the tag's, for go to definition.
+        let text = "<a id=\"x\"/>";
+        let symbols = extract("xml", text).unwrap();
+        assert_eq!(symbols[0].name_range, 1..2);
+    }
+
+    #[test]
+    fn huge_documents_stop_at_the_limit() {
+        let text = format!(
+            "{{{}}}",
+            (0..MAX_SYMBOLS + 10)
+                .map(|i| format!("\"k{i}\":1"))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        assert_eq!(extract("json", &text).unwrap().len(), MAX_SYMBOLS);
     }
 
     #[test]
