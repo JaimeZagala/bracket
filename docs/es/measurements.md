@@ -315,3 +315,13 @@ Programa mínimo con el perfil release del workspace (`lto = "fat"`, `codegen-un
 El tamaño de la gramática de C# es casi todo datos: `ts_parse_table` es una tabla densa de 4.096 estados × 530 símbolos × 2 bytes (4,3 MB) en `parser.c` (29,7 MB de código fuente generado). Ninguna opción del compilador la reduce; habría que regenerar la gramática. Se mantiene la optimización por defecto.
 
 Velocidad de análisis de C# (un fichero sintético de 1,5 MB, 4.000 clases): 287 ms, 5,3 MB/s, 508.008 nodos; igual con `opt-level = "s"` o `"z"`.
+
+## Fase 3, paso 2 — símbolos de C# (2026-10-19, equipo A)
+
+`cargo bench -p bracket-index --bench symbols`: un fichero C# sintético de 1,47 MB (4.000 clases con campo, propiedad y métodos; 20.001 símbolos).
+
+| Benchmark | Tiempo (mediana) | Velocidad |
+|---|---|---|
+| `symbols/csharp_1_5mb`: analizar y extraer los símbolos | 414 ms | 3,4 MiB/s |
+
+Desglose medido en release: análisis de tree-sitter 297 ms, consulta 96 ms, construcción de los símbolos (nombres, posiciones en caracteres y anidamiento) 4 ms. Una primera ejecución dio 1,38 s con el equipo cargado (la referencia `walk/index_50k_files` también iba más lenta: 139 ms frente a 121); repetida, 414 ms. El índice del proyecto (paso 7) analizará los ficheros en paralelo y el esquema (paso 5) de forma incremental.

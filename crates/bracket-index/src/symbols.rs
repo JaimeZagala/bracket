@@ -3,7 +3,8 @@
 //! C#, CSS, JSON and XML are parsed with tree-sitter and their symbols come from a query per
 //! language (`decisions/0003-symbols.md`). A query marks each declaration with a capture named
 //! `@definition.<kind>` (`@definition.class`, `@definition.key`…) and its name with `@name`,
-//! like tree-sitter's own tag queries. tree-sitter works in bytes; positions are turned into
+//! like tree-sitter's own tag queries; a kind ending in `_to_end` extends the declaration to the
+//! end of the document (a C# file-scoped namespace). The queries are in `queries/`. tree-sitter works in bytes; positions are turned into
 //! chars, the editor's unit, before they leave this module. Nesting comes from the ranges:
 //! a symbol inside another one's range is its child.
 
@@ -51,6 +52,7 @@ impl SymbolKind {
     /// The kind a query capture names: `definition.class` → `Class`.
     pub fn from_capture(capture: &str) -> Option<Self> {
         let kind = capture.strip_prefix("definition.")?;
+        let kind = kind.strip_suffix("_to_end").unwrap_or(kind);
         Some(match kind {
             "namespace" => Self::Namespace,
             "class" => Self::Class,
@@ -123,7 +125,7 @@ static GRAMMARS: [Grammar; 4] = [
     Grammar {
         id: "csharp",
         language: || tree_sitter_c_sharp::LANGUAGE.into(),
-        query: "",
+        query: include_str!("../queries/csharp.scm"),
         compiled: OnceLock::new(),
     },
     Grammar {
@@ -184,8 +186,14 @@ fn run_query(language: &Language, query: &Query, text: &str) -> Vec<Symbol> {
             let index = capture.index as usize;
             if Some(index) == name_index {
                 name = Some(capture.node.byte_range());
-            } else if let Some(kind) = names.get(index).and_then(|n| SymbolKind::from_capture(n)) {
-                definition = Some((kind, capture.node.byte_range()));
+            } else if let Some(capture_name) = names.get(index)
+                && let Some(kind) = SymbolKind::from_capture(capture_name)
+            {
+                let mut range = capture.node.byte_range();
+                if capture_name.ends_with("_to_end") {
+                    range.end = text.len();
+                }
+                definition = Some((kind, range));
             }
         }
         if let Some((kind, range)) = definition {
@@ -203,7 +211,8 @@ fn run_query(language: &Language, query: &Query, text: &str) -> Vec<Symbol> {
 fn symbols(text: &str, mut found: Vec<(SymbolKind, Range<usize>, Range<usize>)>) -> Vec<Symbol> {
     // Outer declarations before the ones they contain; the same declaration once.
     found.sort_by(|a, b| a.1.start.cmp(&b.1.start).then(b.1.end.cmp(&a.1.end)));
-    found.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);
+    // "int a, b;" is one declaration with two names: two symbols.
+    found.dedup_by(|a, b| a == b);
     let chars = CharPositions::new(
         text,
         found
@@ -211,16 +220,20 @@ fn symbols(text: &str, mut found: Vec<(SymbolKind, Range<usize>, Range<usize>)>)
             .flat_map(|(_, r, n)| [r.start, r.end, n.start, n.end]),
     );
     let mut symbols: Vec<Symbol> = Vec::with_capacity(found.len());
-    // The open declarations that may contain the next one, with their end in bytes.
-    let mut open: Vec<(usize, usize)> = Vec::new();
+    // The open declarations that may contain the next one, with their byte range. One with the
+    // same range is a sibling ("int a, b;"), not a parent.
+    let mut open: Vec<(usize, Range<usize>)> = Vec::new();
     for (kind, range, name) in found {
-        while open.last().is_some_and(|&(_, end)| range.start >= end) {
+        while open
+            .last()
+            .is_some_and(|(_, last)| range.start >= last.end || *last == range)
+        {
             open.pop();
         }
-        let parent = open.last().map(|&(index, _)| index);
+        let parent = open.last().map(|(index, _)| *index);
         let depth = parent.map_or(0, |p| symbols[p].depth + 1);
         let name_text = text.get(name.clone()).unwrap_or_default();
-        let end = range.end;
+        let byte_range = range.clone();
         symbols.push(Symbol {
             name: tidy_name(name_text),
             kind,
@@ -229,7 +242,7 @@ fn symbols(text: &str, mut found: Vec<(SymbolKind, Range<usize>, Range<usize>)>)
             parent,
             depth,
         });
-        open.push((symbols.len() - 1, end));
+        open.push((symbols.len() - 1, byte_range));
     }
     symbols
 }
@@ -336,6 +349,95 @@ mod tests {
         assert!(has_symbols("csharp") && !has_symbols("rust"));
     }
 
+    /// The outline as text: one line per symbol, indented by depth.
+    fn outline(language: &str, text: &str) -> String {
+        extract(language, text)
+            .unwrap()
+            .iter()
+            .map(|s| {
+                format!(
+                    "{}{} {:?}
+",
+                    "  ".repeat(s.depth),
+                    s.name,
+                    s.kind
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn csharp_declarations_are_found_and_nested() {
+        let expected = "Demo.Billing Namespace
+  InvoiceChanged Delegate
+  Invoice Class
+    _lines Field
+    _removed Field
+    Count Field
+    Changed Event
+    Saved Event
+    Invoice Constructor
+    Number Property
+    Total Property
+    this Indexer
+    CompareTo Method
+    Describe Method
+    Dump Method
+    Line Class
+      Sku Property
+      Quantity Property
+  Customer Record
+  Money Record
+  Point Struct
+    X Property
+    Y Property
+  IInvoiceStore Interface
+    Find Method
+    Count Property
+  Status Enum
+    Draft EnumMember
+    Sent EnumMember
+    Paid EnumMember
+";
+        let text = include_str!("../corpus/Sample.cs");
+        assert_eq!(outline("csharp", text), expected);
+    }
+
+    #[test]
+    fn a_file_scoped_namespace_holds_the_rest_of_the_file() {
+        let text = "namespace A;
+class B { }
+";
+        let symbols = extract("csharp", text).unwrap();
+        assert_eq!(symbols[0].range, 0..text.chars().count());
+        assert_eq!(symbols[1].parent, Some(0));
+        // A block namespace ends at its closing brace.
+        let text = "namespace A { class B { } }
+class C { }";
+        let symbols = extract("csharp", text).unwrap();
+        let c = symbols.iter().find(|s| s.name == "C").unwrap();
+        assert_eq!(c.parent, None);
+    }
+
+    #[test]
+    fn csharp_being_typed_keeps_its_symbols() {
+        // A statement being typed inside a method: the members around it are still found.
+        let text = "class A {
+  int x;
+  void M() {
+    var y = 
+  }
+  string Name { get; }
+}";
+        let names: Vec<String> = extract("csharp", text)
+            .unwrap()
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        assert!(names.contains(&"A".to_owned()) && names.contains(&"x".to_owned()));
+        assert!(names.contains(&"Name".to_owned()), "{names:?}");
+    }
+
     #[test]
     fn kinds_come_from_capture_names() {
         assert_eq!(
@@ -345,6 +447,10 @@ mod tests {
         assert_eq!(
             SymbolKind::from_capture("definition.enum_member"),
             Some(SymbolKind::EnumMember)
+        );
+        assert_eq!(
+            SymbolKind::from_capture("definition.namespace_to_end"),
+            Some(SymbolKind::Namespace)
         );
         assert_eq!(SymbolKind::from_capture("name"), None);
         assert_eq!(SymbolKind::from_capture("definition.unknown"), None);

@@ -315,3 +315,13 @@ A minimal program with the workspace's release profile (`lto = "fat"`, `codegen-
 The C# grammar's size is almost all data: `ts_parse_table` is a dense table of 4,096 states × 530 symbols × 2 bytes (4.3 MB) in `parser.c` (29.7 MB of generated source). No compiler option reduces it; the grammar would have to be regenerated. The default optimization stays.
 
 C# parsing speed (a synthetic 1.5 MB file, 4,000 classes): 287 ms, 5.3 MB/s, 508,008 nodes; the same with `opt-level = "s"` or `"z"`.
+
+## Phase 3, step 2 — C# symbols (2026-10-19, machine A)
+
+`cargo bench -p bracket-index --bench symbols`: a synthetic C# file of 1.47 MB (4,000 classes with a field, a property and methods; 20,001 symbols).
+
+| Benchmark | Time (median) | Speed |
+|---|---|---|
+| `symbols/csharp_1_5mb`: parsing and extracting the symbols | 414 ms | 3.4 MiB/s |
+
+Breakdown measured in release: tree-sitter parsing 297 ms, query 96 ms, building the symbols (names, char positions and nesting) 4 ms. A first run gave 1.38 s with the machine busy (the `walk/index_50k_files` reference was slower too: 139 ms against 121); repeated, 414 ms. The project index (step 7) will parse files in parallel and the outline (step 5) incrementally.

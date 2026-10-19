@@ -28,5 +28,9 @@ harness = false
 name = "fuzzy"
 harness = false
 
+[[bench]]
+name = "symbols"
+harness = false
+
 [lints]
 workspace = true
