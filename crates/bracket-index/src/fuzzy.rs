@@ -62,17 +62,17 @@ fn lower(c: char) -> char {
     c.to_lowercase().next().unwrap_or(c)
 }
 
-/// The best `limit` matches, best first. Ties go to the shorter path, then alphabetical order.
-pub fn search(candidates: &[String], query: &Query, limit: usize) -> Vec<Match> {
+/// The best `limit` matches, best first. Ties go to the shorter candidate, then alphabetical
+/// order, then the earlier one in the list.
+pub fn search<S: AsRef<str> + Sync>(candidates: &[S], query: &Query, limit: usize) -> Vec<Match> {
     if query.is_empty() {
         return Vec::new();
     }
+    let text = |index: usize| candidates[index].as_ref();
     let score_range = |range: std::ops::Range<usize>| -> Vec<(i32, usize)> {
-        candidates[range.clone()]
-            .iter()
-            .zip(range)
-            .filter(|(candidate, _)| is_subsequence(candidate, &query.chars))
-            .filter_map(|(candidate, index)| score(candidate, query).map(|s| (s, index)))
+        range
+            .filter(|&index| is_subsequence(text(index), &query.chars))
+            .filter_map(|index| score(text(index), query).map(|s| (s, index)))
             .collect()
     };
     // Large lists are scored on several threads, in equal slices.
@@ -100,8 +100,9 @@ pub fn search(candidates: &[String], query: &Query, limit: usize) -> Vec<Match> 
     };
     let order = |a: &(i32, usize), b: &(i32, usize)| {
         b.0.cmp(&a.0)
-            .then_with(|| candidates[a.1].len().cmp(&candidates[b.1].len()))
-            .then_with(|| candidates[a.1].cmp(&candidates[b.1]))
+            .then_with(|| text(a.1).len().cmp(&text(b.1).len()))
+            .then_with(|| text(a.1).cmp(text(b.1)))
+            .then_with(|| a.1.cmp(&b.1))
     };
     if scored.len() > limit && limit > 0 {
         scored.select_nth_unstable_by(limit - 1, order);
@@ -113,7 +114,7 @@ pub fn search(candidates: &[String], query: &Query, limit: usize) -> Vec<Match> 
         .map(|(score, index)| Match {
             index,
             score,
-            positions: positions(&candidates[index], query).unwrap_or_default(),
+            positions: positions(text(index), query).unwrap_or_default(),
         })
         .collect()
 }

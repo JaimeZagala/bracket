@@ -44,6 +44,7 @@ Con un proyecto abierto, el **panel del proyecto** muestra a la izquierda el ár
 - **Ctrl+Mayús+P** o **F1** (o **Ver → Paleta de comandos…**) abre el mismo cuadro con `>` delante: lista los comandos disponibles, como «Archivo: Guardar», con su atajo a la derecha, y se filtran escribiendo como en Ctrl+P. Al pasar el ratón por un comando se ve su identificador (por ejemplo `file.save`).
 - **Ctrl+G** (o **Ir → Ir a línea…**) abre el cuadro con `:` delante: escribe la línea, o `línea:columna`, e Intro. También funciona escribir `:` en Ctrl+P.
 - **Ctrl+Mayús+O** (o **Ir → Ir a símbolo en el fichero…**) abre el cuadro con `@` delante: lista los símbolos del documento activo (los mismos del esquema) en orden, con su tipo, el símbolo donde están declarados y su línea. Escribir filtra por nombre como en Ctrl+P; Intro selecciona el nombre del símbolo en el editor.
+- **Ctrl+T** (o **Ir → Ir a símbolo del proyecto…**) abre el cuadro con `#` delante: busca por nombre, como Ctrl+P, entre los símbolos de todos los ficheros del proyecto. Cada resultado muestra su tipo, el símbolo donde está declarado y, a la derecha, su fichero y línea (la ruta completa al pasar el ratón); Intro abre el fichero con el cursor en el símbolo. Necesita una carpeta abierta, y mientras se preparan los símbolos lo indica.
 - Los menús muestran los mismos comandos y atajos; los que no se pueden usar en ese momento (por ejemplo, Cerrar carpeta sin proyecto) salen desactivados.
 
 ### Buscar en el fichero (Ctrl+F)

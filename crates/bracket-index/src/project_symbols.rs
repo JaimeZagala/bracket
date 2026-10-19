@@ -19,6 +19,7 @@ use bracket_core::document::DiskStamp;
 use bracket_core::encoding;
 
 use crate::Cancelled;
+use crate::fuzzy::{self, Query};
 use crate::rules::RuleSet;
 use crate::symbols::{Symbol, SymbolKind, SymbolParser};
 
@@ -137,6 +138,35 @@ impl FileSymbols {
     }
 }
 
+/// A project symbol found by a search.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FoundSymbol {
+    pub name: String,
+    pub kind: SymbolKind,
+    /// The name of the symbol it is declared in, if any.
+    pub container: Option<String>,
+    /// Its file, relative to the project.
+    pub relative: String,
+    /// Where its name starts: line and column in chars, 0-based.
+    pub line: u32,
+    pub column: u32,
+    /// The matched characters of the name (char indices).
+    pub positions: Vec<usize>,
+}
+
+/// A symbol as the fuzzy search sees it: its name, and where to find it again.
+struct Candidate<'a> {
+    name: &'a str,
+    file: u32,
+    symbol: u32,
+}
+
+impl AsRef<str> for Candidate<'_> {
+    fn as_ref(&self) -> &str {
+        self.name
+    }
+}
+
 /// The symbols of a project's files.
 pub struct ProjectSymbols {
     root: PathBuf,
@@ -193,6 +223,51 @@ impl ProjectSymbols {
                 .iter()
                 .map(|(path, file)| path.len() + file.heap_bytes())
                 .sum::<usize>()
+    }
+
+    /// The best `limit` symbols whose names match `query` fuzzily (as Ctrl+P matches paths),
+    /// best first; among equals, in the order of the files and of the symbols in them. The list
+    /// of names is gathered for each query: it costs a few milliseconds and no memory between
+    /// queries.
+    pub fn search(&self, query: &str, limit: usize) -> Vec<FoundSymbol> {
+        let query = Query::new(query);
+        if query.is_empty() {
+            return Vec::new();
+        }
+        let mut files = Vec::new();
+        let mut candidates = Vec::with_capacity(self.symbol_count);
+        for path in self.files.iter() {
+            let Some(file) = self.by_file.get(path.as_str()) else {
+                continue;
+            };
+            if file.symbols().is_empty() {
+                continue;
+            }
+            let number = files.len() as u32;
+            files.push((path, file));
+            candidates.extend(file.symbols().iter().enumerate().map(|(i, s)| Candidate {
+                name: file.name(s),
+                file: number,
+                symbol: i as u32,
+            }));
+        }
+        fuzzy::search(&candidates, &query, limit)
+            .into_iter()
+            .map(|m| {
+                let candidate = &candidates[m.index];
+                let (path, file) = files[candidate.file as usize];
+                let symbol = &file.symbols()[candidate.symbol as usize];
+                FoundSymbol {
+                    name: candidate.name.to_owned(),
+                    kind: symbol.kind,
+                    container: file.parent(symbol).map(|p| file.name(p).to_owned()),
+                    relative: path.clone(),
+                    line: symbol.line,
+                    column: symbol.column,
+                    positions: m.positions,
+                }
+            })
+            .collect()
     }
 
     /// Brings every file in line with `files`, the whole project as the file index lists it:
@@ -649,6 +724,35 @@ mod tests {
         assert!(matches!(read(job(None)), Outcome::Read(_)));
         fs::remove_file(root.join("A.cs")).unwrap();
         assert!(matches!(read(job(None)), Outcome::Gone));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn symbols_are_searched_across_files() {
+        let root = temp_dir("search");
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(
+            root.join(r"src\Invoice.cs"),
+            "class Invoice\n{\n  void ComputeTotal() { }\n}\n",
+        )
+        .unwrap();
+        fs::write(root.join(r"src\Order.cs"), "class Order { int Total; }").unwrap();
+        let mut symbols = ProjectSymbols::new(root.clone());
+        symbols
+            .sync(files(&root), &csharp, &CancelToken::new())
+            .unwrap();
+
+        let found = symbols.search("total", 10);
+        let names: Vec<&str> = found.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["Total", "ComputeTotal"], "the whole name first");
+        assert_eq!(found[0].relative, r"src\Order.cs");
+        assert_eq!(found[0].container.as_deref(), Some("Order"));
+        assert_eq!(found[0].kind, SymbolKind::Field);
+        let compute = &found[1];
+        assert_eq!((compute.line, compute.column), (2, 7));
+        assert_eq!(compute.positions, [7, 8, 9, 10, 11]);
+        assert!(symbols.search("", 10).is_empty());
+        assert_eq!(symbols.search("total", 1).len(), 1, "the limit holds");
         fs::remove_dir_all(&root).unwrap();
     }
 

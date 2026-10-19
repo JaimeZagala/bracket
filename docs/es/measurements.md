@@ -374,3 +374,17 @@ Medido por fases en un programa de prueba sobre `target/project-50k` (41.668 fic
 | Tamaño del ejecutable | 15.374.848 B | 15.382.016 B (14,67 MB) | 15.296.000 B |
 
 El índice de símbolos cuesta ahora unos 7 MB con 50.000 ficheros y 9 MB con 210.000 símbolos. El arranque no cambia (`compare-startup.ps1` sin proyecto, tres tandas: diferencias de −10 a +7 ms según el orden, ruido con el equipo cargado).
+
+## Fase 3, paso 8 — Ctrl+T (2026-10-19, equipo A)
+
+`cargo bench -p bracket-index --bench fuzzy`, grupo `fuzzy_symbols`: una consulta sobre los 210.000 símbolos de `target/project-cs`, con 200 resultados; incluye reunir los nombres, puntuarlos y construir los resultados, como cada pulsación. Presupuesto: 50 ms por pulsación.
+
+| Consulta | Tiempo |
+|---|---|
+| Una letra (`c`) | 16,8 ms |
+| Palabra (`compute`) | 12,9 ms |
+| Letras sueltas (`svc12x3`) | 2,4 ms |
+| Nombre exacto (`Service12x3`) | 2,4 ms |
+| Sin coincidencias (`zzz`) | 2,3 ms (reunir los nombres) |
+
+Ctrl+P no cambia con el emparejador genérico: 6,3 ms con una letra y 7,0 ms con una palabra sobre 50.000 ficheros. Ejecutable: 15.412.736 B (14,70 MB), +30 KB; quedan 315.904 B (308 KB) hasta el presupuesto de 15 MB.

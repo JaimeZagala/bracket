@@ -28,6 +28,7 @@ pub enum Command {
     QuickOpen,
     GoToLine,
     GoToSymbol,
+    GoToProjectSymbol,
     FocusTree,
     NextTab,
     PreviousTab,
@@ -56,7 +57,7 @@ const CTRL_SHIFT: Modifiers = Modifiers::COMMAND.plus(Modifiers::SHIFT);
 
 impl Command {
     /// In menu order.
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 24] = [
         Self::New,
         Self::Open,
         Self::OpenFolder,
@@ -77,6 +78,7 @@ impl Command {
         Self::QuickOpen,
         Self::GoToLine,
         Self::GoToSymbol,
+        Self::GoToProjectSymbol,
         Self::FocusTree,
         Self::NextTab,
         Self::PreviousTab,
@@ -105,6 +107,7 @@ impl Command {
             Self::QuickOpen => "go.file",
             Self::GoToLine => "go.line",
             Self::GoToSymbol => "go.symbol",
+            Self::GoToProjectSymbol => "go.projectSymbol",
             Self::FocusTree => "go.projectTree",
             Self::NextTab => "go.nextTab",
             Self::PreviousTab => "go.previousTab",
@@ -131,6 +134,7 @@ impl Command {
             Self::QuickOpen
             | Self::GoToLine
             | Self::GoToSymbol
+            | Self::GoToProjectSymbol
             | Self::FocusTree
             | Self::NextTab
             | Self::PreviousTab => Menu::Go,
@@ -159,6 +163,7 @@ impl Command {
             Self::QuickOpen => texts.menu_quick_open(),
             Self::GoToLine => texts.menu_go_to_line(),
             Self::GoToSymbol => texts.menu_go_to_symbol(),
+            Self::GoToProjectSymbol => texts.menu_go_to_project_symbol(),
             Self::FocusTree => texts.menu_focus_tree(),
             Self::NextTab => texts.menu_next_tab(),
             Self::PreviousTab => texts.menu_previous_tab(),
@@ -203,6 +208,7 @@ impl Command {
             Self::QuickOpen => keys!(CTRL, P),
             Self::GoToLine => keys!(CTRL, G),
             Self::GoToSymbol => keys!(CTRL_SHIFT, O),
+            Self::GoToProjectSymbol => keys!(CTRL, T),
             Self::FocusTree => keys!(CTRL_SHIFT, E),
             Self::NextTab => keys!(CTRL, Tab; CTRL, PageDown),
             Self::PreviousTab => keys!(CTRL_SHIFT, Tab; CTRL, PageUp),
@@ -216,9 +222,11 @@ impl Command {
 
     pub fn is_available(self, state: &State) -> bool {
         match self {
-            Self::CloseFolder | Self::FocusTree | Self::FindInFolder | Self::ReplaceInFolder => {
-                state.has_project
-            }
+            Self::CloseFolder
+            | Self::FocusTree
+            | Self::GoToProjectSymbol
+            | Self::FindInFolder
+            | Self::ReplaceInFolder => state.has_project,
             Self::Save
             | Self::SaveAs
             | Self::GoToLine
@@ -311,6 +319,7 @@ mod tests {
         for command in [
             Command::CloseFolder,
             Command::FocusTree,
+            Command::GoToProjectSymbol,
             Command::Save,
             Command::GoToLine,
             Command::GoToSymbol,

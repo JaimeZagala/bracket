@@ -12,6 +12,8 @@ use std::thread;
 
 use bracket_core::CancelToken;
 use bracket_index::fuzzy::{self, Query};
+use bracket_index::project_symbols::FoundSymbol;
+use bracket_index::symbols::SymbolKind;
 use bracket_index::{FileIndex, WalkOptions, walk};
 use bracket_session::ProjectChanges;
 use bracket_syntax::LanguageRegistry;
@@ -25,6 +27,7 @@ use crate::commands::Command;
 use crate::i18n::Texts;
 use crate::outline::{PaletteSymbol, SymbolList, kind_badge};
 use crate::symbol_index::FilesChanged;
+use crate::symbol_index::SymbolWorker;
 use crate::tabs;
 
 /// Results kept for one query.
@@ -254,6 +257,11 @@ pub enum PaletteAction {
     GoToLine(LinePosition),
     /// `@symbol`: select this range (a symbol's name) in the active document.
     GoTo(std::ops::Range<usize>),
+    /// `#symbol`: open a file with the caret at a symbol's name: line and column, 1-based.
+    GoToSymbol {
+        path: PathBuf,
+        position: (usize, usize),
+    },
     Run(Command),
     Close,
 }
@@ -273,6 +281,9 @@ pub struct QuickOpen {
     generation: u64,
     found: Vec<Found>,
     found_generation: u64,
+    /// The project's symbols for `#`, and the query they answer.
+    symbols_found: Vec<FoundSymbol>,
+    symbols_generation: u64,
     recent: Vec<PathBuf>,
     selected: usize,
     first_frame: bool,
@@ -287,6 +298,8 @@ impl QuickOpen {
             generation: 0,
             found: Vec::new(),
             found_generation: 0,
+            symbols_found: Vec::new(),
+            symbols_generation: 0,
             recent: recent.into_iter().filter(|p| p.is_file()).collect(),
             selected: 0,
             first_frame: true,
@@ -302,16 +315,36 @@ impl QuickOpen {
         }
     }
 
-    /// The query for the index, if the file part changed and is not empty.
-    fn query_changed(&mut self, index: Option<&IndexWorker>) {
+    /// Takes the results of a project symbol query; old ones are dropped.
+    pub fn symbol_results(&mut self, generation: u64, found: Vec<FoundSymbol>) {
+        if generation == self.generation {
+            self.symbols_found = found;
+            self.symbols_generation = generation;
+            self.selected = 0;
+        }
+    }
+
+    /// The query for the file or symbol index, if what it searches for changed and is not
+    /// empty.
+    fn query_changed(&mut self, index: Option<&IndexWorker>, symbol_index: Option<&SymbolWorker>) {
         self.generation += 1;
         self.selected = 0;
         let (file, _) = parse_query(&self.text);
-        if let Some(index) = index
-            && Mode::of(&self.text) == Mode::Files
-            && !file.is_empty()
-        {
-            index.query(file.to_owned(), self.generation);
+        match Mode::of(&self.text) {
+            Mode::Files if !file.is_empty() => {
+                if let Some(index) = index {
+                    index.query(file.to_owned(), self.generation);
+                }
+            }
+            Mode::ProjectSymbols => {
+                let name = self.text[1..].trim();
+                if let Some(symbol_index) = symbol_index
+                    && !name.is_empty()
+                {
+                    symbol_index.query(name.to_owned(), self.generation);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -358,6 +391,15 @@ impl QuickOpen {
         }
     }
 
+    /// The project symbols found for the current query; none while the box asks for nothing.
+    fn shown_symbols(&self) -> &[FoundSymbol] {
+        if self.text[1..].trim().is_empty() {
+            &[]
+        } else {
+            &self.symbols_found
+        }
+    }
+
     /// Whether the palette lists the active document's symbols (`@`), so they must be ready.
     pub fn wants_symbols(&self) -> bool {
         Mode::of(&self.text) == Mode::Symbols
@@ -373,6 +415,7 @@ impl QuickOpen {
         root: Option<&Path>,
         index: Option<&IndexWorker>,
         indexed: Option<usize>,
+        symbol_index: Option<&SymbolWorker>,
         symbols_indexed: Option<usize>,
         commands: &[PaletteCommand],
         lines: Option<usize>,
@@ -408,6 +451,7 @@ impl QuickOpen {
             Mode::Files => items.len(),
             Mode::Commands => matches.len(),
             Mode::Symbols => symbol_matches.len(),
+            Mode::ProjectSymbols => self.shown_symbols().len(),
             Mode::Line => usize::from(go_to_line),
         };
         let pressed = |key| ctx.input_mut(|i| i.consume_key(Modifiers::NONE, key));
@@ -439,6 +483,10 @@ impl QuickOpen {
                 Mode::Symbols => symbol_matches
                     .get(self.selected)
                     .map(|(i, _)| PaletteAction::GoTo(symbol_list[*i].name_range.clone())),
+                Mode::ProjectSymbols => root.and_then(|root| {
+                    let found = self.shown_symbols().get(self.selected)?;
+                    Some(go_to_symbol(root, found))
+                }),
                 Mode::Files => items.get(self.selected).map(|item| PaletteAction::Open {
                     path: item.path.clone(),
                     line,
@@ -475,7 +523,7 @@ impl QuickOpen {
                         self.first_frame = false;
                     }
                     if edit.response.changed() {
-                        self.query_changed(index);
+                        self.query_changed(index, symbol_index);
                     }
                     ui.add_space(4.0);
                     match mode {
@@ -518,8 +566,15 @@ impl QuickOpen {
                                         let symbol = &symbol_list[*index];
                                         let selected = i == self.selected;
                                         let line = texts.symbol_line(&symbol.line.to_string());
-                                        let response =
-                                            symbol_row(ui, symbol, positions, &line, selected);
+                                        let response = symbol_row(
+                                            ui,
+                                            symbol.kind,
+                                            &symbol.name,
+                                            symbol.container.as_deref(),
+                                            positions,
+                                            &line,
+                                            selected,
+                                        );
                                         if selected {
                                             response.scroll_to_me(None);
                                         }
@@ -527,6 +582,59 @@ impl QuickOpen {
                                             action = Some(PaletteAction::GoTo(
                                                 symbol.name_range.clone(),
                                             ));
+                                        }
+                                    }
+                                });
+                        }
+                        Mode::ProjectSymbols => {
+                            let name = self.text[1..].trim();
+                            let message = match (root, symbols_indexed) {
+                                (None, _) => Some(texts.project_symbols_no_project().to_owned()),
+                                (Some(_), None) => {
+                                    Some(texts.project_symbols_indexing().to_owned())
+                                }
+                                (Some(_), Some(count)) if name.is_empty() => {
+                                    Some(texts.project_symbols_hint(&count.to_string()))
+                                }
+                                (Some(_), Some(_)) => (self.symbols_generation == self.generation
+                                    && self.symbols_found.is_empty())
+                                .then(|| texts.symbols_no_results().to_owned()),
+                            };
+                            if let Some(message) = message {
+                                ui.weak(message);
+                                return;
+                            }
+                            let Some(root) = root else { return };
+                            let shown = self.shown_symbols();
+                            egui::ScrollArea::vertical()
+                                .max_height(ROW_HEIGHT * VISIBLE_ROWS)
+                                .auto_shrink([false, true])
+                                .show_rows(ui, ROW_HEIGHT, shown.len(), |ui, range| {
+                                    ui.spacing_mut().item_spacing.y = 0.0;
+                                    for i in range {
+                                        let found = &shown[i];
+                                        let selected = i == self.selected;
+                                        let file = found
+                                            .relative
+                                            .rsplit('\\')
+                                            .next()
+                                            .unwrap_or(&found.relative);
+                                        let place = format!("{file}:{}", found.line + 1);
+                                        let response = symbol_row(
+                                            ui,
+                                            found.kind,
+                                            &found.name,
+                                            found.container.as_deref(),
+                                            &found.positions,
+                                            &place,
+                                            selected,
+                                        )
+                                        .on_hover_text(&found.relative);
+                                        if selected {
+                                            response.scroll_to_me(None);
+                                        }
+                                        if response.clicked() {
+                                            action = Some(go_to_symbol(root, found));
                                         }
                                     }
                                 });
@@ -623,6 +731,8 @@ enum Mode {
     Commands,
     /// `@`: go to a symbol of the active document.
     Symbols,
+    /// `#`: go to a symbol of the project.
+    ProjectSymbols,
     /// `:`: go to a line of the active document.
     Line,
 }
@@ -633,6 +743,8 @@ impl Mode {
             Self::Commands
         } else if text.starts_with('@') {
             Self::Symbols
+        } else if text.starts_with('#') {
+            Self::ProjectSymbols
         } else if text.trim() == ":"
             || (text.trim_start().starts_with(':') && parse_query(text).0.is_empty())
         {
@@ -679,13 +791,23 @@ fn symbol_matches(names: &[String], query: &str) -> Vec<(usize, Vec<usize>)> {
         .collect()
 }
 
+/// Opens the file of a project symbol with the caret at its name.
+fn go_to_symbol(root: &Path, found: &FoundSymbol) -> PaletteAction {
+    PaletteAction::GoToSymbol {
+        path: root.join(&found.relative),
+        position: (found.line as usize + 1, found.column as usize + 1),
+    }
+}
+
 /// One symbol: its kind, its name with the matched characters marked, the symbol it is in and,
-/// on the right, its line.
+/// on the right, where it is (`place`).
 fn symbol_row(
     ui: &mut Ui,
-    symbol: &PaletteSymbol,
+    kind: SymbolKind,
+    name: &str,
+    container: Option<&str>,
     positions: &[usize],
-    line: &str,
+    place: &str,
     selected: bool,
 ) -> egui::Response {
     let (rect, response) =
@@ -705,14 +827,9 @@ fn symbol_row(
     let center_y = rect.center().y;
     let mut x = rect.left() + 8.0;
     let badge_font = FontId::proportional((font.size * 0.7).round());
-    x += tabs::paint_badge(
-        painter,
-        &kind_badge(symbol.kind),
-        badge_font,
-        pos2(x, center_y),
-    ) + 6.0;
+    x += tabs::paint_badge(painter, &kind_badge(kind), badge_font, pos2(x, center_y)) + 6.0;
     let line_galley = painter.layout_no_wrap(
-        line.to_owned(),
+        place.to_owned(),
         FontId::proportional(font.size * 0.85),
         weak,
     );
@@ -722,7 +839,7 @@ fn symbol_row(
         line_galley,
         weak,
     );
-    let chars: Vec<char> = symbol.name.chars().collect();
+    let chars: Vec<char> = name.chars().collect();
     let name = painter.layout_job(highlighted(
         &chars,
         0..chars.len(),
@@ -737,9 +854,9 @@ fn symbol_row(
     ));
     let name_width = name.size().x;
     clip.galley(pos2(x, center_y - name.size().y / 2.0), name, text);
-    if let Some(container) = &symbol.container {
+    if let Some(container) = container {
         let container = painter.layout_no_wrap(
-            container.clone(),
+            container.to_owned(),
             FontId::proportional(font.size * 0.85),
             weak,
         );
@@ -1043,12 +1160,44 @@ mod tests {
     }
 
     #[test]
+    fn project_symbols_follow_the_newest_query() {
+        assert_eq!(Mode::of("#invoice"), Mode::ProjectSymbols);
+        let mut palette = QuickOpen::new(Vec::new(), "#");
+        assert!(palette.shown_symbols().is_empty());
+        palette.text = "#inv".to_owned();
+        palette.query_changed(None, None);
+        let found = |name: &str| FoundSymbol {
+            name: name.to_owned(),
+            kind: SymbolKind::Class,
+            container: None,
+            relative: format!(r"src\{name}.cs"),
+            line: 4,
+            column: 6,
+            positions: Vec::new(),
+        };
+        palette.symbol_results(palette.generation - 1, vec![found("Old")]);
+        assert!(
+            palette.shown_symbols().is_empty(),
+            "an older query is dropped"
+        );
+        palette.symbol_results(palette.generation, vec![found("Invoice")]);
+        assert_eq!(palette.shown_symbols()[0].name, "Invoice");
+        assert_eq!(
+            go_to_symbol(Path::new(r"C:\p"), &palette.shown_symbols()[0]),
+            PaletteAction::GoToSymbol {
+                path: PathBuf::from(r"C:\p\src\Invoice.cs"),
+                position: (5, 7),
+            }
+        );
+    }
+
+    #[test]
     fn older_results_are_dropped() {
         let mut palette = QuickOpen::new(Vec::new(), "");
         palette.text = "pro".into();
-        palette.query_changed(None);
+        palette.query_changed(None, None);
         palette.text = "prog".into();
-        palette.query_changed(None);
+        palette.query_changed(None, None);
         let found = vec![Found {
             relative: "old".into(),
             positions: vec![],

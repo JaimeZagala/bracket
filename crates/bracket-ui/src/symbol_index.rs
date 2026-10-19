@@ -9,7 +9,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use bracket_core::{CancelToken, Document, Rope};
-use bracket_index::project_symbols::{MAX_FILE_BYTES, ProjectSymbols, Resolve, SymbolSource};
+use bracket_index::project_symbols::{
+    FoundSymbol, MAX_FILE_BYTES, ProjectSymbols, Resolve, SymbolSource,
+};
 use bracket_index::rules::RuleSet;
 use bracket_index::symbols;
 use bracket_syntax::LanguageRegistry;
@@ -36,12 +38,23 @@ pub enum SymbolCommand {
         path: PathBuf,
         text: Option<Rope>,
     },
+    Query {
+        text: String,
+        generation: u64,
+    },
 }
 
 pub enum SymbolEvent {
     /// The index is up to date and holds this many symbols.
     Ready(usize),
+    Results {
+        generation: u64,
+        found: Vec<FoundSymbol>,
+    },
 }
+
+/// Results kept for one query.
+const LIMIT: usize = 200;
 
 /// The thread that owns the project's symbol index.
 pub struct SymbolWorker {
@@ -72,6 +85,7 @@ impl SymbolWorker {
                     let mut full = false;
                     let mut changed = HashSet::new();
                     let mut unsaved = HashMap::new();
+                    let mut query = None;
                     for command in std::iter::once(first).chain(command_rx.try_iter()) {
                         match command {
                             SymbolCommand::Files(change) => {
@@ -82,8 +96,12 @@ impl SymbolWorker {
                             SymbolCommand::Unsaved { path, text } => {
                                 unsaved.insert(path, text);
                             }
+                            SymbolCommand::Query { text, generation } => {
+                                query = Some((text, generation));
+                            }
                         }
                     }
+                    let updated = files.is_some() || !unsaved.is_empty();
                     let mut result = match files {
                         Some(files) if full => index.sync(files, resolve, &worker_cancel),
                         Some(files) => index.refresh(
@@ -99,14 +117,23 @@ impl SymbolWorker {
                         result = result
                             .and_then(|()| index.set_unsaved(&path, text, resolve, &worker_cancel));
                     }
-                    if result.is_err()
-                        || event_tx
-                            .send(SymbolEvent::Ready(index.symbol_count()))
-                            .is_err()
-                    {
+                    if result.is_err() {
                         return;
                     }
-                    notify();
+                    let mut events = Vec::new();
+                    if updated {
+                        events.push(SymbolEvent::Ready(index.symbol_count()));
+                    }
+                    if let Some((text, generation)) = query {
+                        let found = index.search(&text, LIMIT);
+                        events.push(SymbolEvent::Results { generation, found });
+                    }
+                    for event in events {
+                        if event_tx.send(event).is_err() {
+                            return;
+                        }
+                        notify();
+                    }
                 }
             })
             .expect("the symbol index thread starts");
@@ -120,6 +147,12 @@ impl SymbolWorker {
     /// Where the file index sends its changes.
     pub fn sender(&self) -> Sender<SymbolCommand> {
         self.commands.clone()
+    }
+
+    pub fn query(&self, text: String, generation: u64) {
+        let _ = self
+            .commands
+            .send(SymbolCommand::Query { text, generation });
     }
 
     pub fn events(&self) -> Vec<SymbolEvent> {
@@ -238,7 +271,7 @@ mod tests {
             if worker
                 .events()
                 .iter()
-                .any(|SymbolEvent::Ready(n)| *n == symbols)
+                .any(|e| matches!(e, SymbolEvent::Ready(n) if *n == symbols))
             {
                 return;
             }
@@ -289,6 +322,23 @@ mod tests {
         })
         .unwrap();
         wait_for(&worker, 3);
+
+        worker.query("m".to_owned(), 7);
+        let started = Instant::now();
+        let found = loop {
+            assert!(started.elapsed() < Duration::from_secs(10), "no results");
+            let results = worker.events().into_iter().find_map(|e| match e {
+                SymbolEvent::Results { generation, found } => Some((generation, found)),
+                SymbolEvent::Ready(_) => None,
+            });
+            if let Some(results) = results {
+                break results;
+            }
+            thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(found.0, 7);
+        assert_eq!(found.1[0].name, "M");
+        assert_eq!(found.1[0].relative, "B.cs");
         drop(worker);
         fs::remove_dir_all(&root).unwrap();
     }

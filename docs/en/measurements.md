@@ -374,3 +374,17 @@ Measured phase by phase in a test program on `target/project-50k` (41,668 files 
 | Executable size | 15,374,848 B | 15,382,016 B (14.67 MB) | 15,296,000 B |
 
 The symbol index now costs about 7 MB with 50,000 files and 9 MB with 210,000 symbols. Startup does not change (`compare-startup.ps1` without a project, three batches: differences from −10 to +7 ms depending on the order, noise on a busy machine).
+
+## Phase 3, step 8 — Ctrl+T (2026-10-19, machine A)
+
+`cargo bench -p bracket-index --bench fuzzy`, group `fuzzy_symbols`: one query over the 210,000 symbols of `target/project-cs`, with 200 results; it includes gathering the names, scoring them and building the results, as each keystroke does. Budget: 50 ms per keystroke.
+
+| Query | Time |
+|---|---|
+| One letter (`c`) | 16.8 ms |
+| Word (`compute`) | 12.9 ms |
+| Scattered letters (`svc12x3`) | 2.4 ms |
+| Exact name (`Service12x3`) | 2.4 ms |
+| No match (`zzz`) | 2.3 ms (gathering the names) |
+
+Ctrl+P does not change with the generic matcher: 6.3 ms with one letter and 7.0 ms with a word over 50,000 files. Executable: 15,412,736 B (14.70 MB), +30 KB; 315,904 B (308 KB) left up to the 15 MB budget.

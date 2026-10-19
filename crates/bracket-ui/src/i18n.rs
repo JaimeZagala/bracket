@@ -176,6 +176,22 @@ impl Texts {
         self.get("menu_go")
     }
 
+    pub fn menu_go_to_project_symbol(&self) -> &str {
+        self.get("menu_go_to_project_symbol")
+    }
+
+    pub fn project_symbols_no_project(&self) -> &str {
+        self.get("project_symbols_no_project")
+    }
+
+    pub fn project_symbols_indexing(&self) -> &str {
+        self.get("project_symbols_indexing")
+    }
+
+    pub fn project_symbols_hint(&self, count: &str) -> String {
+        self.fill("project_symbols_hint", &[("count", &count)])
+    }
+
     pub fn menu_go_to_symbol(&self) -> &str {
         self.get("menu_go_to_symbol")
     }
@@ -935,6 +951,19 @@ mod tests {
                 ("menu_go", t.menu_go().to_owned()),
                 ("menu_go_to_line", t.menu_go_to_line().to_owned()),
                 ("menu_go_to_symbol", t.menu_go_to_symbol().to_owned()),
+                (
+                    "menu_go_to_project_symbol",
+                    t.menu_go_to_project_symbol().to_owned(),
+                ),
+                (
+                    "project_symbols_no_project",
+                    t.project_symbols_no_project().to_owned(),
+                ),
+                (
+                    "project_symbols_indexing",
+                    t.project_symbols_indexing().to_owned(),
+                ),
+                ("project_symbols_hint", t.project_symbols_hint("1")),
                 ("symbols_pending", t.symbols_pending().to_owned()),
                 ("symbols_no_results", t.symbols_no_results().to_owned()),
                 ("symbol_line", t.symbol_line("1")),

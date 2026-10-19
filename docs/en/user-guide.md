@@ -44,6 +44,7 @@ With a project open, the **project panel** on the left shows the folder tree: fo
 - **Ctrl+Shift+P** or **F1** (or **View → Command palette…**) opens the same box with `>` in front: it lists the available commands, like "File: Save", with their shortcut on the right, filtered by typing as in Ctrl+P. Hovering over a command shows its identifier (for example `file.save`).
 - **Ctrl+G** (or **Go → Go to line…**) opens the box with `:` in front: type the line, or `line:column`, and Enter. Typing `:` in Ctrl+P works too.
 - **Ctrl+Shift+O** (or **Go → Go to symbol in file…**) opens the box with `@` in front: it lists the active document's symbols (the same as the outline) in order, with their kind, the symbol they are declared in and their line. Typing filters by name as in Ctrl+P; Enter selects the symbol's name in the editor.
+- **Ctrl+T** (or **Go → Go to symbol in project…**) opens the box with `#` in front: it searches by name, like Ctrl+P, among the symbols of every file in the project. Each result shows its kind, the symbol it is declared in and, on the right, its file and line (the full path on hover); Enter opens the file with the caret at the symbol. It needs an open folder, and says so while the symbols are being prepared.
 - The menus show the same commands and shortcuts; the ones that cannot be used at the moment (for example, Close folder without a project) are disabled.
 
 ### Find in file (Ctrl+F)

@@ -1111,6 +1111,7 @@ impl BracketApp {
             Command::Palette => return self.open_palette(">"),
             Command::GoToLine => return self.open_palette(":"),
             Command::GoToSymbol => return self.open_palette("@"),
+            Command::GoToProjectSymbol => return self.open_palette("#"),
             // Closing goes through the unsaved-changes check in handle_window_events.
             Command::Exit => ctx.send_viewport_cmd(ViewportCommand::Close),
         }
@@ -1912,6 +1913,7 @@ impl BracketApp {
             self.project.as_deref(),
             self.index.as_ref(),
             self.indexed,
+            self.symbol_index.as_ref(),
             self.symbols_indexed,
             &commands,
             lines,
@@ -1937,6 +1939,19 @@ impl BracketApp {
                 if tab.loading.is_none() {
                     go_to(tab, (line, column.unwrap_or(1)));
                 }
+            }
+            PaletteAction::GoToSymbol {
+                path,
+                position: (line, column),
+            } => {
+                self.open_request(
+                    ctx,
+                    OpenRequest {
+                        path,
+                        line: Some(line),
+                        column: Some(column),
+                    },
+                );
             }
             PaletteAction::GoTo(range) => {
                 if self.tabs[self.active].loading.is_none() {
@@ -2265,8 +2280,15 @@ impl eframe::App for BracketApp {
             }
         }
         if let Some(symbols) = &self.symbol_index {
-            for SymbolEvent::Ready(count) in symbols.events() {
-                self.symbols_indexed = Some(count);
+            for event in symbols.events() {
+                match event {
+                    SymbolEvent::Ready(count) => self.symbols_indexed = Some(count),
+                    SymbolEvent::Results { generation, found } => {
+                        if let Some(palette) = &mut self.quick_open {
+                            palette.symbol_results(generation, found);
+                        }
+                    }
+                }
             }
             let documents = self.tabs.iter().filter(|t| t.loading.is_none());
             let documents = documents.filter_map(|t| Some((t.path()?, &t.doc)));
