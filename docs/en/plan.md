@@ -46,7 +46,7 @@ Measured, not assumed. If a budget cannot be met, it is reported with data and a
 - **Interface:** egui + eframe (glow backend). Decision accepted in Phase 0 after measuring it against iced ([decisions/0001-ui.md](decisions/0001-ui.md)). The UI sits behind a thin layer.
 - **Buffer:** ropey. Multiple selections from the start. Custom transactional undo/redo (a multi-cursor edit or a bulk replace is one step).
 - **Highlighting:** syntect with the `default-fancy` feature (no C dependencies), `.sublime-syntax`/`.tmLanguage` grammars.
-- **Symbols:** tree-sitter for C#, CSS, JSON and XML. T-SQL through regex rules (CREATE/ALTER of PROCEDURE, FUNCTION, VIEW, TABLE, TRIGGER; `GO` as separator). Razor in three layers: TextMate highlighting; directive symbols (`@page`, `@inject`, `@using`, `@inherits`) and `@code` blocks passed to the C# extractor; navigation from `<MyComponent />` to `MyComponent.razor` by file name.
+- **Symbols:** tree-sitter for C#, CSS, JSON and XML ([decisions/0003-symbols.md](decisions/0003-symbols.md)). T-SQL through regex rules (CREATE/ALTER of PROCEDURE, FUNCTION, VIEW, TABLE, TRIGGER; `GO` as separator). Razor in three layers: TextMate highlighting; directive symbols (`@page`, `@inject`, `@using`, `@inherits`) and `@code` blocks passed to the C# extractor; navigation from `<MyComponent />` to `MyComponent.razor` by file name.
 - **Projects and search:** ignore, regex, our own fuzzy matcher, trash (Recycle Bin). (`grep-searcher` was planned; it was not needed, see the architecture.)
 - **Other:** notify, similar, encoding_rs + chardetng, toml_edit (configuration: keeps comments when saving and reads key by key; replaces serde + toml since Phase 1), anyhow + thiserror + tracing, crossbeam-channel.
 - **Distribution:** winreg, winresource or embed-resource, ureq, semver, sha2 + ed25519-dalek, self-replace, zip. Inno Setup installer. Publishing with GitHub Actions on a Windows runner.
@@ -61,7 +61,7 @@ C#, Razor, CSS, T-SQL, JSON and XML are built into the executable. An optional `
 ```text
 languages/<id>/language.toml          format_version, name, extensions, badge, comments, indentation, pairs
 languages/<id>/syntax.sublime-syntax  optional; or `scope` in language.toml to use an included grammar
-languages/<id>/symbols.toml           optional (Phase 2): regex symbol rules (name, pattern, kind)
+languages/<id>/symbols.toml           optional (Phase 3): regex symbol rules (name, pattern, kind)
 ```
 
 `format_version` lets the editor reject an incompatible package with a clear message. Grammars are `.sublime-syntax` version 1: syntect does not load `.tmLanguage` files or Sublime Text 4 grammars with `extends`. `.xsig`, `.xml`, `.xsd`, `.config` and `.csproj` map to XML. Origin and license of every grammar go in `THIRD_PARTY.en.md`.
@@ -176,6 +176,28 @@ Approved on 2026-10-18. Steps ordered by dependencies; each one builds, has test
 Completed on 2026-10-19 (0.2.0, local `v0.2.0` tag); results in [measurements](measurements.md).
 
 Planned dependencies, each measured before it goes in: `ignore` and `grep-searcher` + `grep-regex` (Unlicense OR MIT) and `trash` (MIT). In the end `ignore`, `trash` and `regex` went in; `grep-searcher` and `grep-regex` were not needed (step 13). The fuzzy matcher is our own, so as not to add another license (`nucleo-matcher` is MPL-2.0); if it missed the budget, `nucleo-matcher` would be measured.
+
+### Phase 3 in detail
+
+Approved on 2026-10-19, with tree-sitter for symbols ([decisions/0003-symbols.md](decisions/0003-symbols.md)). Steps ordered by dependencies; each one builds, has tests and gets its own commit.
+
+**Size.** Measured with the workspace's release profile, the C# grammar adds 5.4 MB and the CSS, JSON and XML ones another 0.16 MB: the executable will grow from 9.1 to about 14.6 MB, close to the 15 MB budget. Step 1 measures whether it can be reduced without losing speed; Phase 5 (installer and updater) will have to fit in what is left and, if it does not, the budget will be reviewed with data.
+
+1. tree-sitter in `bracket-index`: `tree-sitter` and the C#, CSS, JSON and XML grammars, measured in size and startup, with the options to reduce the size tried, and recorded in `THIRD_PARTY`. Symbol model (name, kind, range and name range in chars, container and nesting) and extraction with our own queries per language; tree-sitter works in bytes and the conversion to chars happens at the edge.
+2. C# symbols: namespaces (file-scoped too), classes, structs, interfaces, records, enums, delegates, methods, constructors, properties, fields, events and indexers. A synthetic test corpus (no client code) and a benchmark in MB/s.
+3. Symbols for CSS (selectors, nested `@media`/`@supports`, `@keyframes`, `--x` variables), JSON (nested keys, array indices) and XML/XSIG (nested elements, with `id`/`name` when present); with count limits for large files.
+4. T-SQL by regex rules (CREATE, ALTER and CREATE OR ALTER of PROCEDURE, FUNCTION, VIEW, TABLE, TRIGGER and TYPE; `GO` as separator), with the same rule engine external packages will use (`symbols.toml`: name, pattern, kind, `format_version`). Razor: `@page`, `@inject`, `@using` and `@inherits` directives, and `@code`/`@functions` blocks parsed with the C# grammar and their offset.
+5. Outline of the active document: parsing on a thread, incremental with the tree-sitter tree after each edit (debounced); an "Outline" tab in the side panel, as a tree, click to go there and the symbol at the caret marked.
+6. Ctrl+Shift+O: the file's symbols in the palette (`@` prefix), with fuzzy search.
+7. Project symbol index: parallel extraction on the index thread (with a size limit per file), incremental with the watcher, which now also reports content changes; tabs with unsaved changes use their buffer. Time and memory with a synthetic C# project.
+8. Ctrl+T: the project's symbols in the palette (`#` prefix), with kind, container and file. Benchmark against the Ctrl+P budget (< 50 ms per keystroke) with 200,000 symbols.
+9. Go to definition (F12 and Ctrl+click): the word at the caret is looked up in the index (the same file first, then the same folder or namespace); if there are several, a list to choose from. In Razor, `<MyComponent />` opens `MyComponent.razor`. Navigation history: Alt+← and Alt+→.
+10. References by name (Shift+F12): a whole-word search in the project (matching case in C#), with the results in the Search tab; approximate, without a compiler.
+11. Path at the caret in the status bar, from the tree-sitter tree: XPath in XML/XSIG (`/Invoice/Lines/Line[3]/@id`) and JSON path (`$.items[2].name`); click to copy it; with a size limit.
+12. `languages.md` (es/en): built-in languages, extensions, the symbols each one extracts and the package format, `symbols.toml` included.
+13. Close: measurements (size against the budget, extraction in MB/s, symbol index of the synthetic project in time and RAM, Ctrl+T, startup with a project), documentation, CHANGELOG and local `v0.3.0` tag.
+
+Planned dependencies, each measured before it goes in: `tree-sitter` 0.27, `tree-sitter-c-sharp` 0.23, `tree-sitter-css` 0.25, `tree-sitter-json` 0.24 and `tree-sitter-xml` 0.7 (all MIT).
 
 ## Future improvements without an assigned phase
 

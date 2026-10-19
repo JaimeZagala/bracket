@@ -46,7 +46,7 @@ Se miden, no se suponen. Si alguno no es alcanzable, se informa con datos y alte
 - **Interfaz:** egui + eframe (backend glow). Decisión aceptada en la Fase 0 tras medirla frente a iced ([decisions/0001-ui.md](decisions/0001-ui.md)). La UI queda detrás de una capa fina.
 - **Buffer:** ropey. Selección múltiple desde el inicio. Deshacer/rehacer propio por transacciones (un multicursor o un reemplazo masivo es un solo paso).
 - **Resaltado:** syntect con la feature `default-fancy` (sin dependencias de C), gramáticas `.sublime-syntax`/`.tmLanguage`.
-- **Símbolos:** tree-sitter para C#, CSS, JSON y XML. T-SQL por reglas regex (CREATE/ALTER de PROCEDURE, FUNCTION, VIEW, TABLE, TRIGGER; `GO` como separador). Razor en tres capas: resaltado TextMate; símbolos de directivas (`@page`, `@inject`, `@using`, `@inherits`) y bloques `@code` pasados al extractor de C#; navegación de `<MiComponente />` a `MiComponente.razor` por nombre de fichero.
+- **Símbolos:** tree-sitter para C#, CSS, JSON y XML ([decisions/0003-symbols.md](decisions/0003-symbols.md)). T-SQL por reglas regex (CREATE/ALTER de PROCEDURE, FUNCTION, VIEW, TABLE, TRIGGER; `GO` como separador). Razor en tres capas: resaltado TextMate; símbolos de directivas (`@page`, `@inject`, `@using`, `@inherits`) y bloques `@code` pasados al extractor de C#; navegación de `<MiComponente />` a `MiComponente.razor` por nombre de fichero.
 - **Proyecto y búsqueda:** ignore, regex, emparejador difuso propio, trash (Papelera de reciclaje). (`grep-searcher` estaba previsto; no hizo falta, ver la arquitectura.)
 - **Otros:** notify, similar, encoding_rs + chardetng, toml_edit (configuración: conserva comentarios al guardar y lee clave a clave; sustituye a serde + toml desde la Fase 1), anyhow + thiserror + tracing, crossbeam-channel.
 - **Distribución:** winreg, winresource o embed-resource, ureq, semver, sha2 + ed25519-dalek, self-replace, zip. Instalador con Inno Setup. Publicación con GitHub Actions en runner de Windows.
@@ -61,7 +61,7 @@ C#, Razor, CSS, T-SQL, JSON y XML van dentro del ejecutable. Una carpeta `langua
 ```text
 languages/<id>/language.toml          format_version, nombre, extensiones, insignia, comentarios, tabulación, pares
 languages/<id>/syntax.sublime-syntax  opcional; o `scope` en language.toml para usar una gramática incluida
-languages/<id>/symbols.toml           opcional (Fase 2): reglas regex de símbolos (nombre, patrón, tipo)
+languages/<id>/symbols.toml           opcional (Fase 3): reglas regex de símbolos (nombre, patrón, tipo)
 ```
 
 `format_version` permite rechazar con un mensaje claro un paquete incompatible. Las gramáticas son `.sublime-syntax` versión 1: syntect no carga `.tmLanguage` ni las gramáticas de Sublime Text 4 con `extends`. `.xsig`, `.xml`, `.xsd`, `.config` y `.csproj` se asocian a XML. Origen y licencia de cada gramática en `THIRD_PARTY.md`.
@@ -176,6 +176,28 @@ Aprobada el 2026-10-18. Pasos ordenados por dependencias; cada uno compila, tien
 Completada el 2026-10-19 (0.2.0, etiqueta local `v0.2.0`); resultados en [mediciones](measurements.md).
 
 Dependencias previstas, cada una medida antes de entrar: `ignore` y `grep-searcher` + `grep-regex` (Unlicense OR MIT) y `trash` (MIT). Al final entraron `ignore`, `trash` y `regex`; `grep-searcher` y `grep-regex` no hicieron falta (paso 13). El emparejador difuso es propio, para no añadir otra licencia (`nucleo-matcher` es MPL-2.0); si no cumpliera el presupuesto, se mediría `nucleo-matcher`.
+
+### Fase 3 en detalle
+
+Aprobada el 2026-10-19, con tree-sitter para los símbolos ([decisions/0003-symbols.md](decisions/0003-symbols.md)). Pasos ordenados por dependencias; cada uno compila, tiene tests y lleva su propio commit.
+
+**Tamaño.** Medido con el perfil release del workspace, la gramática de C# añade 5,4 MB y las de CSS, JSON y XML, otros 0,16 MB: el ejecutable pasará de 9,1 a unos 14,6 MB, cerca del presupuesto de 15 MB. El paso 1 mide si se puede reducir sin perder velocidad; la Fase 5 (instalador y actualizador) tendrá que caber en lo que quede y, si no cabe, se revisará el presupuesto con datos.
+
+1. tree-sitter en `bracket-index`: `tree-sitter` y las gramáticas de C#, CSS, JSON y XML, medidas en tamaño y arranque, con las opciones para reducir el tamaño probadas, y anotadas en `THIRD_PARTY`. Modelo de símbolos (nombre, tipo, rango y rango del nombre en caracteres, contenedor y anidamiento) y extracción con consultas propias por lenguaje; tree-sitter trabaja en bytes y la conversión a caracteres se hace en el borde.
+2. Símbolos de C#: espacios de nombres (también de ámbito de fichero), clases, structs, interfaces, records, enums, delegados, métodos, constructores, propiedades, campos, eventos e indexadores. Corpus de prueba sintético (nada de código de clientes) y benchmark en MB/s.
+3. Símbolos de CSS (selectores, `@media`/`@supports` anidados, `@keyframes`, variables `--x`), JSON (claves anidadas, índices de array) y XML/XSIG (elementos anidados, con `id`/`name` si los tienen); con topes de cantidad para ficheros grandes.
+4. T-SQL por reglas regex (CREATE, ALTER y CREATE OR ALTER de PROCEDURE, FUNCTION, VIEW, TABLE, TRIGGER y TYPE; `GO` como separador), con el mismo motor de reglas que usarán los paquetes externos (`symbols.toml`: nombre, patrón, tipo, `format_version`). Razor: directivas `@page`, `@inject`, `@using` e `@inherits`, y bloques `@code`/`@functions` analizados con la gramática de C# y su desplazamiento.
+5. Esquema del documento activo: análisis en un hilo, incremental con el árbol de tree-sitter tras cada edición (con antirrebote); pestaña «Esquema» en el panel lateral, en árbol, con clic para ir y el símbolo del cursor marcado.
+6. Ctrl+Mayús+O: símbolos del fichero en la paleta (prefijo `@`), con búsqueda difusa.
+7. Índice de símbolos del proyecto: extracción en paralelo en el hilo del índice (con tope de tamaño por fichero), incremental con la vigilancia, que pasa a avisar también de los cambios de contenido; las pestañas con cambios sin guardar usan su buffer. Tiempo y memoria con un proyecto C# sintético.
+8. Ctrl+T: símbolos del proyecto en la paleta (prefijo `#`), con tipo, contenedor y fichero. Benchmark frente al presupuesto de Ctrl+P (< 50 ms por pulsación) con 200.000 símbolos.
+9. Ir a definición (F12 y Ctrl+clic): la palabra bajo el cursor se busca en el índice (primero el mismo fichero, después la misma carpeta o espacio de nombres); si hay varias, una lista para elegir. En Razor, `<MiComponente />` abre `MiComponente.razor`. Historial de navegación: Alt+← y Alt+→.
+10. Referencias por nombre (Mayús+F12): búsqueda de palabra completa en el proyecto (distinguiendo mayúsculas en C#), con los resultados en la pestaña Buscar; aproximadas, sin compilador.
+11. Ruta bajo el cursor en la barra de estado, a partir del árbol de tree-sitter: XPath en XML/XSIG (`/Invoice/Lines/Line[3]/@id`) y ruta JSON (`$.items[2].name`); clic para copiarla; con tope de tamaño.
+12. `languages.md` (es/en): lenguajes integrados, extensiones, símbolos que extrae cada uno y formato de los paquetes, `symbols.toml` incluido.
+13. Cierre: mediciones (tamaño frente al presupuesto, extracción en MB/s, índice de símbolos del proyecto sintético en tiempo y RAM, Ctrl+T, arranque con proyecto), documentación, CHANGELOG y etiqueta local `v0.3.0`.
+
+Dependencias previstas, cada una medida antes de entrar: `tree-sitter` 0.27, `tree-sitter-c-sharp` 0.23, `tree-sitter-css` 0.25, `tree-sitter-json` 0.24 y `tree-sitter-xml` 0.7 (todas MIT).
 
 ## Mejoras futuras sin fase asignada
 
