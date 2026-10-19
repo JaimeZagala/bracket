@@ -261,6 +261,38 @@ impl Texts {
         self.fill("find_total", &[("total", &total)])
     }
 
+    pub fn menu_replace(&self) -> &str {
+        self.get("menu_replace")
+    }
+
+    pub fn replace_hint(&self) -> &str {
+        self.get("replace_hint")
+    }
+
+    pub fn replace_one(&self) -> &str {
+        self.get("replace_one")
+    }
+
+    pub fn replace_all(&self) -> &str {
+        self.get("replace_all")
+    }
+
+    pub fn replace_one_tip(&self) -> &str {
+        self.get("replace_one_tip")
+    }
+
+    pub fn replace_all_tip(&self) -> &str {
+        self.get("replace_all_tip")
+    }
+
+    pub fn replace_read_only(&self) -> &str {
+        self.get("replace_read_only")
+    }
+
+    pub fn replaced_count(&self, count: &str) -> String {
+        self.fill("replaced_count", &[("count", &count)])
+    }
+
     pub fn menu_recent(&self) -> &str {
         self.get("menu_recent")
     }
@@ -696,6 +728,14 @@ mod tests {
                     t.dialog_open_folder_title().to_owned(),
                 ),
                 ("menu_recent", t.menu_recent().to_owned()),
+                ("menu_replace", t.menu_replace().to_owned()),
+                ("replace_hint", t.replace_hint().to_owned()),
+                ("replace_one", t.replace_one().to_owned()),
+                ("replace_all", t.replace_all().to_owned()),
+                ("replace_one_tip", t.replace_one_tip().to_owned()),
+                ("replace_all_tip", t.replace_all_tip().to_owned()),
+                ("replace_read_only", t.replace_read_only().to_owned()),
+                ("replaced_count", t.replaced_count("1")),
                 ("menu_edit", t.menu_edit().to_owned()),
                 ("menu_find", t.menu_find().to_owned()),
                 ("menu_find_next", t.menu_find_next().to_owned()),

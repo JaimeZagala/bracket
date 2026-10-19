@@ -52,6 +52,8 @@ With a project open, the **project panel** on the left shows the folder tree: fo
 - **Enter** or **F3** goes to the next one and **Shift+Enter** or **Shift+F3** to the previous one; at the end it wraps around to the start. F3 also works with the bar closed: it opens it with the last search.
 - **Aa** matches case, **ab** finds whole words only and **.\*** uses regular expressions (the `regex` crate's syntax: `\d+`, `^using`, `(foo|bar)`). Alt+C, Alt+W and Alt+R turn them on from the keyboard. An invalid expression is shown in red, with the reason when hovering over it.
 - **Esc** closes the bar and goes back to the editor.
+- **Ctrl+H** (or **Edit → Replace…**) adds the replace row. **Replace** (or Enter in that field) changes the selected match and selects the next one; if the selection is not a match, it first selects the next one so you see what will change. **Replace all** (Ctrl+Alt+Enter) changes all of them at once; Ctrl+Z undoes it in a single step.
+- With **.\*** on, the replacement can use the expression's groups: `$1`, `$2`… or `${name}` for `(?<name>…)`, and `$$` for a `$`. `\n` inserts a line break (the document's: CRLF or LF), `\t` a tab and `\\` a backslash. Without regular expressions, the text is inserted as it is.
 - In files over 1 MB the search runs in the background and the bar shows "Searching…" meanwhile.
 
 Text search in the project comes in the next steps of Phase 2.

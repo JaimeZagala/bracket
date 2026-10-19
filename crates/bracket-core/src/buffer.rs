@@ -158,6 +158,44 @@ impl Buffer {
         true
     }
 
+    /// Replaces several ranges (char positions in the current text, sorted and not
+    /// overlapping) in one undo step, as find and replace does. Selections move with the text
+    /// around them; one that touched a replaced range ends at the edge of its replacement.
+    /// Returns false, and records nothing, if there is nothing to replace.
+    pub fn replace_ranges(&mut self, replacements: &[(Range<usize>, String)]) -> bool {
+        if replacements.is_empty() {
+            return false;
+        }
+        debug_assert!(
+            replacements.windows(2).all(|w| w[0].0.end <= w[1].0.start),
+            "replacements must be sorted and must not overlap"
+        );
+        let before = self.selections.clone();
+        let mut changes = Vec::with_capacity(replacements.len());
+        // Positions in the text left by the previous changes: shifted by what they added.
+        let mut shift: isize = 0;
+        for (range, inserted) in replacements {
+            let at = (range.start as isize + shift) as usize;
+            let change = Change {
+                start: at,
+                removed: self.text.slice(at..at + range.len()).to_string(),
+                inserted: inserted.clone(),
+            };
+            change.apply(&mut self.text);
+            shift += inserted.chars().count() as isize - range.len() as isize;
+            changes.push(change);
+        }
+        let moved = |pos: usize| moved_position(pos, replacements);
+        self.selections = before.map(|s| Selection::new(moved(s.anchor), moved(s.head)));
+        let transaction = Transaction {
+            changes,
+            before,
+            after: self.selections.clone(),
+        };
+        self.history.push(transaction, EditKind::Other);
+        true
+    }
+
     /// Selects the whole text as a single selection.
     pub fn select_all(&mut self) {
         self.selections = Selections::single(Selection::new(0, self.text.len_chars()));
@@ -321,9 +359,65 @@ impl Buffer {
     }
 }
 
+/// Where `pos` ends up after `replacements` (see [`Buffer::replace_ranges`]): shifted by the
+/// replacements before it; inside one, at the end of its replacement.
+fn moved_position(pos: usize, replacements: &[(Range<usize>, String)]) -> usize {
+    let mut shift: isize = 0;
+    for (range, inserted) in replacements {
+        let inserted = inserted.chars().count() as isize;
+        if range.end <= pos {
+            shift += inserted - range.len() as isize;
+        } else if range.start < pos {
+            return (range.start as isize + shift + inserted) as usize;
+        } else {
+            break;
+        }
+    }
+    (pos as isize + shift) as usize
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn several_ranges_are_replaced_in_one_undo_step() {
+        let mut buffer = Buffer::from_text("let a = 1; let b = 22; let c = 333;");
+        buffer.set_selections(Selections::caret(35));
+        let version = buffer.version();
+        assert!(buffer.replace_ranges(&[
+            (8..9, "one".to_owned()),
+            (19..21, "two".to_owned()),
+            (31..34, "3".to_owned()),
+        ]));
+        assert_eq!(
+            buffer.text().to_string(),
+            "let a = one; let b = two; let c = 3;"
+        );
+        assert_ne!(buffer.version(), version);
+        assert_eq!(
+            buffer.selections().primary().head,
+            36,
+            "the caret follows the text"
+        );
+        assert!(buffer.undo());
+        assert_eq!(
+            buffer.text().to_string(),
+            "let a = 1; let b = 22; let c = 333;"
+        );
+        assert!(!buffer.undo(), "it was a single step");
+        assert!(!buffer.replace_ranges(&[]));
+    }
+
+    #[test]
+    fn a_replaced_selection_covers_its_replacement() {
+        let mut buffer = Buffer::from_text("café café");
+        buffer.set_selections(Selections::single(Selection::new(5, 9)));
+        buffer.replace_ranges(&[(5..9, "tea".to_owned())]);
+        assert_eq!(buffer.text().to_string(), "café tea");
+        let selection = buffer.selections().primary();
+        assert_eq!((selection.anchor, selection.head), (5, 8));
+    }
 
     fn buffer_with(text: &str, selections: &[(usize, usize)]) -> Buffer {
         let mut buffer = Buffer::from_text(text);

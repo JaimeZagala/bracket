@@ -1,14 +1,14 @@
 //! The find bar (Ctrl+F) above the editor: the query, match case / whole word / regex, a
-//! counter and previous / next. Matches are found again whenever the query, its options, the
-//! active tab or its text change; documents over [`THREAD_ABOVE`] are searched on a worker
-//! thread, cancelled when a newer search starts.
+//! counter and previous / next, plus a replace row (Ctrl+H). Matches are found again whenever
+//! the query, its options, the active tab or its text change; documents over [`THREAD_ABOVE`]
+//! are searched on a worker thread, cancelled when a newer search starts.
 
 use std::ops::Range;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 
-use bracket_core::{CancelToken, Document, Generations};
-use bracket_search::{FindError, FindOptions, Finder, Matches};
+use bracket_core::{CancelToken, Document, Generations, movement};
+use bracket_search::{FindError, FindOptions, Finder, Matches, Replacement};
 use eframe::egui::{
     self, Id, Key, Modifiers, RichText, Ui,
     text::{CCursor, CCursorRange},
@@ -35,7 +35,22 @@ struct SearchKey {
 pub enum FindAction {
     Next,
     Previous,
+    ReplaceOne,
+    ReplaceAll,
     Close,
+}
+
+/// What a replace did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReplaceOutcome {
+    /// The selected match was replaced; the next one is selected once found.
+    Replaced,
+    /// The selection was not a match: this match should be selected first.
+    Select(Range<usize>),
+    /// Every match was replaced, in one undo step.
+    All(usize),
+    ReadOnly,
+    Nothing,
 }
 
 #[derive(Default)]
@@ -51,6 +66,10 @@ pub struct FindBar {
     searches: Generations,
     /// Select the first match from here once the results for a new query arrive.
     jump_from: Option<usize>,
+    /// The replace row is shown.
+    replace_open: bool,
+    replacement: String,
+    focus_replacement: bool,
 }
 
 impl FindBar {
@@ -62,15 +81,76 @@ impl FindBar {
         !self.query.is_empty()
     }
 
-    /// Opens the bar, with `initial` as the query if given; the first match from `caret` is
-    /// selected as soon as it is found.
-    pub fn open(&mut self, initial: Option<String>, caret: usize) {
+    /// Opens the bar, with `initial` as the query if given, and the replace row if `replace`;
+    /// the first match from `caret` is selected as soon as it is found. With a query already
+    /// there, Ctrl+H goes straight to the replacement.
+    pub fn open(&mut self, initial: Option<String>, caret: usize, replace: bool) {
         if let Some(text) = initial {
             self.query = text;
         }
         self.open = true;
-        self.focus = true;
+        self.replace_open = replace;
+        if replace && !self.query.is_empty() {
+            self.focus_replacement = true;
+        } else {
+            self.focus = true;
+        }
         self.jump_from = Some(caret);
+    }
+
+    /// Replaces the selected match, if the selection is one; otherwise asks for the next match
+    /// to be selected first, so the user sees what will be replaced.
+    pub fn replace_one(&mut self, tab: u64, doc: &mut Document) -> ReplaceOutcome {
+        if doc.is_read_only() {
+            return ReplaceOutcome::ReadOnly;
+        }
+        let Ok(finder) = Finder::new(&self.query, self.options) else {
+            return ReplaceOutcome::Nothing;
+        };
+        let ranges = self.marks(tab, doc);
+        let selection = doc.buffer.selections().primary();
+        let selected = selection.start()..selection.end();
+        if !ranges.contains(&selected) {
+            return match step(ranges, selected, true) {
+                Some(index) => ReplaceOutcome::Select(ranges[index].clone()),
+                None => ReplaceOutcome::Nothing,
+            };
+        }
+        // The lines around the match, so that `^`, `$` and `\b` see what they would see in the
+        // whole document.
+        let text = doc.buffer.text();
+        let from = movement::line_start(text, movement::line_of(text, selected.start));
+        let to = movement::line_end(text, movement::line_of(text, selected.end));
+        let context = text.slice(from..to).to_string();
+        let replacement = Replacement::new(&self.replacement, &finder, doc.line_ending().as_str());
+        let local = selected.start - from..selected.end - from;
+        let Some(new) = finder.replace_at(&context, local, &replacement) else {
+            return ReplaceOutcome::Nothing;
+        };
+        let after = selected.start + new.chars().count();
+        doc.buffer.replace_ranges(&[(selected, new)]);
+        self.jump_from = Some(after);
+        ReplaceOutcome::Replaced
+    }
+
+    /// Replaces every match in one undo step.
+    pub fn replace_all(&mut self, doc: &mut Document) -> ReplaceOutcome {
+        if doc.is_read_only() {
+            return ReplaceOutcome::ReadOnly;
+        }
+        let Ok(finder) = Finder::new(&self.query, self.options) else {
+            return ReplaceOutcome::Nothing;
+        };
+        let replacement = Replacement::new(&self.replacement, &finder, doc.line_ending().as_str());
+        let text = doc.buffer.text().to_string();
+        let found = finder
+            .replace_all(&text, &replacement, &CancelToken::new())
+            .unwrap_or_default();
+        if found.is_empty() {
+            return ReplaceOutcome::Nothing;
+        }
+        doc.buffer.replace_ranges(&found);
+        ReplaceOutcome::All(found.len())
     }
 
     pub fn close(&mut self) {
@@ -191,14 +271,24 @@ impl FindBar {
     ) -> Option<FindAction> {
         let mut action = None;
         let id = Id::new("find-query");
+        let replace_id = Id::new("find-replacement");
         let ctx = ui.ctx().clone();
         let caret = doc.buffer.selections().primary().start();
+        let consume = |modifiers, key| ctx.input_mut(|i| i.consume_key(modifiers, key));
+        let ctrl_alt = Modifiers::COMMAND.plus(Modifiers::ALT);
         if ui.memory(|m| m.has_focus(id)) {
-            let consume = |modifiers, key| ctx.input_mut(|i| i.consume_key(modifiers, key));
             if consume(Modifiers::SHIFT, Key::Enter) {
                 action = Some(FindAction::Previous);
             } else if consume(Modifiers::NONE, Key::Enter) {
                 action = Some(FindAction::Next);
+            } else if consume(Modifiers::NONE, Key::Escape) {
+                action = Some(FindAction::Close);
+            }
+        } else if ui.memory(|m| m.has_focus(replace_id)) {
+            if consume(ctrl_alt, Key::Enter) {
+                action = Some(FindAction::ReplaceAll);
+            } else if consume(Modifiers::NONE, Key::Enter) {
+                action = Some(FindAction::ReplaceOne);
             } else if consume(Modifiers::NONE, Key::Escape) {
                 action = Some(FindAction::Close);
             }
@@ -301,6 +391,39 @@ impl FindBar {
                 action = Some(FindAction::Close);
             }
         });
+        if self.replace_open {
+            ui.horizontal(|ui| {
+                let mut output = egui::TextEdit::singleline(&mut self.replacement)
+                    .id(replace_id)
+                    .hint_text(texts.replace_hint())
+                    .desired_width(260.0)
+                    .show(ui);
+                if self.focus_replacement {
+                    output.response.request_focus();
+                    let all = CCursorRange::two(
+                        CCursor::new(0),
+                        CCursor::new(self.replacement.chars().count()),
+                    );
+                    output.state.cursor.set_char_range(Some(all));
+                    output.state.store(ui.ctx(), replace_id);
+                    self.focus_replacement = false;
+                }
+                if ui
+                    .button(texts.replace_one())
+                    .on_hover_text(texts.replace_one_tip())
+                    .clicked()
+                {
+                    action = Some(FindAction::ReplaceOne);
+                }
+                if ui
+                    .button(texts.replace_all())
+                    .on_hover_text(texts.replace_all_tip())
+                    .clicked()
+                {
+                    action = Some(FindAction::ReplaceAll);
+                }
+            });
+        }
         action
     }
 }
@@ -371,7 +494,7 @@ mod tests {
         let ctx = egui::Context::default();
         let mut bar = FindBar::default();
         let mut doc = doc("let x = 1;\nlet y = x;\n");
-        bar.open(Some("x".into()), 0);
+        bar.open(Some("x".into()), 0, false);
         bar.update(&ctx, 1, &doc);
         assert_eq!(bar.marks(1, &doc), [4..5, 19..20]);
         assert_eq!(bar.take_jump(1, &doc), Some(4..5));
@@ -398,7 +521,7 @@ mod tests {
         let mut bar = FindBar::default();
         let line = "public class Customer { }\n";
         let doc = doc(&line.repeat(THREAD_ABOVE / line.len() + 10));
-        bar.open(Some("customer".into()), 0);
+        bar.open(Some("customer".into()), 0, false);
         bar.update(&ctx, 1, &doc);
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         while bar.marks(1, &doc).is_empty() {
@@ -413,12 +536,52 @@ mod tests {
     }
 
     #[test]
+    fn replacing_one_selects_first_then_replaces_and_moves_on() {
+        let ctx = egui::Context::default();
+        let mut bar = FindBar::default();
+        let mut doc = doc("cat cat cat");
+        doc.buffer
+            .set_selections(bracket_core::Selections::caret(1));
+        bar.open(Some("cat".into()), 1, true);
+        bar.replacement = "dog".into();
+        bar.update(&ctx, 1, &doc);
+        bar.jump_from = None;
+        // The caret is not on a match: the next one is selected first.
+        assert_eq!(bar.replace_one(1, &mut doc), ReplaceOutcome::Select(4..7));
+        doc.buffer.set_selections(bracket_core::Selections::single(
+            bracket_core::Selection::new(4, 7),
+        ));
+        assert_eq!(bar.replace_one(1, &mut doc), ReplaceOutcome::Replaced);
+        assert_eq!(doc.buffer.text().to_string(), "cat dog cat");
+        bar.update(&ctx, 1, &doc);
+        assert_eq!(
+            bar.take_jump(1, &doc),
+            Some(8..11),
+            "the next match after the replacement"
+        );
+    }
+
+    #[test]
+    fn replacing_all_is_one_undo_step_and_respects_line_breaks() {
+        let mut bar = FindBar::default();
+        let mut doc = Document::new_empty(LineEnding::CrLf, TextEncoding::UTF8);
+        doc.buffer.insert("a, b, c");
+        bar.options.regex = true;
+        bar.open(Some(r",\s*".into()), 0, true);
+        bar.replacement = r"\n".into();
+        assert_eq!(bar.replace_all(&mut doc), ReplaceOutcome::All(2));
+        assert_eq!(doc.buffer.text().to_string(), "a\r\nb\r\nc");
+        assert!(doc.buffer.undo());
+        assert_eq!(doc.buffer.text().to_string(), "a, b, c");
+    }
+
+    #[test]
     fn an_invalid_regex_is_reported_and_marks_nothing() {
         let ctx = egui::Context::default();
         let mut bar = FindBar::default();
         let doc = doc("abc");
         bar.options.regex = true;
-        bar.open(Some("(".into()), 0);
+        bar.open(Some("(".into()), 0, false);
         bar.update(&ctx, 1, &doc);
         assert!(bar.error.is_some());
         assert!(bar.marks(1, &doc).is_empty());

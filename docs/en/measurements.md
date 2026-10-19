@@ -247,3 +247,9 @@ Executable size: 9,291,264 B (+39 KB against step 9: the registry, the palette's
 |---|---|---|---|
 | Executable size | 9,291,264 B | 9,373,184 B | +80 KB: `regex` and the find bar |
 | Startup (15 interleaved rounds, median) | 140.3 ms | 141.9 ms | Noise (the machine was busy for both) |
+
+## Phase 2, step 12 — replace in file (2026-10-19, machine A)
+
+Executable size: 9,398,784 B (+25 KB against step 11).
+
+`find/replace_all_regex_50mb` (every `new Customer(…)` with its replacement `Customer.Create($1)`, about 10,000 matches in 50 MB): 79.8 ms. In this session the machine was about 7 times slower than at step 11 (in the same run `find/plain_50mb` gave 76 ms against 8.8 ms, and a release build took 6.5 min instead of 1.5), so the figure is pessimistic and will be repeated when the phase closes (step 15). Startup was not measured for the same reason.

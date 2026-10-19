@@ -19,6 +19,7 @@ pub enum Command {
     Find,
     FindNext,
     FindPrevious,
+    Replace,
     Palette,
     ToggleSidebar,
     QuickOpen,
@@ -51,7 +52,7 @@ const CTRL_SHIFT: Modifiers = Modifiers::COMMAND.plus(Modifiers::SHIFT);
 
 impl Command {
     /// In menu order.
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 19] = [
         Self::New,
         Self::Open,
         Self::OpenFolder,
@@ -63,6 +64,7 @@ impl Command {
         Self::Find,
         Self::FindNext,
         Self::FindPrevious,
+        Self::Replace,
         Self::Palette,
         Self::ToggleSidebar,
         Self::QuickOpen,
@@ -86,6 +88,7 @@ impl Command {
             Self::Find => "edit.find",
             Self::FindNext => "edit.findNext",
             Self::FindPrevious => "edit.findPrevious",
+            Self::Replace => "edit.replace",
             Self::Palette => "view.commandPalette",
             Self::ToggleSidebar => "view.toggleSidebar",
             Self::QuickOpen => "go.file",
@@ -106,7 +109,7 @@ impl Command {
             | Self::SaveAs
             | Self::CloseTab
             | Self::Exit => Menu::File,
-            Self::Find | Self::FindNext | Self::FindPrevious => Menu::Edit,
+            Self::Find | Self::FindNext | Self::FindPrevious | Self::Replace => Menu::Edit,
             Self::Palette | Self::ToggleSidebar => Menu::View,
             Self::QuickOpen
             | Self::GoToLine
@@ -129,6 +132,7 @@ impl Command {
             Self::Find => texts.menu_find(),
             Self::FindNext => texts.menu_find_next(),
             Self::FindPrevious => texts.menu_find_previous(),
+            Self::Replace => texts.menu_replace(),
             Self::Palette => texts.menu_command_palette(),
             Self::ToggleSidebar => texts.menu_sidebar(),
             Self::QuickOpen => texts.menu_quick_open(),
@@ -169,6 +173,7 @@ impl Command {
             Self::Find => keys!(CTRL, F),
             Self::FindNext => keys!(Modifiers::NONE, F3),
             Self::FindPrevious => keys!(Modifiers::SHIFT, F3),
+            Self::Replace => keys!(CTRL, H),
             Self::Palette => keys!(CTRL_SHIFT, P; Modifiers::NONE, F1),
             Self::ToggleSidebar => keys!(CTRL, B),
             Self::QuickOpen => keys!(CTRL, P),
@@ -192,7 +197,8 @@ impl Command {
             | Self::GoToLine
             | Self::Find
             | Self::FindNext
-            | Self::FindPrevious => state.active_loaded,
+            | Self::FindPrevious
+            | Self::Replace => state.active_loaded,
             Self::NextTab | Self::PreviousTab => state.tabs > 1,
             _ => true,
         }

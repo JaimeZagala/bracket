@@ -52,6 +52,8 @@ Con un proyecto abierto, el **panel del proyecto** muestra a la izquierda el ár
 - **Intro** o **F3** va a la siguiente y **Mayús+Intro** o **Mayús+F3**, a la anterior; al llegar al final se vuelve al principio. F3 también funciona con la barra cerrada: la abre con la última búsqueda.
 - **Aa** distingue mayúsculas y minúsculas, **ab** busca solo palabras completas y **.\*** usa expresiones regulares (sintaxis de la crate `regex`: `\d+`, `^using`, `(foo|bar)`). Alt+C, Alt+W y Alt+R los activan desde el teclado. Una expresión no válida se indica en rojo, con el motivo al pasar el ratón.
 - **Esc** cierra la barra y vuelve al editor.
+- **Ctrl+H** (o **Editar → Reemplazar…**) añade la fila de reemplazo. **Reemplazar** (o Intro en ese campo) cambia la coincidencia seleccionada y selecciona la siguiente; si lo seleccionado no es una coincidencia, primero selecciona la siguiente para que veas qué se va a cambiar. **Reemplazar todo** (Ctrl+Alt+Intro) las cambia todas de una vez; Ctrl+Z lo deshace en un solo paso.
+- Con **.\*** activado, el reemplazo puede usar los grupos de la expresión: `$1`, `$2`… o `${nombre}` para `(?<nombre>…)`, y `$$` para un `$`. `\n` inserta un salto de línea (el del documento: CRLF o LF), `\t` un tabulador y `\\` una barra invertida. Sin expresiones regulares, el texto se inserta tal cual.
 - En ficheros de más de 1 MB la búsqueda va en segundo plano y la barra muestra «Buscando…» mientras tanto.
 
 La búsqueda de texto en el proyecto llega en los próximos pasos de la Fase 2.

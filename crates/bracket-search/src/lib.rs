@@ -2,4 +2,4 @@
 
 pub mod find;
 
-pub use find::{FindError, FindOptions, Finder, Matches};
+pub use find::{FindError, FindOptions, Finder, Matches, Replacement};

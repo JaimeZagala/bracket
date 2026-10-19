@@ -1,5 +1,9 @@
-//! Finding text in one document: plain text or a regular expression, matching case or not,
-//! whole words or not. Matches come back as char ranges, the unit of the editor's selections.
+//! Finding and replacing text in one document: plain text or a regular expression, matching
+//! case or not, whole words or not. Matches come back as char ranges, the unit of the editor's
+//! selections.
+//!
+//! With regular expressions the replacement can use the groups of the match (`$1`, `${name}`,
+//! `$$` for a dollar sign) and `\n`, `\t` and `\\`; `\n` becomes the document's line break.
 
 use std::ops::Range;
 
@@ -35,6 +39,58 @@ pub struct Matches {
 #[derive(Clone, Debug)]
 pub struct Finder {
     regex: Regex,
+    is_regex: bool,
+}
+
+/// What matches are replaced with.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Replacement {
+    template: String,
+    /// The template expands groups and escapes (only for regular expressions).
+    expand: bool,
+}
+
+impl Replacement {
+    /// `line_break`: the document's line break, for `\n` in the template.
+    pub fn new(template: &str, finder: &Finder, line_break: &str) -> Self {
+        if !finder.is_regex {
+            return Self {
+                template: template.to_owned(),
+                expand: false,
+            };
+        }
+        let mut unescaped = String::with_capacity(template.len());
+        let mut chars = template.chars();
+        while let Some(c) = chars.next() {
+            if c != '\\' {
+                unescaped.push(c);
+                continue;
+            }
+            match chars.next() {
+                Some('n') => unescaped.push_str(line_break),
+                Some('t') => unescaped.push('\t'),
+                Some('\\') => unescaped.push('\\'),
+                Some(other) => {
+                    unescaped.push('\\');
+                    unescaped.push(other);
+                }
+                None => unescaped.push('\\'),
+            }
+        }
+        Self {
+            template: unescaped,
+            expand: true,
+        }
+    }
+
+    fn apply(&self, captures: &regex::Captures<'_>) -> String {
+        if !self.expand {
+            return self.template.clone();
+        }
+        let mut out = String::new();
+        captures.expand(&self.template, &mut out);
+        out
+    }
 }
 
 impl Finder {
@@ -57,7 +113,53 @@ impl Finder {
             .crlf(true)
             .build()
             .map_err(|e| FindError::Invalid(first_line(&e.to_string())))?;
-        Ok(Self { regex })
+        Ok(Self {
+            regex,
+            is_regex: options.regex,
+        })
+    }
+
+    /// Every match in `text` with what replaces it, in order, as char ranges. `None` if
+    /// cancelled.
+    pub fn replace_all(
+        &self,
+        text: &str,
+        replacement: &Replacement,
+        cancel: &CancelToken,
+    ) -> Option<Vec<(Range<usize>, String)>> {
+        let mut found = Vec::new();
+        let (mut byte, mut char) = (0, 0);
+        for (count, captures) in self.regex.captures_iter(text).enumerate() {
+            if count % 1024 == 0 && cancel.is_cancelled() {
+                return None;
+            }
+            let whole = captures.get(0).expect("group 0 is the whole match");
+            if whole.is_empty() {
+                continue;
+            }
+            char += text[byte..whole.start()].chars().count();
+            let start = char;
+            char += whole.as_str().chars().count();
+            byte = whole.end();
+            found.push((start..char, replacement.apply(&captures)));
+        }
+        Some(found)
+    }
+
+    /// What replaces the match at `range` (chars of `context`, a piece of the document that
+    /// starts at a line start and ends at a line end, so anchors still work). `None` if the
+    /// query does not match exactly there (the text changed).
+    pub fn replace_at(
+        &self,
+        context: &str,
+        range: Range<usize>,
+        replacement: &Replacement,
+    ) -> Option<String> {
+        let start = context.char_indices().nth(range.start).map(|(b, _)| b)?;
+        let captures = self.regex.captures_at(context, start)?;
+        let whole = captures.get(0)?;
+        (whole.start() == start && whole.as_str().chars().count() == range.len())
+            .then(|| replacement.apply(&captures))
     }
 
     /// Up to `limit` matches in `text`. `None` if cancelled. Empty matches (a regex like `x*`)
@@ -191,6 +293,71 @@ mod tests {
             panic!("an unclosed group is invalid");
         };
         assert!(!message.is_empty() && !message.contains('\n'), "{message}");
+    }
+
+    fn replace(text: &str, query: &str, options: FindOptions, with: &str) -> String {
+        let finder = Finder::new(query, options).unwrap();
+        let replacement = Replacement::new(with, &finder, "\r\n");
+        let found = finder
+            .replace_all(text, &replacement, &CancelToken::new())
+            .unwrap();
+        let chars: Vec<char> = text.chars().collect();
+        let mut out = String::new();
+        let mut at = 0;
+        for (range, new) in found {
+            out.extend(&chars[at..range.start]);
+            out.push_str(&new);
+            at = range.end;
+        }
+        out.extend(&chars[at..]);
+        out
+    }
+
+    #[test]
+    fn plain_replacements_are_taken_literally() {
+        assert_eq!(replace("a.b a.b", "a.b", PLAIN, "$1 c"), "$1 c $1 c");
+    }
+
+    #[test]
+    fn regex_replacements_use_groups_and_escapes() {
+        let regex = FindOptions {
+            regex: true,
+            ..PLAIN
+        };
+        assert_eq!(
+            replace("Smith, John; Doe, Jane", r"(\w+), (\w+)", regex, "$2 $1"),
+            "John Smith; Jane Doe"
+        );
+        assert_eq!(replace("id=7", r"id=(?<n>\d+)", regex, "${n}$$"), "7$");
+        // \n becomes the document's line break (CRLF here); \\ is a backslash.
+        assert_eq!(replace("a;b", ";", regex, r"\n"), "a\r\nb");
+        assert_eq!(replace("a;b", ";", regex, r"\t\\"), "a\t\\b");
+    }
+
+    #[test]
+    fn one_match_is_replaced_in_its_context() {
+        let regex = FindOptions {
+            regex: true,
+            ..PLAIN
+        };
+        let finder = Finder::new(r"^(\w+) = (\d+)", regex).unwrap();
+        let replacement = Replacement::new("$2 = $1", &finder, "\n");
+        let line = "count = 42";
+        assert_eq!(
+            finder.replace_at(line, 0..10, &replacement).as_deref(),
+            Some("42 = count")
+        );
+        assert_eq!(
+            finder.replace_at(line, 1..10, &replacement),
+            None,
+            "not a match there"
+        );
+        let words = Finder::new("ñu", PLAIN).unwrap();
+        let replacement = Replacement::new("gnu", &words, "\n");
+        assert_eq!(
+            words.replace_at("el ñu", 3..5, &replacement).as_deref(),
+            Some("gnu")
+        );
     }
 
     #[test]

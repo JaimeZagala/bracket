@@ -247,3 +247,9 @@ Tamaño del ejecutable: 9.291.264 B (+39 KB frente al paso 9: el registro, el mo
 |---|---|---|---|
 | Tamaño del ejecutable | 9.291.264 B | 9.373.184 B | +80 KB: `regex` y la barra de búsqueda |
 | Arranque (15 rondas intercaladas, mediana) | 140,3 ms | 141,9 ms | Ruido (el equipo iba cargado en las dos) |
+
+## Fase 2, paso 12 — reemplazar en el fichero (2026-10-19, equipo A)
+
+Tamaño del ejecutable: 9.398.784 B (+25 KB frente al paso 11).
+
+`find/replace_all_regex_50mb` (cada `new Customer(…)` con su reemplazo `Customer.Create($1)`, unas 10.000 coincidencias en 50 MB): 79,8 ms. En esta sesión el equipo iba unas 7 veces más lento que en el paso 11 (en la misma ejecución, `find/plain_50mb` dio 76 ms frente a 8,8 ms y una compilación release tardó 6,5 min en lugar de 1,5), así que la cifra es pesimista y se repetirá en el cierre de la fase (paso 15). El arranque no se midió por lo mismo.

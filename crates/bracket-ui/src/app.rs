@@ -30,7 +30,7 @@ use crate::dialogs;
 use crate::disk::{self, DiskNotice, DiskState, DiskWatch, NoticeAction};
 use crate::editor_view::{EditorStyle, EditorView};
 use crate::file_ops::{FileOp, FileOps, OpError};
-use crate::find_bar::{FindAction, FindBar};
+use crate::find_bar::{FindAction, FindBar, ReplaceOutcome};
 use crate::fonts::{self, Fallback, FontSource, LoadedFallback};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
@@ -1015,21 +1015,8 @@ impl BracketApp {
                     return;
                 }
             }
-            Command::Find => {
-                let doc = &self.active_tab().doc;
-                let selection = doc.buffer.selections().primary();
-                // A short selection on one line is what to look for.
-                let selected = (!selection.is_caret())
-                    .then(|| {
-                        doc.buffer
-                            .text()
-                            .slice(selection.start()..selection.end())
-                            .to_string()
-                    })
-                    .filter(|text| !text.contains('\n') && text.chars().count() <= 200);
-                self.find.open(selected, selection.start());
-                return;
-            }
+            Command::Find => return self.open_find(false),
+            Command::Replace => return self.open_find(true),
             Command::FindNext => return self.find_step(ctx, true),
             Command::FindPrevious => return self.find_step(ctx, false),
             Command::QuickOpen => return self.open_palette(""),
@@ -1041,6 +1028,42 @@ impl BracketApp {
         self.focus_editor(ctx);
     }
 
+    /// Ctrl+F (or Ctrl+H with the replace row): a short selection on one line is what to look
+    /// for.
+    fn open_find(&mut self, replace: bool) {
+        let doc = &self.active_tab().doc;
+        let selection = doc.buffer.selections().primary();
+        let selected = (!selection.is_caret())
+            .then(|| {
+                doc.buffer
+                    .text()
+                    .slice(selection.start()..selection.end())
+                    .to_string()
+            })
+            .filter(|text| !text.contains('\n') && text.chars().count() <= 200);
+        self.find.open(selected, selection.start(), replace);
+    }
+
+    /// Replaces the selected match, or every match, in the active tab.
+    fn replace(&mut self, all: bool) {
+        let tab = &mut self.tabs[self.active];
+        let outcome = if all {
+            self.find.replace_all(&mut tab.doc)
+        } else {
+            self.find.replace_one(tab.id, &mut tab.doc)
+        };
+        match outcome {
+            ReplaceOutcome::Select(range) => self.select_match(range),
+            ReplaceOutcome::All(count) => {
+                self.status = Some(self.texts.replaced_count(&count.to_string()));
+            }
+            ReplaceOutcome::ReadOnly => {
+                self.status = Some(self.texts.replace_read_only().to_owned());
+            }
+            ReplaceOutcome::Replaced | ReplaceOutcome::Nothing => {}
+        }
+    }
+
     /// F3 / Shift+F3: the next or previous match. With the bar closed, it opens and the first
     /// match after the caret is selected once found.
     fn find_step(&mut self, ctx: &egui::Context, forward: bool) {
@@ -1048,7 +1071,7 @@ impl BracketApp {
         let tab = &self.tabs[index];
         if !self.find.is_open() || !self.find.has_query() {
             let caret = tab.doc.buffer.selections().primary().start();
-            self.find.open(None, caret);
+            self.find.open(None, caret, false);
             return;
         }
         if let Some(range) = self.find.step(tab.id, &tab.doc, forward) {
@@ -2071,6 +2094,8 @@ impl eframe::App for BracketApp {
         match find_action {
             Some(FindAction::Next) => self.find_step(&ctx, true),
             Some(FindAction::Previous) => self.find_step(&ctx, false),
+            Some(FindAction::ReplaceOne) => self.replace(false),
+            Some(FindAction::ReplaceAll) => self.replace(true),
             Some(FindAction::Close) => {
                 self.find.close();
                 self.focus_editor(&ctx);

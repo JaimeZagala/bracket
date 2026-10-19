@@ -4,7 +4,7 @@
 use std::hint::black_box;
 
 use bracket_core::{CancelToken, Rope};
-use bracket_search::{FindOptions, Finder};
+use bracket_search::{FindOptions, Finder, Replacement};
 use criterion::{Criterion, criterion_group, criterion_main};
 
 /// About 50 MB of code-like lines; one line in 100 mentions "Customer".
@@ -58,6 +58,19 @@ fn searches(c: &mut Criterion) {
             b.iter(|| finder.find_all(black_box(&text), 100_000, &CancelToken::new()))
         });
     }
+    // Replace all: every match and its replacement, with a group from a regex.
+    let finder = Finder::new(
+        r"new Customer\((\S+)\)",
+        FindOptions {
+            regex: true,
+            ..FindOptions::default()
+        },
+    )
+    .unwrap();
+    let replacement = Replacement::new("Customer.Create($1)", &finder, "\r\n");
+    group.bench_function("replace_all_regex_50mb", |b| {
+        b.iter(|| finder.replace_all(black_box(&text), &replacement, &CancelToken::new()))
+    });
     group.finish();
 }
 
