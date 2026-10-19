@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-19
+
+Symbols and navigation (Phase 3). Not published: only the local `v0.3.0` tag exists.
+
 ### Added
 
 - Outline of the active document: an "Outline" tab in the side panel (also without a project, with View → Outline) with the symbols as a tree, collapsible, a click to go to each one and the one at the caret marked. Symbols for C#, CSS, JSON and XML with tree-sitter; for T-SQL by rules; for Razor, its directives and the members of `@code`. Language packages can bring a `symbols.toml` with regex rules. The outline is worked out again on a thread, incrementally, when typing stops.

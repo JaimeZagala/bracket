@@ -4,7 +4,7 @@ Editor de código nativo para Windows 10/11 x64, escrito en Rust. Intermedio ent
 
 ## Estado
 
-Fases 0, 1 y 2 completadas (0.1.0 y 0.2.0, etiquetas locales `v0.1.0` y `v0.2.0`). Fase 3 (símbolos y navegación, 0.3.0) en curso, aprobada el 2026-10-19 con tree-sitter (`docs/es/decisions/0003-symbols.md`). Versión del workspace: 0.2.0. Detalle en `docs/es/plan.md`.
+Fases 0 a 3 completadas (0.1.0, 0.2.0 y 0.3.0, etiquetas locales `v0.1.0`, `v0.2.0` y `v0.3.0`). La navegación por el proyecto (índice de símbolos, Ctrl+T, referencias) es experimental y está desactivada por defecto (`[experimental] project_navigation`). La Fase 4 (edición avanzada, 0.4.0) necesita aprobación antes de empezar. Versión del workspace: 0.3.0. Detalle en `docs/es/plan.md`.
 
 ## Comandos
 

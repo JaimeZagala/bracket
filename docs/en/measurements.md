@@ -396,3 +396,37 @@ Executable: 15,452,160 B (14.74 MB), +39 KB; 276,480 B (270 KB) left up to the 1
 ## Phase 3, step 11 — path at the caret (2026-10-19, machine A)
 
 With a generated 5.0 MiB XML (64,344 sibling `Line` elements), on the path thread: first time (full parse) 945 ms; moving the caret (no parse; counting the siblings of the same name) 41 ms; inserting an element in the middle (incremental parse) 153 ms. Executable: 15,500,288 B (14.78 MB), +48 KB; 228,352 B (223 KB) left up to the 15 MB budget.
+
+## Phase 3 — close, 0.3.0 (2026-10-19, machine A)
+
+`./scripts/measure.ps1` (temporary portable copy, without the user's session) with 0.3.0 and with 0.2.0 built separately the same day, and `cargo bench --workspace`. Plan budgets:
+
+| Measure | Budget | 0.2.0 | 0.3.0 | How |
+|---|---|---|---|---|
+| Executable size | < 15 MB | 9,523,712 B | 15,503,360 B (14.79 MB) | Release with LTO; 225,280 B (220 KB) left |
+| Startup to the first frame | < 150 ms | 146.5 ms | 136.7 ms (minimum 122.5) | `-Runs 12`, no file, one version after the other (busy machine) |
+| Startup, interleaved | < 150 ms | 125.7 / 128.4 / 130.9 ms | 131.1 / 123.7 / 132.4 ms | `compare-startup.ps1`, three batches: noise |
+| Startup opening a project | < 150 ms | 127.4 ms | 135.7 ms (minimum 117.2) | `-Runs 15 -Arguments target\project-50k` |
+| Idle memory, no files | — | 30.1 MB | 30.3 MB | Private working set at 3 s |
+| Memory with 10 tabs | < 80 MB | 43.2 MB | 43.2 MB | 10 files (26 KB): C#, Razor, T-SQL, XML, CSS, Markdown, TOML, Rust, text and JSON (active); at 5 s |
+| Memory with the 50,000-file project | — | 37.5 MB | 37.7 MB | Tree and file index; at 6 s |
+| Same with `[experimental] project_navigation = true` | — | — | 44.9 MB | `-Config` with the option; symbol index built |
+| `target/project-cs` with navigation on | — | — | 41.8 MB | 2,000 C# files, 210,000 symbols |
+| 100 MB file visible | < 1 s | 334 ms | Not measured again | Phase 3 did not change loading |
+| Ctrl+P with 50,000 files | < 50 ms | 7.0 ms | 7.8 ms (worst query, `file`) | `fuzzy/word` |
+| Ctrl+T with 210,000 symbols (experimental) | < 50 ms | — | 13.0 ms (worst query, one letter) | `fuzzy_symbols/one_letter` |
+
+With navigation off (the usual case), 0.3.0 uses the same memory as 0.2.0: the outline, the path at the caret and the index only work when needed.
+
+Phase 3 benchmarks:
+
+| Benchmark | Time (median) |
+|---|---|
+| `symbols/csharp_1_5mb`: extracting the symbols of a 1.47 MB C# file | 370 ms (4.0 MiB/s; step 1: 414 ms) |
+| `fuzzy_symbols/one_letter` … `no_match`: Ctrl+T with 210,000 symbols | 2.1–13.0 ms |
+| `fuzzy_symbols/definitions`: go to definition, `Compute3` (8,000 matches) | 1.6 ms |
+| Symbol index of `target/project-cs` (`--example project_symbols`) | 0.94–0.99 s with 4 threads (step 7, memory reduction) |
+
+Earlier phases' benchmarks, no regression: `walk/index_50k_files` 108 ms (0.2.0: 121), `walk/resync_root` 8.0 ms (10.5), `fuzzy/*` 0.84–7.8 ms (0.74–7.0), `folder/search_50k_files` 641 ms (940), `find/plain_50mb` 7.8 ms (10.3), `find/regex_50mb` 81 ms (100), `find/replace_all_regex_50mb` 10.1 ms (14.2), `open/rope_from_str_1m_lines` 20.7 ms (24.2), `open/load_file_1m_lines` 39.9 ms (45.2), `insert_char_middle_1m_lines` 1.1 µs (1.2), unchanged viewport 82 µs (110.6) and scrolling 398 µs (542.6). Highlighting: first pass of 10,000 C# lines 1.05 s, page at line 5,000 after typing at line 12 24.7 ms, unchanged 6.2 ms.
+
+The first run of each measurement (1.2–1.7 s) is a freshly copied exe: it includes Windows Defender's scan.

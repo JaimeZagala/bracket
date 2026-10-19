@@ -18,7 +18,10 @@
 # Usage:
 #   ./scripts/measure.ps1 -Exe target/release/bracket.exe [-Runs 10] [-Arguments 'file.txt']
 #       [-Maximized] [-Scroll [-ScrollRuns 5]] [-MaxStartupMs 150]
+#       [-Config config.toml]
 #
+# -Config copies that file next to the executable as its config.toml (for example, to measure
+# with [experimental] project_navigation = true).
 # -Maximized starts the window maximized (BRACKET_MEASURE_MAXIMIZED=1).
 # -MaxStartupMs N fails (exit code 1) when the warm median launch->first frame exceeds N ms.
 # -Scroll (needs a file in -Arguments) also runs BRACKET_MEASURE_SCROLL=<file>: after the first
@@ -33,7 +36,8 @@ param(
     [switch]$Maximized,
     [switch]$Scroll,
     [int]$ScrollRuns = 5,
-    [double]$MaxStartupMs = 0
+    [double]$MaxStartupMs = 0,
+    [string]$Config = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,6 +47,9 @@ New-Item -ItemType Directory -Path $work | Out-Null
 $runExe = Join-Path $work (Split-Path -Leaf $exePath)
 Copy-Item -LiteralPath $exePath -Destination $runExe
 New-Item -ItemType File -Path (Join-Path $work 'portable.toml') | Out-Null
+if ($Config) {
+    Copy-Item -LiteralPath (Resolve-Path -LiteralPath $Config).Path -Destination (Join-Path $work 'config.toml')
+}
 
 function Remove-Work {
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue

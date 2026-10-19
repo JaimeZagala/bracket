@@ -2,19 +2,19 @@
 
 # Architecture
 
-Status: Phase 2 complete (0.2.0). This document describes the agreed structure; each section states what is implemented.
+Status: Phase 3 complete (0.3.0). This document describes the agreed structure; each section states what is implemented.
 
 ## Workspace crates
 
 | Crate | Responsibility | Depends on (workspace) | Status |
 |---|---|---|---|
 | `bracket-core` | Buffer (ropey), multiple selections, transactional undo/redo, cursor movement, encoding, line endings, document model. No UI and no Windows APIs. | — | Phase 1: buffer, selections, history with exact saved state, movement, encodings, line endings, document with atomic saving, reloading and disk stamps |
-| `bracket-syntax` | Loading of built-in and external languages, incremental line-based highlighting with cache, themes. | `bracket-core` | Phase 1: language registry (the six built-in languages, extensions, badge and grammar) and highlighting with syntect. Phase 2: Rust as the seventh built-in language |
-| `bracket-index` | Project walking, symbol extraction (tree-sitter and regex), incremental index, fuzzy search, references by name. | `bracket-core` | Phase 2: project walk with `ignore` (file index and listing one folder), fuzzy search. Phase 3: symbols with tree-sitter (`symbols.rs`) |
+| `bracket-syntax` | Loading of built-in and external languages, incremental line-based highlighting with cache, themes. | `bracket-core` | Phase 1: language registry (the six built-in languages, extensions, badge and grammar) and highlighting with syntect. Phase 2: Rust as the seventh built-in language. Phase 3: `symbols.toml` in packages |
+| `bracket-index` | Project walking, symbol extraction (tree-sitter and regex), incremental index, fuzzy search, references by name. | `bracket-core` | Phase 2: project walk with `ignore` (file index and listing one folder), fuzzy search. Phase 3: symbols with tree-sitter and rules (`symbols.rs`, `rules.rs`), project symbol index (`project_symbols.rs`, experimental) and path at the caret (`caret_path.rs`) |
 | `bracket-search` | Cancellable regex find and replace in a file and across a folder, with streamed results. | `bracket-core`, `bracket-index` | Phase 2: find and replace in a document (`find.rs`) and find in folder (`folder.rs`) |
-| `bracket-session` | TOML configuration, portable mode, recoverable session, recent files, file watching, command registry. | `bracket-core` | Phase 1: paths (portable mode or `%APPDATA%`), TOML configuration, recoverable session and file watching. Phase 2: recent items, the project panel in the session and recursive project watching |
+| `bracket-session` | TOML configuration, portable mode, recoverable session, recent files, file watching, command registry. | `bracket-core` | Phase 1: paths (portable mode or `%APPDATA%`), TOML configuration, recoverable session and file watching. Phase 2: recent items, the project panel in the session and recursive project watching. Phase 3: watching also reports content changes; `[experimental]` in the configuration |
 | `bracket-update` | Release channel checks, download, checksum and signature verification, apply and rollback. | — | Empty |
-| `bracket-ui` | egui interface: editor view, tabs, project tree, palette, status bar. | `bracket-core`, `bracket-index`, `bracket-session`, `bracket-syntax` | Phase 1: tabs, File menu, status bar, system fonts, text catalogs. Phase 2: project tree in the side panel |
+| `bracket-ui` | egui interface: editor view, tabs, project tree, palette, status bar. | `bracket-core`, `bracket-index`, `bracket-session`, `bracket-syntax` | Phase 1: tabs, File menu, status bar, system fonts, text catalogs. Phase 2: project tree in the side panel. Phase 3: outline, the palette's `@` and `#` modes, go to definition and history, path at the caret |
 | `bracket-app` | `bracket.exe` binary: startup, single instance, arguments, Windows manifest, HKCU registration. | `bracket-ui`, `bracket-session`, `bracket-syntax`, `bracket-update` | Phase 0: startup and file argument. Phase 1: resolves paths, loads the configuration and language packages, single instance and command line |
 
 ## Dependency rules
@@ -164,7 +164,7 @@ Still to be solved; each item states the planned phase.
 
 - **Fallback font memory:** egui takes about twice the size of each loaded font; with Japanese or Chinese text on screen, Microsoft YaHei adds about 42 MB. Alternative if it matters: a smaller CJK font with less coverage (MS Gothic, 9 MB).
 - **No system fonts:** if no font at all were found (Consolas and Segoe UI ship with Windows), the application would exit without any message.
-- **Startup (all phases):** 120–135 ms without load in 0.1.0 and 124 ms in 0.2.0 (130 ms opening a 50,000-file project: the index starts after the first frame); about 60 ms are OpenGL initialization on Windows and no eframe setting reduces it (see [measurements.md](measurements.md)). About 15–25 ms of margin remain: new work must stay off the first frame's path, and `check.ps1 -Perf` watches for regressions.
+- **Startup (all phases):** 120–135 ms without load in 0.1.0 124 ms in 0.2.0 (130 ms opening a 50,000-file project: the index starts after the first frame) and the same in 0.3.0 (compared interleaved with 0.2.0, three batches from −5 to +5 ms; tree-sitter and the symbols are not loaded until needed); about 60 ms are OpenGL initialization on Windows and no eframe setting reduces it (see [measurements.md](measurements.md)). About 15–25 ms of margin remain: new work must stay off the first frame's path, and `check.ps1 -Perf` watches for regressions.
 - **Licenses in the distribution (Phase 5):** the BSD-3-Clause notice of encoding_rs (and those of the other dependencies) must ship with the installer and the zip.
 - **Saving from the unsaved-changes dialog:** it runs on the UI thread and blocks it while it lasts (usually milliseconds). Hard links to the original file are not kept when saving (inherent to atomic saving).
 - **Text units (Phase 4):** grapheme clusters are not treated as a unit and wide (CJK) characters count as one column.

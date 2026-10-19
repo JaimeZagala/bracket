@@ -2,7 +2,7 @@
 
 # User guide
 
-Bracket 0.2.0 (Phase 2, projects). This guide describes what already works and grows with each phase.
+Bracket 0.3.0 (Phase 3, symbols and navigation). This guide describes what already works and grows with each phase.
 
 ## Opening and saving
 

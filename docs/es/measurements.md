@@ -396,3 +396,37 @@ Ejecutable: 15.452.160 B (14,74 MB), +39 KB; quedan 276.480 B (270 KB) hasta el 
 ## Fase 3, paso 11 — ruta bajo el cursor (2026-10-19, equipo A)
 
 Con un XML generado de 5,0 MiB (64.344 elementos `Line` hermanos), en el hilo de la ruta: primera vez (análisis completo) 945 ms; mover el cursor (sin análisis; contar los hermanos del mismo nombre) 41 ms; insertar un elemento en medio (análisis incremental) 153 ms. Ejecutable: 15.500.288 B (14,78 MB), +48 KB; quedan 228.352 B (223 KB) hasta el presupuesto de 15 MB.
+
+## Fase 3 — cierre, 0.3.0 (2026-10-19, equipo A)
+
+`./scripts/measure.ps1` (copia portable temporal, sin la sesión del usuario) con la 0.3.0 y con la 0.2.0 compilada aparte el mismo día, y `cargo bench --workspace`. Presupuestos del plan:
+
+| Medida | Presupuesto | 0.2.0 | 0.3.0 | Cómo |
+|---|---|---|---|---|
+| Tamaño del ejecutable | < 15 MB | 9.523.712 B | 15.503.360 B (14,79 MB) | Release con LTO; quedan 225.280 B (220 KB) |
+| Arranque hasta el primer fotograma | < 150 ms | 146,5 ms | 136,7 ms (mínimo 122,5) | `-Runs 12`, sin fichero, una versión tras otra (equipo cargado) |
+| Arranque, intercalado | < 150 ms | 125,7 / 128,4 / 130,9 ms | 131,1 / 123,7 / 132,4 ms | `compare-startup.ps1`, tres tandas: ruido |
+| Arranque abriendo un proyecto | < 150 ms | 127,4 ms | 135,7 ms (mínimo 117,2) | `-Runs 15 -Arguments target\project-50k` |
+| Memoria en reposo, sin ficheros | — | 30,1 MB | 30,3 MB | Conjunto de trabajo privado a los 3 s |
+| Memoria con 10 pestañas | < 80 MB | 43,2 MB | 43,2 MB | 10 ficheros (26 KB): C#, Razor, T-SQL, XML, CSS, Markdown, TOML, Rust, texto y JSON (activa); a los 5 s |
+| Memoria con el proyecto de 50.000 ficheros | — | 37,5 MB | 37,7 MB | Árbol e índice de ficheros; a los 6 s |
+| Ídem con `[experimental] project_navigation = true` | — | — | 44,9 MB | `-Config` con la opción; índice de símbolos construido |
+| `target/project-cs` con la navegación activada | — | — | 41,8 MB | 2.000 ficheros C#, 210.000 símbolos |
+| Fichero de 100 MB visible | < 1 s | 334 ms | No medido de nuevo | La Fase 3 no cambió la carga |
+| Ctrl+P con 50.000 ficheros | < 50 ms | 7,0 ms | 7,8 ms (peor consulta, `file`) | `fuzzy/word` |
+| Ctrl+T con 210.000 símbolos (experimental) | < 50 ms | — | 13,0 ms (peor consulta, una letra) | `fuzzy_symbols/one_letter` |
+
+Con la navegación desactivada (lo normal), la 0.3.0 gasta la misma memoria que la 0.2.0: el esquema, la ruta bajo el cursor y el índice solo trabajan cuando hacen falta.
+
+Benchmarks de la Fase 3:
+
+| Benchmark | Tiempo (mediana) |
+|---|---|
+| `symbols/csharp_1_5mb`: extraer los símbolos de un C# de 1,47 MB | 370 ms (4,0 MiB/s; paso 1: 414 ms) |
+| `fuzzy_symbols/one_letter` … `no_match`: Ctrl+T con 210.000 símbolos | 2,1–13,0 ms |
+| `fuzzy_symbols/definitions`: ir a definición, `Compute3` (8.000 coincidencias) | 1,6 ms |
+| Índice de símbolos de `target/project-cs` (`--example project_symbols`) | 0,94–0,99 s con 4 hilos (paso 7, reducción de memoria) |
+
+Benchmarks de las fases anteriores, sin regresión: `walk/index_50k_files` 108 ms (0.2.0: 121), `walk/resync_root` 8,0 ms (10,5), `fuzzy/*` 0,84–7,8 ms (0,74–7,0), `folder/search_50k_files` 641 ms (940), `find/plain_50mb` 7,8 ms (10,3), `find/regex_50mb` 81 ms (100), `find/replace_all_regex_50mb` 10,1 ms (14,2), `open/rope_from_str_1m_lines` 20,7 ms (24,2), `open/load_file_1m_lines` 39,9 ms (45,2), `insert_char_middle_1m_lines` 1,1 µs (1,2), viewport sin cambios 82 µs (110,6) y con scroll 398 µs (542,6). El resaltado: primera pasada de 10.000 líneas de C# 1,05 s, página en la línea 5.000 tras escribir en la 12 24,7 ms, sin cambios 6,2 ms.
+
+La primera ejecución de cada medición (1,2–1,7 s) es la de un exe recién copiado: incluye el análisis de Windows Defender.
