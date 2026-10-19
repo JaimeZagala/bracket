@@ -62,6 +62,9 @@ notify = { version = "8.2.0", default-features = false }
 syntect = { version = "5.3.0", default-features = false }
 # Walking projects with .gitignore rules (ripgrep's walker), on several threads.
 ignore = "0.4.33"
+# Regular expressions for find and replace (linear time, no backtracking). Its engine,
+# regex-automata, is already linked through syntect and globset.
+regex = "1.13.1"
 # Moving files and folders to the Recycle Bin (IFileOperation on Windows). Without chrono: it is
 # only needed to list what is in the bin.
 trash = { version = "5.2.9", default-features = false, features = ["coinit_apartmentthreaded"] }

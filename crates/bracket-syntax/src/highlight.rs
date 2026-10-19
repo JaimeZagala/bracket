@@ -111,6 +111,8 @@ pub struct ThemeColors {
     pub selection: Option<[u8; 4]>,
     pub gutter: Option<[u8; 4]>,
     pub gutter_foreground: Option<[u8; 4]>,
+    /// Background of search matches.
+    pub find_highlight: Option<[u8; 4]>,
 }
 
 /// The editor-area colours of theme `name` (the light default if there is no such theme).
@@ -124,6 +126,7 @@ pub fn theme_colors(name: &str) -> ThemeColors {
         selection: rgba(settings.selection),
         gutter: rgba(settings.gutter),
         gutter_foreground: rgba(settings.gutter_foreground),
+        find_highlight: rgba(settings.find_highlight),
     }
 }
 

@@ -40,6 +40,8 @@ pub struct EditorStyle {
     pub caret: Color32,
     /// Background of the line numbers, if the theme has its own.
     pub gutter: Option<Color32>,
+    /// Background of the matches of a search.
+    pub find_match: Color32,
 }
 
 impl EditorStyle {
@@ -51,6 +53,11 @@ impl EditorStyle {
             selection: visuals.selection.bg_fill,
             caret: visuals.text_cursor.stroke.color,
             gutter: None,
+            find_match: if visuals.dark_mode {
+                Color32::from_rgba_unmultiplied(255, 200, 0, 70)
+            } else {
+                Color32::from_rgba_unmultiplied(255, 190, 0, 110)
+            },
         }
     }
 }
@@ -60,6 +67,8 @@ impl EditorStyle {
 struct Look<'a> {
     highlights: Option<&'a Highlights>,
     style: &'a EditorStyle,
+    /// Matches of a search, as sorted char ranges.
+    marks: &'a [std::ops::Range<usize>],
 }
 
 pub struct EditorView {
@@ -153,13 +162,15 @@ impl EditorView {
         };
     }
 
-    /// Paints the document and handles input. `highlights` colours the lines it covers.
+    /// Paints the document and handles input. `highlights` colours the lines it covers;
+    /// `marks` (sorted char ranges, like the matches of a search) get a background.
     pub fn show(
         &mut self,
         ui: &mut Ui,
         doc: &mut Document,
         highlights: Option<&Highlights>,
         style: &EditorStyle,
+        marks: &[std::ops::Range<usize>],
     ) -> ViewOutput {
         let mut output = ViewOutput::default();
         let font = FontId::monospace(self.font_size);
@@ -216,7 +227,11 @@ impl EditorView {
                 &layout,
                 first..last,
                 response.has_focus(),
-                Look { highlights, style },
+                Look {
+                    highlights,
+                    style,
+                    marks,
+                },
             );
 
             let caret_rect = self.caret_rect(ui, doc, &layout);
@@ -416,7 +431,11 @@ impl EditorView {
     ) -> Option<char> {
         let mut missing_glyph = None;
         let painter = ui.painter();
-        let Look { highlights, style } = look;
+        let Look {
+            highlights,
+            style,
+            marks,
+        } = look;
         let text_color = style.text;
         let weak_color = style.line_number;
         let selection_color = style.selection;
@@ -435,6 +454,20 @@ impl EditorView {
         let selections = doc.buffer.selections();
         let primary_head = selections.primary().head;
         let version = doc.buffer.version();
+        // Only the marks that reach the visible lines.
+        let marks = match (lines.start < lines.end).then(|| {
+            (
+                movement::line_start(text, lines.start),
+                movement::line_end(text, lines.end - 1),
+            )
+        }) {
+            Some((from, to)) => {
+                let first = marks.partition_point(|m| m.end < from);
+                let last = first + marks[first..].partition_point(|m| m.start <= to);
+                &marks[first..last]
+            }
+            None => &[][..],
+        };
 
         for line in lines {
             let y = layout.origin.y + line as f32 * m.row_height;
@@ -473,6 +506,22 @@ impl EditorView {
             self.max_line_width = self.max_line_width.max(galley.size().x);
             let text_origin = pos2(layout.origin.x + m.gutter_width, y + m.text_offset);
             let x_of = |pos: usize| text_origin.x + display.x_of(&galley, pos - line_start);
+
+            for mark in marks {
+                if mark.end <= line_start || mark.start > line_end {
+                    continue;
+                }
+                let x0 = x_of(mark.start.max(line_start));
+                let mut x1 = x_of(mark.end.min(line_end));
+                if mark.end > line_end {
+                    x1 += m.char_width * 0.5;
+                }
+                painter.rect_filled(
+                    Rect::from_min_max(pos2(x0, y), pos2(x1, y + m.row_height)),
+                    2.0,
+                    style.find_match,
+                );
+            }
 
             for sel in selections.iter().filter(|s| !s.is_caret()) {
                 if sel.end() < line_start || sel.start() > line_end {
@@ -821,7 +870,7 @@ mod tests {
         };
         let mut output = ctx.run_ui(input, |ui| {
             egui::CentralPanel::default().show(ui, |ui| {
-                view.show(ui, doc, None, &EditorStyle::from_visuals(ui.visuals()));
+                view.show(ui, doc, None, &EditorStyle::from_visuals(ui.visuals()), &[]);
             });
         });
         // There is no renderer to upload font textures to; egui asserts they are handled.

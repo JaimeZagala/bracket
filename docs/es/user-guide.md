@@ -44,6 +44,16 @@ Con un proyecto abierto, el **panel del proyecto** muestra a la izquierda el ár
 - **Ctrl+G** (o **Ir → Ir a línea…**) abre el cuadro con `:` delante: escribe la línea, o `línea:columna`, e Intro. También funciona escribir `:` en Ctrl+P.
 - Los menús muestran los mismos comandos y atajos; los que no se pueden usar en ese momento (por ejemplo, Cerrar carpeta sin proyecto) salen desactivados.
 
+### Buscar en el fichero (Ctrl+F)
+
+**Ctrl+F** (o **Editar → Buscar…**) abre una barra encima del editor. Si hay texto seleccionado en una sola línea, se busca ese texto.
+
+- Mientras escribes se selecciona la primera coincidencia desde el cursor y todas quedan marcadas en el texto. El contador dice cuál es la seleccionada y cuántas hay («3 de 120»); a partir de 100.000 muestra «100000+».
+- **Intro** o **F3** va a la siguiente y **Mayús+Intro** o **Mayús+F3**, a la anterior; al llegar al final se vuelve al principio. F3 también funciona con la barra cerrada: la abre con la última búsqueda.
+- **Aa** distingue mayúsculas y minúsculas, **ab** busca solo palabras completas y **.\*** usa expresiones regulares (sintaxis de la crate `regex`: `\d+`, `^using`, `(foo|bar)`). Alt+C, Alt+W y Alt+R los activan desde el teclado. Una expresión no válida se indica en rojo, con el motivo al pasar el ratón.
+- **Esc** cierra la barra y vuelve al editor.
+- En ficheros de más de 1 MB la búsqueda va en segundo plano y la barra muestra «Buscando…» mientras tanto.
+
 La búsqueda de texto en el proyecto llega en los próximos pasos de la Fase 2.
 
 ## Pestañas

@@ -44,6 +44,16 @@ With a project open, the **project panel** on the left shows the folder tree: fo
 - **Ctrl+G** (or **Go → Go to line…**) opens the box with `:` in front: type the line, or `line:column`, and Enter. Typing `:` in Ctrl+P works too.
 - The menus show the same commands and shortcuts; the ones that cannot be used at the moment (for example, Close folder without a project) are disabled.
 
+### Find in file (Ctrl+F)
+
+**Ctrl+F** (or **Edit → Find…**) opens a bar above the editor. If text is selected on a single line, that text is searched for.
+
+- While you type, the first match from the caret is selected and all of them are marked in the text. The counter says which one is selected and how many there are ("3 of 120"); from 100,000 on it shows "100000+".
+- **Enter** or **F3** goes to the next one and **Shift+Enter** or **Shift+F3** to the previous one; at the end it wraps around to the start. F3 also works with the bar closed: it opens it with the last search.
+- **Aa** matches case, **ab** finds whole words only and **.\*** uses regular expressions (the `regex` crate's syntax: `\d+`, `^using`, `(foo|bar)`). Alt+C, Alt+W and Alt+R turn them on from the keyboard. An invalid expression is shown in red, with the reason when hovering over it.
+- **Esc** closes the bar and goes back to the editor.
+- In files over 1 MB the search runs in the background and the bar shows "Searching…" meanwhile.
+
 Text search in the project comes in the next steps of Phase 2.
 
 ## Tabs

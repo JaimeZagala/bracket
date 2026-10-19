@@ -6,6 +6,7 @@ mod dialogs;
 mod disk;
 mod editor_view;
 mod file_ops;
+mod find_bar;
 pub mod fonts;
 mod i18n;
 mod measure;

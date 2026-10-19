@@ -231,3 +231,19 @@ The tree paints only the visible rows (`ScrollArea::show_rows`) and rebuilds the
 ## Phase 2, step 10 — command palette (2026-10-19, machine A)
 
 Executable size: 9,291,264 B (+39 KB against step 9: the registry, the palette's command mode and the Go menu).
+
+## Phase 2, step 11 — find in file (2026-10-19, machine A)
+
+`cargo bench -p bracket-search`: a 50 MB document where one line in 100 contains "Customer".
+
+| Benchmark | Time (median) |
+|---|---|
+| `find/rope_to_string_50mb`: copying the rope into one string, on the thread | 25.5 ms |
+| `find/plain_50mb`: "customer", case-insensitive | 8.8 ms |
+| `find/whole_word_50mb`: the same, whole word | 8.1 ms |
+| `find/regex_50mb`: `item\d+5\.Price` | 90.5 ms |
+
+| Measure | Step 10 | Step 11 | Change |
+|---|---|---|---|
+| Executable size | 9,291,264 B | 9,373,184 B | +80 KB: `regex` and the find bar |
+| Startup (15 interleaved rounds, median) | 140.3 ms | 141.9 ms | Noise (the machine was busy for both) |

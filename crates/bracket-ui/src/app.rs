@@ -10,10 +10,10 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::Instant;
 
-use bracket_core::Selections;
 use bracket_core::document::{self, DiskStamp, Document, FileReplacer, LineEnding, SaveError};
 use bracket_core::encoding::{self, TextEncoding};
 use bracket_core::movement::{self, Motion};
+use bracket_core::{Selection, Selections};
 use bracket_index::WalkOptions;
 use bracket_session::config::AUTO_THEME;
 use bracket_session::{
@@ -30,6 +30,7 @@ use crate::dialogs;
 use crate::disk::{self, DiskNotice, DiskState, DiskWatch, NoticeAction};
 use crate::editor_view::{EditorStyle, EditorView};
 use crate::file_ops::{FileOp, FileOps, OpError};
+use crate::find_bar::{FindAction, FindBar};
 use crate::fonts::{self, Fallback, FontSource, LoadedFallback};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
@@ -145,6 +146,8 @@ pub struct BracketApp {
     indexed: Option<usize>,
     /// The Ctrl+P palette, while it is open.
     quick_open: Option<QuickOpen>,
+    /// The find bar above the editor (Ctrl+F).
+    find: FindBar,
     /// Creating, renaming and deleting from the tree, on worker threads.
     file_ops: FileOps,
     /// An entry waiting for the user to confirm it goes to the Recycle Bin.
@@ -286,6 +289,7 @@ impl BracketApp {
             index: None,
             indexed: None,
             quick_open: None,
+            find: FindBar::default(),
             file_ops: FileOps::new(),
             pending_trash: None,
             sidebar: Sidebar::default(),
@@ -1011,6 +1015,23 @@ impl BracketApp {
                     return;
                 }
             }
+            Command::Find => {
+                let doc = &self.active_tab().doc;
+                let selection = doc.buffer.selections().primary();
+                // A short selection on one line is what to look for.
+                let selected = (!selection.is_caret())
+                    .then(|| {
+                        doc.buffer
+                            .text()
+                            .slice(selection.start()..selection.end())
+                            .to_string()
+                    })
+                    .filter(|text| !text.contains('\n') && text.chars().count() <= 200);
+                self.find.open(selected, selection.start());
+                return;
+            }
+            Command::FindNext => return self.find_step(ctx, true),
+            Command::FindPrevious => return self.find_step(ctx, false),
             Command::QuickOpen => return self.open_palette(""),
             Command::Palette => return self.open_palette(">"),
             Command::GoToLine => return self.open_palette(":"),
@@ -1018,6 +1039,31 @@ impl BracketApp {
             Command::Exit => ctx.send_viewport_cmd(ViewportCommand::Close),
         }
         self.focus_editor(ctx);
+    }
+
+    /// F3 / Shift+F3: the next or previous match. With the bar closed, it opens and the first
+    /// match after the caret is selected once found.
+    fn find_step(&mut self, ctx: &egui::Context, forward: bool) {
+        let index = self.active;
+        let tab = &self.tabs[index];
+        if !self.find.is_open() || !self.find.has_query() {
+            let caret = tab.doc.buffer.selections().primary().start();
+            self.find.open(None, caret);
+            return;
+        }
+        if let Some(range) = self.find.step(tab.id, &tab.doc, forward) {
+            self.select_match(range);
+        }
+        let _ = ctx;
+    }
+
+    /// Selects a match in the active tab and scrolls to it.
+    fn select_match(&mut self, range: std::ops::Range<usize>) {
+        let tab = &mut self.tabs[self.active];
+        tab.doc
+            .buffer
+            .set_selections(Selections::single(Selection::new(range.start, range.end)));
+        tab.view.request_scroll_to_caret();
     }
 
     /// Opens the palette: for files, for commands (`>`) or for a line (`:`).
@@ -1151,6 +1197,11 @@ impl BracketApp {
                                 }
                             });
                         }
+                    }
+                });
+                ui.menu_button(texts.menu_edit(), |ui| {
+                    for command in Command::in_menu(Menu::Edit) {
+                        entry(ui, command);
                     }
                 });
                 ui.menu_button(texts.menu_view(), |ui| {
@@ -1527,6 +1578,7 @@ impl BracketApp {
             selection: colors.selection.map_or(base.selection, color32),
             caret: colors.caret.map_or(base.caret, color32),
             gutter: colors.gutter.map(color32),
+            find_match: colors.find_highlight.map_or(base.find_match, color32),
         }
     }
 
@@ -1892,6 +1944,13 @@ impl eframe::App for BracketApp {
             self.status = Some(self.texts.project_bad_exclude(&bad.pattern, &bad.error));
         }
         self.poll_loading(ctx);
+        let tab = &self.tabs[self.active];
+        if self.find.is_open() && tab.loading.is_none() {
+            self.find.update(ctx, tab.id, &tab.doc);
+            if let Some(range) = self.find.take_jump(tab.id, &tab.doc) {
+                self.select_match(range);
+            }
+        }
         // Editing a preview tab keeps it.
         for tab in &mut self.tabs {
             tab.preview &= !tab.doc.is_dirty();
@@ -1958,6 +2017,14 @@ impl eframe::App for BracketApp {
         }
         let mut missing_glyph = None;
         let mut notice_action = None;
+        let mut find_action = None;
+        // Escape in the editor closes the find bar.
+        if self.find.is_open()
+            && ctx.memory(|m| m.has_focus(self.active_tab().view.id()))
+            && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+        {
+            find_action = Some(FindAction::Close);
+        }
         let style = self.editor_style(ui.visuals());
         let background = self
             .theme_colors
@@ -1974,10 +2041,14 @@ impl eframe::App for BracketApp {
                     ctx.request_repaint_after(tabs::LOADING_MESSAGE_DELAY - waited);
                 }
             } else {
+                if self.find.is_open() {
+                    find_action = self.find.show(ui, self.texts, tab.id, &tab.doc);
+                }
                 if let Some(notice) = &tab.disk.notice {
                     let name = tab.title(self.texts);
                     notice_action = disk::notice_bar(ui, notice, &name, self.texts);
                 }
+                let tab_id = tab.id;
                 let Tab {
                     view,
                     doc,
@@ -1985,7 +2056,8 @@ impl eframe::App for BracketApp {
                     ..
                 } = tab;
                 let highlights = highlight.as_mut().and_then(TabHighlight::current);
-                let output = view.show(ui, doc, highlights, &style);
+                let marks = self.find.marks(tab_id, doc);
+                let output = view.show(ui, doc, highlights, &style, marks);
                 if let Some(highlight) = highlight {
                     highlight.follow(doc, output.visible_lines);
                 }
@@ -1995,6 +2067,15 @@ impl eframe::App for BracketApp {
         if let Some(action) = notice_action {
             self.resolve_disk_notice(action);
             self.focus_editor(&ctx);
+        }
+        match find_action {
+            Some(FindAction::Next) => self.find_step(&ctx, true),
+            Some(FindAction::Previous) => self.find_step(&ctx, false),
+            Some(FindAction::Close) => {
+                self.find.close();
+                self.focus_editor(&ctx);
+            }
+            None => {}
         }
         if let Some(c) = missing_glyph {
             self.request_fallback(&ctx, c);

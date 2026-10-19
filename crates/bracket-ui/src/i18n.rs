@@ -197,6 +197,70 @@ impl Texts {
         self.fill("go_to_line_hint", &[("count", &count)])
     }
 
+    pub fn menu_edit(&self) -> &str {
+        self.get("menu_edit")
+    }
+
+    pub fn menu_find(&self) -> &str {
+        self.get("menu_find")
+    }
+
+    pub fn menu_find_next(&self) -> &str {
+        self.get("menu_find_next")
+    }
+
+    pub fn menu_find_previous(&self) -> &str {
+        self.get("menu_find_previous")
+    }
+
+    pub fn find_hint(&self) -> &str {
+        self.get("find_hint")
+    }
+
+    pub fn find_match_case(&self) -> &str {
+        self.get("find_match_case")
+    }
+
+    pub fn find_whole_word(&self) -> &str {
+        self.get("find_whole_word")
+    }
+
+    pub fn find_regex(&self) -> &str {
+        self.get("find_regex")
+    }
+
+    pub fn find_previous_tip(&self) -> &str {
+        self.get("find_previous_tip")
+    }
+
+    pub fn find_next_tip(&self) -> &str {
+        self.get("find_next_tip")
+    }
+
+    pub fn find_close_tip(&self) -> &str {
+        self.get("find_close_tip")
+    }
+
+    pub fn find_none(&self) -> &str {
+        self.get("find_none")
+    }
+
+    pub fn find_searching(&self) -> &str {
+        self.get("find_searching")
+    }
+
+    pub fn find_invalid(&self) -> &str {
+        self.get("find_invalid")
+    }
+
+    pub fn find_position(&self, current: &str, total: &str) -> String {
+        self.fill("find_position", &[("current", &current), ("total", &total)])
+    }
+
+    pub fn find_total(&self, total: &str) -> String {
+        self.fill("find_total", &[("total", &total)])
+    }
+
     pub fn menu_recent(&self) -> &str {
         self.get("menu_recent")
     }
@@ -632,6 +696,22 @@ mod tests {
                     t.dialog_open_folder_title().to_owned(),
                 ),
                 ("menu_recent", t.menu_recent().to_owned()),
+                ("menu_edit", t.menu_edit().to_owned()),
+                ("menu_find", t.menu_find().to_owned()),
+                ("menu_find_next", t.menu_find_next().to_owned()),
+                ("menu_find_previous", t.menu_find_previous().to_owned()),
+                ("find_hint", t.find_hint().to_owned()),
+                ("find_match_case", t.find_match_case().to_owned()),
+                ("find_whole_word", t.find_whole_word().to_owned()),
+                ("find_regex", t.find_regex().to_owned()),
+                ("find_previous_tip", t.find_previous_tip().to_owned()),
+                ("find_next_tip", t.find_next_tip().to_owned()),
+                ("find_close_tip", t.find_close_tip().to_owned()),
+                ("find_none", t.find_none().to_owned()),
+                ("find_searching", t.find_searching().to_owned()),
+                ("find_invalid", t.find_invalid().to_owned()),
+                ("find_position", t.find_position("1", "1")),
+                ("find_total", t.find_total("1")),
                 ("menu_go", t.menu_go().to_owned()),
                 ("menu_go_to_line", t.menu_go_to_line().to_owned()),
                 ("menu_command_palette", t.menu_command_palette().to_owned()),

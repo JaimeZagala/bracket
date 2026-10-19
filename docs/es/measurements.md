@@ -231,3 +231,19 @@ El árbol solo pinta las filas visibles (`ScrollArea::show_rows`) y reconstruye 
 ## Fase 2, paso 10 — paleta de comandos (2026-10-19, equipo A)
 
 Tamaño del ejecutable: 9.291.264 B (+39 KB frente al paso 9: el registro, el modo comandos de la paleta y el menú Ir).
+
+## Fase 2, paso 11 — buscar en el fichero (2026-10-19, equipo A)
+
+`cargo bench -p bracket-search`: un documento de 50 MB con una línea de cada 100 que contiene «Customer».
+
+| Benchmark | Tiempo (mediana) |
+|---|---|
+| `find/rope_to_string_50mb`: copiar la cuerda a un texto, en el hilo | 25,5 ms |
+| `find/plain_50mb`: «customer» sin distinguir mayúsculas | 8,8 ms |
+| `find/whole_word_50mb`: lo mismo, palabra completa | 8,1 ms |
+| `find/regex_50mb`: `item\d+5\.Price` | 90,5 ms |
+
+| Medida | Paso 10 | Paso 11 | Cambio |
+|---|---|---|---|
+| Tamaño del ejecutable | 9.291.264 B | 9.373.184 B | +80 KB: `regex` y la barra de búsqueda |
+| Arranque (15 rondas intercaladas, mediana) | 140,3 ms | 141,9 ms | Ruido (el equipo iba cargado en las dos) |

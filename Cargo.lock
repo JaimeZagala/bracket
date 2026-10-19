@@ -555,6 +555,11 @@ dependencies = [
 [[package]]
 name = "bracket-search"
 version = "0.1.0"
+dependencies = [
+ "bracket-core",
+ "criterion",
+ "regex",
+]
 
 [[package]]
 name = "bracket-session"
@@ -582,6 +587,7 @@ version = "0.1.0"
 dependencies = [
  "bracket-core",
  "bracket-index",
+ "bracket-search",
  "bracket-session",
  "bracket-syntax",
  "criterion",
