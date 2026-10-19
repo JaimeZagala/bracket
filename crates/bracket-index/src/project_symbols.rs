@@ -1,8 +1,9 @@
 //! The symbols of every file in a project, kept up to date as files change.
 //!
-//! Files are read and their symbols extracted on several threads at once. Each file keeps its
-//! names in one string and its symbols as small fixed-size records, so a project with hundreds of
-//! thousands of symbols stays in a few tens of megabytes.
+//! Files are read and their symbols extracted on several threads at once, each thread with one
+//! parser per language for all its files. Each file keeps its names in one string and its
+//! symbols as small fixed-size records, so a project with hundreds of thousands of symbols stays
+//! within a few megabytes.
 
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -19,7 +20,7 @@ use bracket_core::encoding;
 
 use crate::Cancelled;
 use crate::rules::RuleSet;
-use crate::symbols::{self, Symbol, SymbolKind};
+use crate::symbols::{Symbol, SymbolKind, SymbolParser};
 
 /// Larger files are left out (generated code, data dumps): they keep no symbols.
 pub const MAX_FILE_BYTES: u64 = 1024 * 1024;
@@ -27,11 +28,17 @@ pub const MAX_FILE_BYTES: u64 = 1024 * 1024;
 /// With more changed paths than this in one batch, every file is checked again instead.
 const MAX_CHANGED: usize = 256;
 
+/// Threads that read files. Each one leaves the heap a little larger after a full read (about
+/// half a megabyte), and more threads gain little: 2,000 C# files take 0.95 s with 4 threads and
+/// 0.51 s with 15.
+const MAX_THREADS: usize = 4;
+
 /// How to get the symbols of a file: its language (a `bracket-syntax` id) and a language
 /// package's rules, which win over the built-in extractor.
 #[derive(Clone, Debug)]
 pub struct SymbolSource {
-    pub language: String,
+    /// Shared: every file of a language uses the same one.
+    pub language: Arc<str>,
     pub rules: Option<Arc<RuleSet>>,
 }
 
@@ -53,41 +60,48 @@ pub struct ProjectSymbol {
 
 const NO_PARENT: u32 = u32::MAX;
 
-/// The symbols of one file.
+/// The symbols of one file. Most files of a project have none, so they keep only their stamp.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FileSymbols {
     /// The file as it was read; `None` when the symbols come from unsaved text.
     stamp: Option<DiskStamp>,
+    found: Option<Box<Found>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Found {
     /// Every name, one after another.
-    names: String,
-    symbols: Vec<ProjectSymbol>,
+    names: Box<str>,
+    symbols: Box<[ProjectSymbol]>,
 }
 
 impl FileSymbols {
     /// In document order.
     pub fn symbols(&self) -> &[ProjectSymbol] {
-        &self.symbols
+        self.found.as_ref().map_or(&[], |f| &f.symbols)
     }
 
     pub fn name(&self, symbol: &ProjectSymbol) -> &str {
-        &self.names[symbol.name_start as usize..symbol.name_end as usize]
+        let names = self.found.as_ref().map_or("", |f| &f.names);
+        &names[symbol.name_start as usize..symbol.name_end as usize]
     }
 
     /// The symbol `symbol` is declared in, if any.
     pub fn parent(&self, symbol: &ProjectSymbol) -> Option<&ProjectSymbol> {
-        (symbol.parent != NO_PARENT).then(|| &self.symbols[symbol.parent as usize])
+        (symbol.parent != NO_PARENT).then(|| &self.symbols()[symbol.parent as usize])
     }
 
     fn new(text: &str, found: &[Symbol], stamp: Option<DiskStamp>) -> Self {
         // The char offset where each line starts.
         let mut line_starts = vec![0];
-        if !found.is_empty() {
-            line_starts.extend(
-                text.chars()
-                    .enumerate()
-                    .filter(|(_, c)| *c == '\n')
-                    .map(|(i, _)| i + 1),
-            );
+        line_starts.extend(
+            text.chars()
+                .enumerate()
+                .filter(|(_, c)| *c == '\n')
+                .map(|(i, _)| i + 1),
+        );
+        if found.is_empty() {
+            return Self { stamp, found: None };
         }
         let mut names = String::with_capacity(found.iter().map(|s| s.name.len()).sum());
         let symbols = found
@@ -109,13 +123,17 @@ impl FileSymbols {
             .collect();
         Self {
             stamp,
-            names,
-            symbols,
+            found: Some(Box::new(Found {
+                names: names.into_boxed_str(),
+                symbols,
+            })),
         }
     }
 
     fn heap_bytes(&self) -> usize {
-        self.names.capacity() + self.symbols.capacity() * size_of::<ProjectSymbol>()
+        self.found.as_ref().map_or(0, |f| {
+            size_of::<Found>() + f.names.len() + size_of_val(&*f.symbols)
+        })
     }
 }
 
@@ -125,7 +143,7 @@ pub struct ProjectSymbols {
     /// The project's files as the file index lists them: relative, sorted by their lowercase form.
     files: Arc<Vec<String>>,
     /// Every listed file with a symbol source that could be read, by its listed path.
-    by_file: HashMap<String, FileSymbols>,
+    by_file: HashMap<Box<str>, FileSymbols>,
     /// The unsaved text of open documents, by relative path: it wins over the file on disk.
     unsaved: HashMap<String, String>,
     symbol_count: usize,
@@ -162,18 +180,19 @@ impl ProjectSymbols {
 
     /// Every file read, in no particular order.
     pub fn iter(&self) -> impl Iterator<Item = (&str, &FileSymbols)> {
-        self.by_file
-            .iter()
-            .map(|(path, file)| (path.as_str(), file))
+        self.by_file.iter().map(|(path, file)| (&**path, file))
     }
 
     /// Roughly the heap memory held: names, symbol records and the table of files.
     pub fn heap_bytes(&self) -> usize {
-        let entry = size_of::<String>() + size_of::<FileSymbols>() + size_of::<u64>();
-        self.by_file
-            .iter()
-            .map(|(path, file)| path.capacity() + file.heap_bytes() + entry)
-            .sum()
+        let entry = size_of::<Box<str>>() + size_of::<FileSymbols>() + 1;
+        let table = self.by_file.capacity() * entry;
+        table
+            + self
+                .by_file
+                .iter()
+                .map(|(path, file)| path.len() + file.heap_bytes())
+                .sum::<usize>()
     }
 
     /// Brings every file in line with `files`, the whole project as the file index lists it:
@@ -187,10 +206,10 @@ impl ProjectSymbols {
     ) -> Result<(), Cancelled> {
         self.files = files;
         let listed: HashSet<&str> = self.files.iter().map(String::as_str).collect();
-        let gone: Vec<String> = self
+        let gone: Vec<Box<str>> = self
             .by_file
             .keys()
-            .filter(|path| !listed.contains(path.as_str()))
+            .filter(|path| !listed.contains(&***path))
             .cloned()
             .collect();
         for path in gone {
@@ -240,7 +259,7 @@ impl ProjectSymbols {
                         .match_indices('\\')
                         .any(|(i, _)| gone.contains(&lower[..i]));
                 if hit {
-                    targets.insert(path.clone());
+                    targets.insert(path.to_string());
                 }
             }
         }
@@ -309,9 +328,9 @@ impl ProjectSymbols {
                 Outcome::Unchanged => {}
                 Outcome::Gone => self.remove(&job.relative),
                 Outcome::Read(file) => {
-                    self.symbol_count += file.symbols.len();
-                    if let Some(old) = self.by_file.insert(job.relative, file) {
-                        self.symbol_count -= old.symbols.len();
+                    self.symbol_count += file.symbols().len();
+                    if let Some(old) = self.by_file.insert(job.relative.into(), file) {
+                        self.symbol_count -= old.symbols().len();
                     }
                 }
             }
@@ -321,7 +340,7 @@ impl ProjectSymbols {
 
     fn remove(&mut self, relative: &str) {
         if let Some(old) = self.by_file.remove(relative) {
-            self.symbol_count -= old.symbols.len();
+            self.symbol_count -= old.symbols().len();
         }
     }
 }
@@ -360,20 +379,21 @@ enum Outcome {
     Read(FileSymbols),
 }
 
-/// Runs the jobs on all cores but one (the interface keeps one), each thread taking the next job
-/// as it finishes the previous one. The outcomes are in the order of the jobs.
+/// Runs the jobs on all cores but one (the interface keeps one), up to [`MAX_THREADS`], each
+/// thread taking the next job as it finishes the previous one. The outcomes are in the order of the jobs.
 fn read_all(root: &Path, jobs: &[Job], cancel: &CancelToken) -> Result<Vec<Outcome>, Cancelled> {
     let threads = thread::available_parallelism()
         .map_or(1, NonZero::get)
         .saturating_sub(1)
-        .clamp(1, jobs.len().max(1));
+        .clamp(1, MAX_THREADS.min(jobs.len()).max(1));
     if threads == 1 {
+        let mut parsers = Parsers::new();
         let mut outcomes = Vec::with_capacity(jobs.len());
         for job in jobs {
             if cancel.is_cancelled() {
                 return Err(Cancelled);
             }
-            outcomes.push(read(root, job));
+            outcomes.push(read(root, job, &mut parsers));
         }
         return Ok(outcomes);
     }
@@ -382,11 +402,12 @@ fn read_all(root: &Path, jobs: &[Job], cancel: &CancelToken) -> Result<Vec<Outco
         let handles: Vec<_> = (0..threads)
             .map(|_| {
                 scope.spawn(|| {
+                    let mut parsers = Parsers::new();
                     let mut mine = Vec::new();
                     while !cancel.is_cancelled() {
                         let i = next.fetch_add(1, Ordering::Relaxed);
                         let Some(job) = jobs.get(i) else { break };
-                        mine.push((i, read(root, job)));
+                        mine.push((i, read(root, job, &mut parsers)));
                     }
                     mine
                 })
@@ -410,7 +431,10 @@ fn read_all(root: &Path, jobs: &[Job], cancel: &CancelToken) -> Result<Vec<Outco
         .collect())
 }
 
-fn read(root: &Path, job: &Job) -> Outcome {
+/// One parser per language (`None`: it has no symbols), made the first time a thread needs it.
+type Parsers = HashMap<Arc<str>, Option<SymbolParser>>;
+
+fn read(root: &Path, job: &Job, parsers: &mut Parsers) -> Outcome {
     let (text, stamp): (Cow<str>, _) = match &job.unsaved {
         Some(text) => (Cow::Borrowed(text), None),
         None => {
@@ -442,10 +466,14 @@ fn read(root: &Path, job: &Job) -> Outcome {
             ..FileSymbols::default()
         });
     }
-    let found = match &job.source.rules {
-        Some(rules) => symbols::extract_with_rules(rules, &text),
-        None => symbols::extract(&job.source.language, &text).unwrap_or_default(),
-    };
+    let source = &job.source;
+    let parser = parsers
+        .entry(source.language.clone())
+        .or_insert_with(|| SymbolParser::new(&source.language, source.rules.clone()));
+    let found = parser
+        .as_mut()
+        .map(|p| p.extract(&text))
+        .unwrap_or_default();
     Outcome::Read(FileSymbols::new(&text, &found, stamp))
 }
 
@@ -466,7 +494,7 @@ mod tests {
 
     fn csharp(relative: &str) -> Option<SymbolSource> {
         relative.ends_with(".cs").then(|| SymbolSource {
-            language: "csharp".to_owned(),
+            language: "csharp".into(),
             rules: None,
         })
     }
@@ -476,7 +504,7 @@ mod tests {
         let index = walk(root, &WalkOptions::default(), &cancel)
             .unwrap()
             .unwrap();
-        Arc::new(index.files)
+        index.files
     }
 
     /// The names in a file, each with its parent's name.
@@ -615,10 +643,12 @@ mod tests {
             unsaved: None,
             known,
         };
-        assert!(matches!(read(&root, &job(stamp)), Outcome::Unchanged));
-        assert!(matches!(read(&root, &job(None)), Outcome::Read(_)));
+        let mut parsers = Parsers::new();
+        let mut read = |job| read(&root, &job, &mut parsers);
+        assert!(matches!(read(job(stamp)), Outcome::Unchanged));
+        assert!(matches!(read(job(None)), Outcome::Read(_)));
         fs::remove_file(root.join("A.cs")).unwrap();
-        assert!(matches!(read(&root, &job(None)), Outcome::Gone));
+        assert!(matches!(read(job(None)), Outcome::Gone));
         fs::remove_dir_all(&root).unwrap();
     }
 

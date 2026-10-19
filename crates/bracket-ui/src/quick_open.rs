@@ -7,7 +7,6 @@
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
@@ -88,7 +87,7 @@ impl IndexWorker {
                 if !send(IndexEvent::Ready(index.files.len())) {
                     return;
                 }
-                let mut files = Arc::new(index.files.clone());
+                let mut files = index.files.clone();
                 on_files(FilesChanged {
                     files: files.clone(),
                     changed: Vec::new(),
@@ -124,7 +123,7 @@ impl IndexWorker {
                         return;
                     }
                     if changed {
-                        files = Arc::new(index.files.clone());
+                        files = index.files.clone();
                         if !send(IndexEvent::Ready(index.files.len())) {
                             return;
                         }
@@ -982,7 +981,7 @@ mod tests {
         let modified = files_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         assert_eq!(modified.changed, [root.join(r"src\Program.cs")]);
         assert!(
-            Arc::ptr_eq(&modified.files, &added.files),
+            std::sync::Arc::ptr_eq(&modified.files, &added.files),
             "the list is not copied again"
         );
         drop(worker);

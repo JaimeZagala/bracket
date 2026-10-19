@@ -8,7 +8,7 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use bracket_core::CancelToken;
 use ignore::overrides::{Override, OverrideBuilder};
@@ -31,8 +31,9 @@ pub struct WalkOptions {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FileIndex {
     pub root: PathBuf,
-    /// Sorted, with `\\` separators.
-    pub files: Vec<String>,
+    /// Sorted, with `\\` separators. Shared with whoever needs the list (the symbol index): a
+    /// change copies it only while someone else still holds the previous one.
+    pub files: Arc<Vec<String>>,
     /// The project's folders (not the root), relative to it. Changes in folders that are not
     /// here (ignored ones, like `target\`) are left out of the index.
     pub dirs: HashSet<String>,
@@ -118,7 +119,7 @@ pub fn walk(
     files.sort_unstable_by_key(|f| f.to_lowercase());
     Ok(Ok(FileIndex {
         root: root.to_path_buf(),
-        files,
+        files: Arc::new(files),
         dirs: dirs.into_iter().collect(),
     }))
 }
@@ -262,7 +263,9 @@ impl FileIndex {
             }
         }
         block.sort_unstable_by_key(|f| f.to_lowercase());
-        self.files.splice(start..end, block);
+        if self.files[start..end] != block[..] {
+            Arc::make_mut(&mut self.files).splice(start..end, block);
+        }
         Ok(())
     }
 }
@@ -325,7 +328,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(
-            index.files,
+            *index.files,
             [
                 ".editorconfig",
                 ".gitignore",
@@ -360,13 +363,13 @@ mod tests {
             ..WalkOptions::default()
         };
         let index = walk(&root, &options, &CancelToken::new()).unwrap().unwrap();
-        assert_eq!(index.files, [r"src\Program.cs"]);
+        assert_eq!(*index.files, [r"src\Program.cs"]);
         let options = WalkOptions {
             include: vec!["src/**".into()],
             exclude: vec!["*.razor".into()],
         };
         let index = walk(&root, &options, &CancelToken::new()).unwrap().unwrap();
-        assert_eq!(index.files, [r"src\.ignore", r"src\Program.cs"]);
+        assert_eq!(*index.files, [r"src\.ignore", r"src\Program.cs"]);
         fs::remove_dir_all(&root).unwrap();
     }
 

@@ -139,14 +139,25 @@ pub fn resolver(
     languages: &LanguageRegistry,
     rules: &HashMap<String, Arc<RuleSet>>,
 ) -> BoxedResolve {
-    let (languages, rules) = (languages.clone(), rules.clone());
+    // One source per language, shared by all its files.
+    let sources: HashMap<String, SymbolSource> = languages
+        .languages()
+        .iter()
+        .filter_map(|language| {
+            let rules = rules.get(&language.id).cloned();
+            (rules.is_some() || symbols::has_symbols(&language.id)).then(|| {
+                let source = SymbolSource {
+                    language: language.id.as_str().into(),
+                    rules,
+                };
+                (language.id.clone(), source)
+            })
+        })
+        .collect();
+    let languages = languages.clone();
     Box::new(move |relative| {
         let language = languages.for_path(Path::new(relative))?;
-        let rules = rules.get(&language.id).cloned();
-        (rules.is_some() || symbols::has_symbols(&language.id)).then(|| SymbolSource {
-            language: language.id.clone(),
-            rules,
-        })
+        sources.get(&language.id).cloned()
     })
 }
 

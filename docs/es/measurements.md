@@ -355,3 +355,22 @@ En la aplicación (`measure.ps1 -Runs 5 -IdleSeconds 6 -Arguments <proyecto>`), 
 | Conjunto de trabajo privado a los 6 s, `target/project-50k` | 37,8 MB | 58,9 MB | +21,1 MB: 33.000 ficheros diminutos con lenguaje de símbolos (una entrada por fichero, una segunda copia de la lista de rutas y la memoria que el montón conserva tras extraer en 15 hilos) |
 | Arranque con `target/project-cs` (mediana en caliente) | 134,0 ms | 137,4 ms | Ruido: el índice empieza después del primer fotograma |
 | Arranque con `target/project-50k` (mediana en caliente) | 140,1 ms | 135,0 ms | Ruido |
+
+### Reducción de memoria del índice de símbolos (2026-10-19, equipo A)
+
+Medido por fases en un programa de prueba sobre `target/project-50k` (41.668 ficheros con lenguaje de símbolos, casi todos sin símbolos), conjunto de trabajo privado: la copia de la lista de rutas añadía 2,9 MB; compilar las consultas, 2,7 MB; y la extracción, 14,8 MB, de los que al soltar el índice solo se liberaban 7,2: el montón retenía 7,4 MB. La retención crecía con los hilos (1 hilo: nada; 4 hilos: 1,7 MB; 15 hilos: 7,4 MB). Cambios:
+
+- Como mucho 4 hilos de lectura. Construir el índice de `target/project-cs` pasa de 0,51 a 0,94–0,99 s (2 hilos: 1,69 s).
+- La lista de rutas es la misma `Arc` que la de `FileIndex`, sin copia.
+- Los ficheros sin símbolos guardan solo su sello (entrada de 48 bytes en vez de 80); claves `Box<str>`.
+- Un parser por hilo y lenguaje, en vez de uno por fichero (`SymbolParser::extract`).
+
+| Medida | Antes | Después | Paso 6 (sin índice) |
+|---|---|---|---|
+| Conjunto de trabajo privado a los 6 s, `target/project-50k` | 58,9 MB | 44,5 MB | 37,4–37,8 MB |
+| Conjunto de trabajo privado a los 6 s, `target/project-cs` | 45,4 MB | 40,8 MB | 31,6 MB |
+| Memoria estimada de la estructura, `target/project-50k` | 5,4 MiB | 3,9 MiB | — |
+| Construir el índice de `target/project-cs` | 0,52–0,55 s | 0,94–0,99 s | — |
+| Tamaño del ejecutable | 15.374.848 B | 15.382.016 B (14,67 MB) | 15.296.000 B |
+
+El índice de símbolos cuesta ahora unos 7 MB con 50.000 ficheros y 9 MB con 210.000 símbolos. El arranque no cambia (`compare-startup.ps1` sin proyecto, tres tandas: diferencias de −10 a +7 ms según el orden, ruido con el equipo cargado).

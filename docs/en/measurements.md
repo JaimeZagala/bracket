@@ -355,3 +355,22 @@ In the application (`measure.ps1 -Runs 5 -IdleSeconds 6 -Arguments <project>`), 
 | Private working set at 6 s, `target/project-50k` | 37.8 MB | 58.9 MB | +21.1 MB: 33,000 tiny files in a symbol language (one entry per file, a second copy of the path list and the memory the heap keeps after extracting on 15 threads) |
 | Startup with `target/project-cs` (warm median) | 134.0 ms | 137.4 ms | Noise: the index starts after the first frame |
 | Startup with `target/project-50k` (warm median) | 140.1 ms | 135.0 ms | Noise |
+
+### Reducing the symbol index's memory (2026-10-19, machine A)
+
+Measured phase by phase in a test program on `target/project-50k` (41,668 files in a symbol language, nearly all without symbols), private working set: the copy of the path list added 2.9 MB; compiling the queries, 2.7 MB; and the extraction, 14.8 MB, of which dropping the index freed only 7.2: the heap kept 7.4 MB. What it kept grew with the threads (1 thread: nothing; 4 threads: 1.7 MB; 15 threads: 7.4 MB). Changes:
+
+- At most 4 reading threads. Building the index of `target/project-cs` goes from 0.51 to 0.94–0.99 s (2 threads: 1.69 s).
+- The path list is the same `Arc` as `FileIndex`'s, with no copy.
+- Files without symbols keep only their stamp (a 48-byte entry instead of 80); `Box<str>` keys.
+- One parser per thread and language, instead of one per file (`SymbolParser::extract`).
+
+| Measure | Before | After | Step 6 (no index) |
+|---|---|---|---|
+| Private working set at 6 s, `target/project-50k` | 58.9 MB | 44.5 MB | 37.4–37.8 MB |
+| Private working set at 6 s, `target/project-cs` | 45.4 MB | 40.8 MB | 31.6 MB |
+| Estimated memory of the structure, `target/project-50k` | 5.4 MiB | 3.9 MiB | — |
+| Building the index of `target/project-cs` | 0.52–0.55 s | 0.94–0.99 s | — |
+| Executable size | 15,374,848 B | 15,382,016 B (14.67 MB) | 15,296,000 B |
+
+The symbol index now costs about 7 MB with 50,000 files and 9 MB with 210,000 symbols. Startup does not change (`compare-startup.ps1` without a project, three batches: differences from −10 to +7 ms depending on the order, noise on a busy machine).

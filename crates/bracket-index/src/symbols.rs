@@ -254,6 +254,27 @@ impl SymbolParser {
             }
         }
     }
+
+    /// The symbols of a `text` unrelated to the previous one: nothing is kept for the next call.
+    /// For extracting many files with one parser.
+    pub fn extract(&mut self, text: &str) -> Vec<Symbol> {
+        match &mut self.kind {
+            ParserKind::Rules(rules) => extract_with_rules(rules, text),
+            ParserKind::Builtin(extract) => extract(text),
+            ParserKind::Grammar {
+                grammar,
+                parser,
+                last,
+            } => {
+                *last = None;
+                let Some(tree) = parser.parse(text, None) else {
+                    return Vec::new();
+                };
+                let query = grammar.query().expect("checked when the parser was made");
+                symbols(text, query_tree(query, &tree, text))
+            }
+        }
+    }
 }
 
 /// The single edit that turns `old` into `new`: everything between their common start and their

@@ -4,7 +4,6 @@
 //! Usage: cargo run --release -p bracket-index --example project_symbols -- [path]
 //! Default: target/project-cs. A finished project is not written again.
 
-use std::sync::Arc;
 use std::time::Instant;
 
 use bracket_core::CancelToken;
@@ -23,10 +22,10 @@ fn main() -> std::io::Result<()> {
     let index = walk(&root, &WalkOptions::default(), &cancel)
         .expect("no exclusions")
         .expect("not cancelled");
-    let files = Arc::new(index.files);
+    let files = index.files;
     let resolve = |relative: &str| {
         relative.ends_with(".cs").then(|| SymbolSource {
-            language: "csharp".to_owned(),
+            language: "csharp".into(),
             rules: None,
         })
     };
