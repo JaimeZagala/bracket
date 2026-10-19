@@ -87,6 +87,14 @@ The **Outline** tab of the side panel shows the active document's symbols as a t
 - Without a project, **View → Outline** opens the panel with this tab only; Ctrl+B hides it.
 - Documents over 10 MB have no outline.
 
+### Go to definition and history
+
+- **F12**, **Ctrl+click** on a name or **Go → Go to definition** look for where the name at the caret is declared (with Ctrl held, the pointer is a hand). First in the same file, then in the files of its folder or of its namespace, and then in the rest of the project; if none has the exact name, ignoring case. If there is one, it goes straight there; if there are several, they are chosen in the palette (typing goes on searching like Ctrl+T).
+- In Razor, on `<MyComponent />` or `</MyComponent>` it opens `MyComponent.razor`.
+- Without a project, or in a file outside it, it looks among the document's own symbols.
+- It is approximate: it compares names, without compiling. A method with overloads, or two classes with the same name in different namespaces, give several results.
+- **Alt+←** (**Go → Back**) goes back to where the caret was before the last jump (go to definition, to a symbol, to a line, to a file from Ctrl+P, to a search result or to a symbol in the outline) and **Alt+→** (**Go → Forward**) undoes going back. If the tab was closed, the file opens again. The last 50 places are remembered.
+
 ## Tabs
 
 - Each file opens in its own tab. If the active tab is an empty new document, the file takes its place; if the file is already open, its tab is shown.

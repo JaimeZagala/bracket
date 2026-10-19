@@ -4,7 +4,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
@@ -15,6 +15,7 @@ use bracket_core::encoding::{self, TextEncoding};
 use bracket_core::movement::{self, Motion};
 use bracket_core::{Selection, Selections};
 use bracket_index::WalkOptions;
+use bracket_index::project_symbols::FoundSymbol;
 use bracket_index::rules::RuleSet;
 use bracket_search::{FileOutcome, replace_in_file};
 use bracket_session::config::AUTO_THEME;
@@ -36,6 +37,7 @@ use crate::find_bar::{FindAction, FindBar, ReplaceOutcome};
 use crate::fonts::{self, Fallback, FontSource, LoadedFallback};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
+use crate::navigation::{self, History, Place};
 use crate::outline::{self, Outline, SymbolList};
 use crate::quick_open::{IndexEvent, IndexWorker, PaletteAction, PaletteCommand, QuickOpen};
 use crate::search_panel::{OpenMatch, ReplacePlan, SearchAction, SearchPanel, replace_in_document};
@@ -129,6 +131,15 @@ impl ProjectWatch {
     }
 }
 
+/// A go to definition waiting for the symbol index, or for the document's outline.
+struct PendingDefinition {
+    tab: u64,
+    name: String,
+    generation: u64,
+    /// Looked up in the document's own symbols instead of the project's.
+    local: bool,
+}
+
 /// What happened to each closed file of a "Replace all" in the folder.
 type FileOutcomes = Vec<(PathBuf, FileOutcome)>;
 
@@ -180,6 +191,11 @@ pub struct BracketApp {
     /// The number of symbols in it, once it is up to date.
     symbols_indexed: Option<usize>,
     unsaved_texts: UnsavedTexts,
+    /// Places to go back and forward to.
+    history: History,
+    /// A go to definition waiting for its answer.
+    pending_definition: Option<PendingDefinition>,
+    definition_generation: u64,
     /// The Ctrl+P palette, while it is open.
     quick_open: Option<QuickOpen>,
     /// The find bar above the editor (Ctrl+F).
@@ -343,6 +359,9 @@ impl BracketApp {
             symbol_index: None,
             symbols_indexed: None,
             unsaved_texts: UnsavedTexts::default(),
+            history: History::default(),
+            pending_definition: None,
+            definition_generation: 0,
             quick_open: None,
             find: FindBar::default(),
             search: SearchPanel::default(),
@@ -1112,6 +1131,9 @@ impl BracketApp {
             Command::GoToLine => return self.open_palette(":"),
             Command::GoToSymbol => return self.open_palette("@"),
             Command::GoToProjectSymbol => return self.open_palette("#"),
+            Command::GoToDefinition => self.go_to_definition(),
+            Command::NavigateBack => self.navigate(ctx, true),
+            Command::NavigateForward => self.navigate(ctx, false),
             // Closing goes through the unsaved-changes check in handle_window_events.
             Command::Exit => ctx.send_viewport_cmd(ViewportCommand::Close),
         }
@@ -1179,6 +1201,169 @@ impl BracketApp {
         tab.view.request_scroll_to_caret();
     }
 
+    /// Where the caret is now, for the navigation history.
+    fn current_place(&self) -> Option<Place> {
+        let tab = self.active_tab();
+        if tab.loading.is_some() {
+            return None;
+        }
+        let text = tab.doc.buffer.text();
+        let head = tab.doc.buffer.selections().primary().head;
+        let line = text.char_to_line(head);
+        Some(Place {
+            tab: tab.id,
+            path: tab.path().map(Path::to_path_buf),
+            line: line + 1,
+            column: head - text.line_to_char(line) + 1,
+        })
+    }
+
+    /// Records where the caret is before a jump.
+    fn remember(&mut self) {
+        if let Some(place) = self.current_place() {
+            self.history.leave(place);
+        }
+    }
+
+    /// Alt+← and Alt+→.
+    fn navigate(&mut self, ctx: &egui::Context, back: bool) {
+        let Some(current) = self.current_place() else {
+            return;
+        };
+        let place = match back {
+            true => self.history.back(current),
+            false => self.history.forward(current),
+        };
+        let Some(place) = place else { return };
+        let position = (place.line, place.column);
+        if let Some(index) = self.tab_index(place.tab) {
+            self.activate(ctx, index);
+            let tab = &mut self.tabs[index];
+            match &mut tab.loading {
+                Some(loading) => loading.goto = Some(position),
+                None => go_to(tab, position),
+            }
+        } else if let Some(path) = place.path {
+            // The tab was closed: the file opens again.
+            self.open_request(
+                ctx,
+                OpenRequest {
+                    path,
+                    line: Some(place.line),
+                    column: Some(place.column),
+                },
+            );
+        }
+    }
+
+    /// F12 or Ctrl+click: looks up the name at the caret in the project's symbol index, or in
+    /// the document's own symbols when it is not a project file.
+    fn go_to_definition(&mut self) {
+        let tab = &self.tabs[self.active];
+        if tab.loading.is_some() {
+            return;
+        }
+        let caret = tab.doc.buffer.selections().primary().head;
+        let language = tab.language.as_deref();
+        let Some((name, component)) = navigation::name_at(tab.doc.buffer.text(), caret, language)
+        else {
+            self.status = Some(self.texts.definition_no_name().to_owned());
+            return;
+        };
+        self.definition_generation += 1;
+        let path = tab.path().map(Path::to_path_buf);
+        let index = self.symbol_index.as_ref().filter(|_| {
+            let root = self.project.as_deref();
+            path.as_deref()
+                .zip(root)
+                .is_some_and(|(p, r)| p.starts_with(r))
+        });
+        if let Some(index) = index {
+            index.definitions(name.clone(), path, component, self.definition_generation);
+        }
+        self.pending_definition = Some(PendingDefinition {
+            tab: tab.id,
+            name,
+            generation: self.definition_generation,
+            local: index.is_none(),
+        });
+    }
+
+    /// The symbol index's answer to a go to definition: one place is gone to, several are
+    /// offered in the palette, and none sends the search to the document's own symbols (it may
+    /// have unsaved ones the index does not have yet).
+    fn definitions_found(&mut self, ctx: &egui::Context, generation: u64, found: Vec<FoundSymbol>) {
+        let active = self.tabs[self.active].id;
+        let Some(mut pending) = self
+            .pending_definition
+            .take()
+            .filter(|p| p.generation == generation && p.tab == active)
+        else {
+            return;
+        };
+        let Some(root) = self.project.clone() else {
+            return;
+        };
+        match found.as_slice() {
+            [] => {
+                pending.local = true;
+                self.pending_definition = Some(pending);
+            }
+            [one] => {
+                self.remember();
+                self.open_request(
+                    ctx,
+                    OpenRequest {
+                        path: root.join(&one.relative),
+                        line: Some(one.line as usize + 1),
+                        column: Some(one.column as usize + 1),
+                    },
+                );
+                self.focus_editor(ctx);
+            }
+            _ => self.quick_open = Some(QuickOpen::with_found(format!("#{}", pending.name), found)),
+        }
+    }
+
+    /// A go to definition in the document's own symbols, once its outline is ready.
+    fn local_definition(&mut self, ctx: &egui::Context) {
+        let tab = &self.tabs[self.active];
+        let Some(pending) = self
+            .pending_definition
+            .as_ref()
+            .filter(|p| p.local && p.tab == tab.id)
+        else {
+            return;
+        };
+        let name = pending.name.clone();
+        let ranges: Vec<std::ops::Range<usize>> = match self.outline.palette_list(tab.id, &tab.doc)
+        {
+            SymbolList::Pending => return,
+            SymbolList::Ready { symbols, .. } => {
+                let exact: Vec<_> = symbols.iter().filter(|s| s.name == name).collect();
+                let chosen = match exact.is_empty() {
+                    true => symbols
+                        .iter()
+                        .filter(|s| s.name.to_lowercase() == name.to_lowercase())
+                        .collect(),
+                    false => exact,
+                };
+                chosen.iter().map(|s| s.name_range.clone()).collect()
+            }
+            SymbolList::Unsupported | SymbolList::TooLarge => Vec::new(),
+        };
+        self.pending_definition = None;
+        match ranges.as_slice() {
+            [] => self.status = Some(self.texts.definition_none(&name)),
+            [range] => {
+                self.remember();
+                self.select_match(range.clone());
+                self.focus_editor(ctx);
+            }
+            _ => self.open_palette(&format!("@{name}")),
+        }
+    }
+
     /// Starts building the project's file index, once the first frame has been presented.
     fn start_index(&mut self, ctx: &egui::Context) {
         if self.index_pending.is_none() {
@@ -1224,6 +1409,8 @@ impl BracketApp {
             has_project: self.project.is_some(),
             active_loaded: self.active_tab().loading.is_none(),
             tabs: self.tabs.len(),
+            can_go_back: self.history.can_go_back(),
+            can_go_forward: self.history.can_go_forward(),
         }
     }
 
@@ -1244,6 +1431,8 @@ impl BracketApp {
         self.symbol_index = None;
         self.symbols_indexed = None;
         self.unsaved_texts = UnsavedTexts::default();
+        self.history.clear();
+        self.pending_definition = None;
         self.start_index(ctx);
         self.search.reset();
         self.project_watch = folder
@@ -1923,6 +2112,9 @@ impl BracketApp {
         );
         let Some(action) = action else { return };
         self.quick_open = None;
+        if !matches!(action, PaletteAction::Run(_) | PaletteAction::Close) {
+            self.remember();
+        }
         match action {
             PaletteAction::Open { path, line } => {
                 self.open_request(
@@ -2279,6 +2471,7 @@ impl eframe::App for BracketApp {
                 }
             }
         }
+        let mut definitions = None;
         if let Some(symbols) = &self.symbol_index {
             for event in symbols.events() {
                 match event {
@@ -2287,6 +2480,9 @@ impl eframe::App for BracketApp {
                         if let Some(palette) = &mut self.quick_open {
                             palette.symbol_results(generation, found);
                         }
+                    }
+                    SymbolEvent::Definitions { generation, found } => {
+                        definitions = Some((generation, found));
                     }
                 }
             }
@@ -2309,8 +2505,17 @@ impl eframe::App for BracketApp {
         self.finish_file_ops(ctx);
         self.search.poll();
         self.poll_folder_replace();
+        if let Some((generation, found)) = definitions {
+            self.definitions_found(ctx, generation, found);
+        }
         let outline_shown = self.sidebar.visible && self.sidebar_mode == SidebarMode::Outline;
+        let active_id = self.tabs[self.active].id;
+        let local_definition = self
+            .pending_definition
+            .as_ref()
+            .is_some_and(|p| p.local && p.tab == active_id);
         if outline_shown
+            || local_definition
             || self
                 .quick_open
                 .as_ref()
@@ -2322,6 +2527,9 @@ impl eframe::App for BracketApp {
                 let rules = language.and_then(|l| self.symbol_rules.get(l).cloned());
                 self.outline.update(ctx, tab.id, &tab.doc, language, rules);
             }
+        }
+        if local_definition {
+            self.local_definition(ctx);
         }
         if let Some(tree) = &mut self.tree
             && let Some(bad) = tree.poll()
@@ -2379,11 +2587,13 @@ impl eframe::App for BracketApp {
         }
         let (tree_action, search_action, outline_pick) = self.side_panel(ui);
         if let Some(range) = outline_pick {
+            self.remember();
             self.select_match(range);
             self.focus_editor(&ctx);
         }
         match search_action {
             Some(SearchAction::Open(OpenMatch { path, line, column })) => {
+                self.remember();
                 self.open_request(
                     &ctx,
                     OpenRequest {
@@ -2421,6 +2631,7 @@ impl eframe::App for BracketApp {
             None => {}
         }
         let mut missing_glyph = None;
+        let mut definition_click = false;
         let mut notice_action = None;
         let mut find_action = None;
         // Escape in the editor closes the find bar.
@@ -2467,6 +2678,7 @@ impl eframe::App for BracketApp {
                     highlight.follow(doc, output.visible_lines);
                 }
                 missing_glyph = output.missing_glyph;
+                definition_click = output.definition_at.is_some();
             }
         });
         if let Some(action) = notice_action {
@@ -2486,6 +2698,9 @@ impl eframe::App for BracketApp {
         }
         if let Some(c) = missing_glyph {
             self.request_fallback(&ctx, c);
+        }
+        if definition_click {
+            self.go_to_definition();
         }
         self.quick_open_palette(&ctx, frame);
         self.unsaved_dialog(&ctx, frame);

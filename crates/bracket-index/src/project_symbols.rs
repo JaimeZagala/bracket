@@ -225,6 +225,113 @@ impl ProjectSymbols {
                 .sum::<usize>()
     }
 
+    /// Where `name` may be defined, the likeliest first: symbols with exactly that name in the
+    /// file `from` (relative to the project), then in its folder or in one of its namespaces,
+    /// then in the other files in their order. With no exact match, the same ignoring case. For
+    /// a Razor component (`<Name />`), its file `Name.razor` comes first.
+    pub fn definitions(
+        &self,
+        name: &str,
+        from: Option<&str>,
+        component: bool,
+        limit: usize,
+    ) -> Vec<FoundSymbol> {
+        fn folder_of(path: &str) -> &str {
+            path.rsplit_once('\\').map_or("", |(folder, _)| folder)
+        }
+        let from_folder = from.map(folder_of);
+        // The namespaces declared in `from`.
+        let from_namespaces: HashSet<&str> = from
+            .and_then(|f| self.by_file.get(f))
+            .map(|file| {
+                file.symbols()
+                    .iter()
+                    .filter(|s| s.kind == SymbolKind::Namespace)
+                    .map(|s| file.name(s))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let in_namespace = |file: &FileSymbols, symbol: &ProjectSymbol| {
+            let mut parent = file.parent(symbol);
+            while let Some(p) = parent {
+                if p.kind == SymbolKind::Namespace && from_namespaces.contains(file.name(p)) {
+                    return true;
+                }
+                parent = file.parent(p);
+            }
+            false
+        };
+        let mut found = Vec::new();
+        if component {
+            let file_name = format!("{name}.razor");
+            for path in self.files.iter() {
+                let base = path.rsplit('\\').next().unwrap_or(path);
+                if base.eq_ignore_ascii_case(&file_name) {
+                    let rank = if Some(folder_of(path)) == from_folder {
+                        0
+                    } else {
+                        1
+                    };
+                    found.push((
+                        rank,
+                        FoundSymbol {
+                            name: name.to_owned(),
+                            kind: SymbolKind::Class,
+                            container: None,
+                            relative: path.clone(),
+                            line: 0,
+                            column: 0,
+                            positions: Vec::new(),
+                        },
+                    ));
+                }
+            }
+        }
+        for exact in [true, false] {
+            for path in self.files.iter() {
+                let Some(file) = self.by_file.get(path.as_str()) else {
+                    continue;
+                };
+                for symbol in file.symbols() {
+                    let symbol_name = file.name(symbol);
+                    let matches = match exact {
+                        true => symbol_name == name,
+                        false => symbol_name.to_lowercase() == name.to_lowercase(),
+                    };
+                    if !matches {
+                        continue;
+                    }
+                    let rank = if Some(path.as_str()) == from {
+                        2
+                    } else if Some(folder_of(path)) == from_folder || in_namespace(file, symbol) {
+                        3
+                    } else {
+                        4
+                    };
+                    found.push((
+                        rank,
+                        FoundSymbol {
+                            name: symbol_name.to_owned(),
+                            kind: symbol.kind,
+                            container: file.parent(symbol).map(|p| file.name(p).to_owned()),
+                            relative: path.clone(),
+                            line: symbol.line,
+                            column: symbol.column,
+                            positions: Vec::new(),
+                        },
+                    ));
+                }
+            }
+            if found.iter().any(|(rank, _)| *rank >= 2) {
+                break;
+            }
+        }
+        // Stable: within a rank, the order of the files and of the symbols in them.
+        found.sort_by_key(|(rank, _)| *rank);
+        found.truncate(limit);
+        found.into_iter().map(|(_, symbol)| symbol).collect()
+    }
+
     /// The best `limit` symbols whose names match `query` fuzzily (as Ctrl+P matches paths),
     /// best first; among equals, in the order of the files and of the symbols in them. The list
     /// of names is gathered for each query: it costs a few milliseconds and no memory between
@@ -374,6 +481,11 @@ impl ProjectSymbols {
             }
             _ => Ok(()),
         }
+    }
+
+    /// The path of a project file (absolute) as the file index lists it, if it does.
+    pub fn listed_path(&self, path: &Path) -> Option<&str> {
+        listed(&self.files, &self.relative(path)?).map(String::as_str)
     }
 
     fn relative(&self, path: &Path) -> Option<String> {
@@ -724,6 +836,72 @@ mod tests {
         assert!(matches!(read(job(None)), Outcome::Read(_)));
         fs::remove_file(root.join("A.cs")).unwrap();
         assert!(matches!(read(job(None)), Outcome::Gone));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn definitions_nearest_first() {
+        let root = temp_dir("definitions");
+        fs::create_dir_all(root.join(r"src\Billing")).unwrap();
+        fs::create_dir_all(root.join(r"src\Shop")).unwrap();
+        fs::create_dir_all(root.join("lib")).unwrap();
+        fs::write(
+            root.join(r"src\Billing\Invoice.cs"),
+            "namespace Demo.Billing\n{\n  class Invoice { void Total() { } }\n}\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join(r"src\Billing\Tax.cs"),
+            "namespace Demo.Billing { class Tax { int Total; } }",
+        )
+        .unwrap();
+        fs::write(
+            root.join(r"lib\Helpers.cs"),
+            "namespace Demo.Billing { class Helpers { int Total; } }",
+        )
+        .unwrap();
+        fs::write(
+            root.join(r"src\Shop\Cart.cs"),
+            "namespace Demo.Shop { class Cart { int Total; int total; } }",
+        )
+        .unwrap();
+        fs::write(root.join(r"src\Shop\Basket.razor"), "<h1>Basket</h1>").unwrap();
+        let mut symbols = ProjectSymbols::new(root.clone());
+        symbols
+            .sync(files(&root), &csharp, &CancelToken::new())
+            .unwrap();
+
+        let places = |found: Vec<FoundSymbol>| -> Vec<String> {
+            found
+                .iter()
+                .map(|f| format!("{}:{}", f.relative, f.line))
+                .collect()
+        };
+        let from = Some(r"src\Billing\Invoice.cs");
+        assert_eq!(
+            places(symbols.definitions("Total", from, false, 10)),
+            [
+                r"src\Billing\Invoice.cs:2", // the same file
+                r"lib\Helpers.cs:0",         // the same namespace
+                r"src\Billing\Tax.cs:0",     // the same folder
+                r"src\Shop\Cart.cs:0",
+            ]
+        );
+        let found = symbols.definitions("Total", from, false, 10);
+        assert_eq!(found[0].container.as_deref(), Some("Invoice"));
+        assert_eq!(found[0].column, 23);
+        assert_eq!(
+            places(symbols.definitions("TAX", from, false, 10)),
+            [r"src\Billing\Tax.cs:0"],
+            "with no exact match, case is ignored"
+        );
+        assert!(symbols.definitions("Nothing", from, false, 10).is_empty());
+        assert_eq!(symbols.definitions("Total", from, false, 2).len(), 2);
+        assert_eq!(
+            places(symbols.definitions("Basket", None, true, 10)),
+            [r"src\Shop\Basket.razor:0"],
+            "a Razor component is its file"
+        );
         fs::remove_dir_all(&root).unwrap();
     }
 

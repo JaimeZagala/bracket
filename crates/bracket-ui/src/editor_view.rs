@@ -28,6 +28,8 @@ pub struct ViewOutput {
     pub missing_glyph: Option<char>,
     /// Lines painted in this frame.
     pub visible_lines: std::ops::Range<usize>,
+    /// Ctrl+click: go to the definition of the name at this position (the caret is there).
+    pub definition_at: Option<usize>,
 }
 
 /// Colours of the editor area: from the editor theme, falling back to the interface's.
@@ -205,7 +207,7 @@ impl EditorView {
                 metrics: &metrics,
             };
 
-            self.handle_pointer(ui, &response, doc, &layout);
+            output.definition_at = self.handle_pointer(ui, &response, doc, &layout);
 
             self.page_lines = ((viewport.height() / row_height) as usize)
                 .saturating_sub(1)
@@ -259,22 +261,39 @@ impl EditorView {
         output
     }
 
+    /// Clicks and drags. Returns the position of a Ctrl+click.
     fn handle_pointer(
         &mut self,
         ui: &Ui,
         response: &egui::Response,
         doc: &mut Document,
         layout: &Layout<'_>,
-    ) {
+    ) -> Option<usize> {
+        let (pressed, shift, ctrl) = ui.input(|i| {
+            (
+                i.pointer.primary_pressed(),
+                i.modifiers.shift,
+                i.modifiers.command,
+            )
+        });
+        if ctrl && response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
         let Some(point) = response.interact_pointer_pos() else {
             if !response.dragged() {
                 self.drag_anchor = None;
             }
-            return;
+            return None;
         };
-        let (pressed, shift) = ui.input(|i| (i.pointer.primary_pressed(), i.modifiers.shift));
         let pos = position_at_point(ui, doc, layout, point);
 
+        if pressed && ctrl && !shift {
+            response.request_focus();
+            doc.buffer.seal_undo_step();
+            doc.buffer.set_selections(Selections::caret(pos));
+            self.drag_anchor = None;
+            return Some(pos);
+        }
         if pressed {
             response.request_focus();
             doc.buffer.seal_undo_step();
@@ -300,6 +319,7 @@ impl EditorView {
                 .set_selections(Selections::single(Selection::new(start, end)));
             self.drag_anchor = None;
         }
+        None
     }
 
     fn handle_events(&mut self, ui: &Ui, doc: &mut Document, page_lines: usize) {

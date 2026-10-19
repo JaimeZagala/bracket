@@ -306,6 +306,15 @@ impl QuickOpen {
         }
     }
 
+    /// The palette in `#` mode with `text` and these symbols already found: the definitions to
+    /// choose from. Typing searches the project again.
+    pub fn with_found(text: String, found: Vec<FoundSymbol>) -> Self {
+        Self {
+            symbols_found: found,
+            ..Self::new(Vec::new(), &text)
+        }
+    }
+
     /// Takes the results of a query; old ones are dropped.
     pub fn results(&mut self, generation: u64, found: Vec<Found>) {
         if generation == self.generation {

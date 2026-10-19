@@ -388,3 +388,7 @@ The symbol index now costs about 7 MB with 50,000 files and 9 MB with 210,000 sy
 | No match (`zzz`) | 2.3 ms (gathering the names) |
 
 Ctrl+P does not change with the generic matcher: 6.3 ms with one letter and 7.0 ms with a word over 50,000 files. Executable: 15,412,736 B (14.70 MB), +30 KB; 315,904 B (308 KB) left up to the 15 MB budget.
+
+## Phase 3, step 9 — go to definition (2026-10-19, machine A)
+
+Executable: 15,452,160 B (14.74 MB), +39 KB; 276,480 B (270 KB) left up to the 15 MB budget. Looking up a definition (`cargo bench -p bracket-index --bench fuzzy`, `fuzzy_symbols/definitions`: `Compute3` among the 210,000 symbols of `target/project-cs`, with 8,000 matches and 200 results) takes 2.2 ms.

@@ -29,6 +29,9 @@ pub enum Command {
     GoToLine,
     GoToSymbol,
     GoToProjectSymbol,
+    GoToDefinition,
+    NavigateBack,
+    NavigateForward,
     FocusTree,
     NextTab,
     PreviousTab,
@@ -50,6 +53,9 @@ pub struct State {
     /// The active tab has finished loading.
     pub active_loaded: bool,
     pub tabs: usize,
+    /// The navigation history has places behind or ahead.
+    pub can_go_back: bool,
+    pub can_go_forward: bool,
 }
 
 const CTRL: Modifiers = Modifiers::COMMAND;
@@ -57,7 +63,7 @@ const CTRL_SHIFT: Modifiers = Modifiers::COMMAND.plus(Modifiers::SHIFT);
 
 impl Command {
     /// In menu order.
-    pub const ALL: [Self; 24] = [
+    pub const ALL: [Self; 27] = [
         Self::New,
         Self::Open,
         Self::OpenFolder,
@@ -79,6 +85,9 @@ impl Command {
         Self::GoToLine,
         Self::GoToSymbol,
         Self::GoToProjectSymbol,
+        Self::GoToDefinition,
+        Self::NavigateBack,
+        Self::NavigateForward,
         Self::FocusTree,
         Self::NextTab,
         Self::PreviousTab,
@@ -108,6 +117,9 @@ impl Command {
             Self::GoToLine => "go.line",
             Self::GoToSymbol => "go.symbol",
             Self::GoToProjectSymbol => "go.projectSymbol",
+            Self::GoToDefinition => "go.definition",
+            Self::NavigateBack => "go.back",
+            Self::NavigateForward => "go.forward",
             Self::FocusTree => "go.projectTree",
             Self::NextTab => "go.nextTab",
             Self::PreviousTab => "go.previousTab",
@@ -135,6 +147,9 @@ impl Command {
             | Self::GoToLine
             | Self::GoToSymbol
             | Self::GoToProjectSymbol
+            | Self::GoToDefinition
+            | Self::NavigateBack
+            | Self::NavigateForward
             | Self::FocusTree
             | Self::NextTab
             | Self::PreviousTab => Menu::Go,
@@ -164,6 +179,9 @@ impl Command {
             Self::GoToLine => texts.menu_go_to_line(),
             Self::GoToSymbol => texts.menu_go_to_symbol(),
             Self::GoToProjectSymbol => texts.menu_go_to_project_symbol(),
+            Self::GoToDefinition => texts.menu_go_to_definition(),
+            Self::NavigateBack => texts.menu_back(),
+            Self::NavigateForward => texts.menu_forward(),
             Self::FocusTree => texts.menu_focus_tree(),
             Self::NextTab => texts.menu_next_tab(),
             Self::PreviousTab => texts.menu_previous_tab(),
@@ -209,6 +227,9 @@ impl Command {
             Self::GoToLine => keys!(CTRL, G),
             Self::GoToSymbol => keys!(CTRL_SHIFT, O),
             Self::GoToProjectSymbol => keys!(CTRL, T),
+            Self::GoToDefinition => keys!(Modifiers::NONE, F12),
+            Self::NavigateBack => keys!(Modifiers::ALT, ArrowLeft),
+            Self::NavigateForward => keys!(Modifiers::ALT, ArrowRight),
             Self::FocusTree => keys!(CTRL_SHIFT, E),
             Self::NextTab => keys!(CTRL, Tab; CTRL, PageDown),
             Self::PreviousTab => keys!(CTRL_SHIFT, Tab; CTRL, PageUp),
@@ -236,6 +257,9 @@ impl Command {
             | Self::FindPrevious
             | Self::Replace => state.active_loaded,
             Self::NextTab | Self::PreviousTab => state.tabs > 1,
+            Self::GoToDefinition => state.active_loaded,
+            Self::NavigateBack => state.can_go_back,
+            Self::NavigateForward => state.can_go_forward,
             _ => true,
         }
     }
@@ -315,11 +339,16 @@ mod tests {
             has_project: true,
             active_loaded: true,
             tabs: 2,
+            can_go_back: true,
+            can_go_forward: true,
         };
         for command in [
             Command::CloseFolder,
             Command::FocusTree,
             Command::GoToProjectSymbol,
+            Command::GoToDefinition,
+            Command::NavigateBack,
+            Command::NavigateForward,
             Command::Save,
             Command::GoToLine,
             Command::GoToSymbol,

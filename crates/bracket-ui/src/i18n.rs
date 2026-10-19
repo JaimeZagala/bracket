@@ -176,6 +176,26 @@ impl Texts {
         self.get("menu_go")
     }
 
+    pub fn menu_go_to_definition(&self) -> &str {
+        self.get("menu_go_to_definition")
+    }
+
+    pub fn menu_back(&self) -> &str {
+        self.get("menu_back")
+    }
+
+    pub fn menu_forward(&self) -> &str {
+        self.get("menu_forward")
+    }
+
+    pub fn definition_no_name(&self) -> &str {
+        self.get("definition_no_name")
+    }
+
+    pub fn definition_none(&self, name: &str) -> String {
+        self.fill("definition_none", &[("name", &name)])
+    }
+
     pub fn menu_go_to_project_symbol(&self) -> &str {
         self.get("menu_go_to_project_symbol")
     }
@@ -955,6 +975,14 @@ mod tests {
                     "menu_go_to_project_symbol",
                     t.menu_go_to_project_symbol().to_owned(),
                 ),
+                (
+                    "menu_go_to_definition",
+                    t.menu_go_to_definition().to_owned(),
+                ),
+                ("menu_back", t.menu_back().to_owned()),
+                ("menu_forward", t.menu_forward().to_owned()),
+                ("definition_no_name", t.definition_no_name().to_owned()),
+                ("definition_none", t.definition_none("x")),
                 (
                     "project_symbols_no_project",
                     t.project_symbols_no_project().to_owned(),

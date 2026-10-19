@@ -388,3 +388,7 @@ El índice de símbolos cuesta ahora unos 7 MB con 50.000 ficheros y 9 MB con 21
 | Sin coincidencias (`zzz`) | 2,3 ms (reunir los nombres) |
 
 Ctrl+P no cambia con el emparejador genérico: 6,3 ms con una letra y 7,0 ms con una palabra sobre 50.000 ficheros. Ejecutable: 15.412.736 B (14,70 MB), +30 KB; quedan 315.904 B (308 KB) hasta el presupuesto de 15 MB.
+
+## Fase 3, paso 9 — ir a definición (2026-10-19, equipo A)
+
+Ejecutable: 15.452.160 B (14,74 MB), +39 KB; quedan 276.480 B (270 KB) hasta el presupuesto de 15 MB. Buscar una definición (`cargo bench -p bracket-index --bench fuzzy`, `fuzzy_symbols/definitions`: `Compute3` entre los 210.000 símbolos de `target/project-cs`, con 8.000 coincidencias y 200 resultados) tarda 2,2 ms.

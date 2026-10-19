@@ -42,12 +42,23 @@ pub enum SymbolCommand {
         text: String,
         generation: u64,
     },
+    /// Where `name` may be defined, seen from the file `from`; `component`: a Razor component.
+    Definitions {
+        name: String,
+        from: Option<PathBuf>,
+        component: bool,
+        generation: u64,
+    },
 }
 
 pub enum SymbolEvent {
     /// The index is up to date and holds this many symbols.
     Ready(usize),
     Results {
+        generation: u64,
+        found: Vec<FoundSymbol>,
+    },
+    Definitions {
         generation: u64,
         found: Vec<FoundSymbol>,
     },
@@ -86,6 +97,7 @@ impl SymbolWorker {
                     let mut changed = HashSet::new();
                     let mut unsaved = HashMap::new();
                     let mut query = None;
+                    let mut definitions = None;
                     for command in std::iter::once(first).chain(command_rx.try_iter()) {
                         match command {
                             SymbolCommand::Files(change) => {
@@ -99,6 +111,12 @@ impl SymbolWorker {
                             SymbolCommand::Query { text, generation } => {
                                 query = Some((text, generation));
                             }
+                            SymbolCommand::Definitions {
+                                name,
+                                from,
+                                component,
+                                generation,
+                            } => definitions = Some((name, from, component, generation)),
                         }
                     }
                     let updated = files.is_some() || !unsaved.is_empty();
@@ -128,6 +146,11 @@ impl SymbolWorker {
                         let found = index.search(&text, LIMIT);
                         events.push(SymbolEvent::Results { generation, found });
                     }
+                    if let Some((name, from, component, generation)) = definitions {
+                        let from = from.as_deref().and_then(|f| index.listed_path(f));
+                        let found = index.definitions(&name, from, component, LIMIT);
+                        events.push(SymbolEvent::Definitions { generation, found });
+                    }
                     for event in events {
                         if event_tx.send(event).is_err() {
                             return;
@@ -153,6 +176,21 @@ impl SymbolWorker {
         let _ = self
             .commands
             .send(SymbolCommand::Query { text, generation });
+    }
+
+    pub fn definitions(
+        &self,
+        name: String,
+        from: Option<PathBuf>,
+        component: bool,
+        generation: u64,
+    ) {
+        let _ = self.commands.send(SymbolCommand::Definitions {
+            name,
+            from,
+            component,
+            generation,
+        });
     }
 
     pub fn events(&self) -> Vec<SymbolEvent> {
@@ -329,7 +367,7 @@ mod tests {
             assert!(started.elapsed() < Duration::from_secs(10), "no results");
             let results = worker.events().into_iter().find_map(|e| match e {
                 SymbolEvent::Results { generation, found } => Some((generation, found)),
-                SymbolEvent::Ready(_) => None,
+                _ => None,
             });
             if let Some(results) = results {
                 break results;
@@ -339,6 +377,28 @@ mod tests {
         assert_eq!(found.0, 7);
         assert_eq!(found.1[0].name, "M");
         assert_eq!(found.1[0].relative, "B.cs");
+
+        worker.definitions("B".to_owned(), Some(root.join("A.cs")), false, 8);
+        let started = Instant::now();
+        let found = loop {
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "no definitions"
+            );
+            let found = worker.events().into_iter().find_map(|e| match e {
+                SymbolEvent::Definitions {
+                    generation: 8,
+                    found,
+                } => Some(found),
+                _ => None,
+            });
+            if let Some(found) = found {
+                break found;
+            }
+            thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(found.len(), 1);
+        assert_eq!((found[0].relative.as_str(), found[0].line), ("B.cs", 0));
         drop(worker);
         fs::remove_dir_all(&root).unwrap();
     }

@@ -10,6 +10,7 @@ mod find_bar;
 pub mod fonts;
 mod i18n;
 mod measure;
+mod navigation;
 mod outline;
 mod quick_open;
 mod search_panel;

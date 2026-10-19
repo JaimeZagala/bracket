@@ -69,6 +69,11 @@ fn symbol_queries(c: &mut Criterion) {
     ] {
         group.bench_function(name, |b| b.iter(|| symbols.search(black_box(text), 200)));
     }
+    // Go to definition: every symbol compared with one name.
+    let from = Some(r"Module07\File03.cs");
+    group.bench_function("definitions", |b| {
+        b.iter(|| symbols.definitions(black_box("Compute3"), from, false, 200))
+    });
     group.finish();
 }
 

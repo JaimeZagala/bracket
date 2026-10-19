@@ -87,6 +87,14 @@ La pestaña **Esquema** del panel lateral muestra los símbolos del documento ac
 - Sin proyecto, **Ver → Esquema** abre el panel solo con esta pestaña; Ctrl+B lo oculta.
 - Los documentos de más de 10 MB no tienen esquema.
 
+### Ir a definición e historial
+
+- **F12**, **Ctrl+clic** sobre un nombre o **Ir → Ir a definición** buscan dónde se declara el nombre que hay en el cursor (con Ctrl pulsado, el puntero es una mano). Primero en el mismo fichero, después en los de su carpeta o de su espacio de nombres, y luego en el resto del proyecto; si no hay ninguno con el nombre exacto, sin distinguir mayúsculas. Si hay uno, va directamente; si hay varios, se elige en la paleta (escribir sigue buscando como Ctrl+T).
+- En Razor, sobre `<MiComponente />` o `</MiComponente>` abre `MiComponente.razor`.
+- Sin proyecto, o en un fichero de fuera de él, busca entre los símbolos del propio documento.
+- Es aproximado: compara nombres, sin compilar. Un método con sobrecargas, o dos clases con el mismo nombre en espacios de nombres distintos, dan varios resultados.
+- **Alt+←** (**Ir → Atrás**) vuelve a donde estaba el cursor antes del último salto (ir a definición, a un símbolo, a una línea, a un fichero de Ctrl+P, a un resultado de búsqueda o a un símbolo del esquema) y **Alt+→** (**Ir → Adelante**) deshace la vuelta. Si la pestaña se cerró, el fichero se abre de nuevo. Se recuerdan los últimos 50 sitios.
+
 ## Pestañas
 
 - Cada fichero se abre en su propia pestaña. Si la pestaña activa es un documento nuevo vacío, el fichero ocupa su lugar; si el fichero ya está abierto, se va a su pestaña.
