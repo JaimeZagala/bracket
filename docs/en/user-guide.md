@@ -38,10 +38,11 @@ With a project open, the **project panel** on the left shows the folder tree: fo
 - `Program.cs:42` opens the file at line 42 and `Program.cs:42:7` also at column 7. `:120` goes to line 120 of the active document.
 - It searches the project's files, with the same exclusions as the tree. The index is prepared when the folder opens (a tenth of a second with 50,000 files) and updates by itself. Without a project, it searches the recent files.
 
-### Command palette and Go to line
+### Command palette, Go to line and Go to symbol
 
 - **Ctrl+Shift+P** or **F1** (or **View → Command palette…**) opens the same box with `>` in front: it lists the available commands, like "File: Save", with their shortcut on the right, filtered by typing as in Ctrl+P. Hovering over a command shows its identifier (for example `file.save`).
 - **Ctrl+G** (or **Go → Go to line…**) opens the box with `:` in front: type the line, or `line:column`, and Enter. Typing `:` in Ctrl+P works too.
+- **Ctrl+Shift+O** (or **Go → Go to symbol in file…**) opens the box with `@` in front: it lists the active document's symbols (the same as the outline) in order, with their kind, the symbol they are declared in and their line. Typing filters by name as in Ctrl+P; Enter selects the symbol's name in the editor.
 - The menus show the same commands and shortcuts; the ones that cannot be used at the moment (for example, Close folder without a project) are disabled.
 
 ### Find in file (Ctrl+F)

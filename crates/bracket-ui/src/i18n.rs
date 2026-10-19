@@ -169,6 +169,22 @@ impl Texts {
         self.get("menu_go")
     }
 
+    pub fn menu_go_to_symbol(&self) -> &str {
+        self.get("menu_go_to_symbol")
+    }
+
+    pub fn symbols_pending(&self) -> &str {
+        self.get("symbols_pending")
+    }
+
+    pub fn symbols_no_results(&self) -> &str {
+        self.get("symbols_no_results")
+    }
+
+    pub fn symbol_line(&self, line: &str) -> String {
+        self.fill("symbol_line", &[("line", &line)])
+    }
+
     pub fn menu_go_to_line(&self) -> &str {
         self.get("menu_go_to_line")
     }
@@ -911,6 +927,10 @@ mod tests {
                 ("find_total", t.find_total("1")),
                 ("menu_go", t.menu_go().to_owned()),
                 ("menu_go_to_line", t.menu_go_to_line().to_owned()),
+                ("menu_go_to_symbol", t.menu_go_to_symbol().to_owned()),
+                ("symbols_pending", t.symbols_pending().to_owned()),
+                ("symbols_no_results", t.symbols_no_results().to_owned()),
+                ("symbol_line", t.symbol_line("1")),
                 ("menu_command_palette", t.menu_command_palette().to_owned()),
                 ("menu_next_tab", t.menu_next_tab().to_owned()),
                 ("menu_previous_tab", t.menu_previous_tab().to_owned()),

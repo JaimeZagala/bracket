@@ -11,6 +11,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 ### Added
 
 - Esquema del documento activo: pestaña «Esquema» en el panel lateral (también sin proyecto, con Ver → Esquema) con los símbolos en árbol, plegables, un clic para ir a cada uno y el del cursor marcado. Símbolos de C#, CSS, JSON y XML con tree-sitter; de T-SQL por reglas; de Razor, sus directivas y los miembros de `@code`. Los paquetes de lenguaje pueden traer un `symbols.toml` con reglas regex. El esquema se recalcula en un hilo, de forma incremental, al dejar de escribir.
+- Ir a símbolo en el fichero: Ctrl+Mayús+O (o `@` en la paleta) lista los símbolos del documento activo, con su tipo, dónde están declarados y su línea, y se filtran escribiendo.
 
 ## [0.2.0] - 2026-10-19
 

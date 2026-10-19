@@ -38,10 +38,11 @@ Con un proyecto abierto, el **panel del proyecto** muestra a la izquierda el ár
 - `Program.cs:42` abre el fichero en la línea 42 y `Program.cs:42:7`, también en la columna 7. `:120` va a la línea 120 del documento activo.
 - Busca en los ficheros del proyecto, con las mismas exclusiones que el árbol. El índice se prepara al abrir la carpeta (con 50.000 ficheros, una décima de segundo) y se actualiza solo. Sin proyecto, busca entre los recientes.
 
-### Paleta de comandos e Ir a línea
+### Paleta de comandos, Ir a línea e Ir a símbolo
 
 - **Ctrl+Mayús+P** o **F1** (o **Ver → Paleta de comandos…**) abre el mismo cuadro con `>` delante: lista los comandos disponibles, como «Archivo: Guardar», con su atajo a la derecha, y se filtran escribiendo como en Ctrl+P. Al pasar el ratón por un comando se ve su identificador (por ejemplo `file.save`).
 - **Ctrl+G** (o **Ir → Ir a línea…**) abre el cuadro con `:` delante: escribe la línea, o `línea:columna`, e Intro. También funciona escribir `:` en Ctrl+P.
+- **Ctrl+Mayús+O** (o **Ir → Ir a símbolo en el fichero…**) abre el cuadro con `@` delante: lista los símbolos del documento activo (los mismos del esquema) en orden, con su tipo, el símbolo donde están declarados y su línea. Escribir filtra por nombre como en Ctrl+P; Intro selecciona el nombre del símbolo en el editor.
 - Los menús muestran los mismos comandos y atajos; los que no se pueden usar en ese momento (por ejemplo, Cerrar carpeta sin proyecto) salen desactivados.
 
 ### Buscar en el fichero (Ctrl+F)

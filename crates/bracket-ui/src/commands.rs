@@ -27,6 +27,7 @@ pub enum Command {
     ShowOutline,
     QuickOpen,
     GoToLine,
+    GoToSymbol,
     FocusTree,
     NextTab,
     PreviousTab,
@@ -55,7 +56,7 @@ const CTRL_SHIFT: Modifiers = Modifiers::COMMAND.plus(Modifiers::SHIFT);
 
 impl Command {
     /// In menu order.
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 23] = [
         Self::New,
         Self::Open,
         Self::OpenFolder,
@@ -75,6 +76,7 @@ impl Command {
         Self::ShowOutline,
         Self::QuickOpen,
         Self::GoToLine,
+        Self::GoToSymbol,
         Self::FocusTree,
         Self::NextTab,
         Self::PreviousTab,
@@ -102,6 +104,7 @@ impl Command {
             Self::ShowOutline => "view.outline",
             Self::QuickOpen => "go.file",
             Self::GoToLine => "go.line",
+            Self::GoToSymbol => "go.symbol",
             Self::FocusTree => "go.projectTree",
             Self::NextTab => "go.nextTab",
             Self::PreviousTab => "go.previousTab",
@@ -127,6 +130,7 @@ impl Command {
             Self::Palette | Self::ToggleSidebar | Self::ShowOutline => Menu::View,
             Self::QuickOpen
             | Self::GoToLine
+            | Self::GoToSymbol
             | Self::FocusTree
             | Self::NextTab
             | Self::PreviousTab => Menu::Go,
@@ -154,6 +158,7 @@ impl Command {
             Self::ShowOutline => texts.menu_outline(),
             Self::QuickOpen => texts.menu_quick_open(),
             Self::GoToLine => texts.menu_go_to_line(),
+            Self::GoToSymbol => texts.menu_go_to_symbol(),
             Self::FocusTree => texts.menu_focus_tree(),
             Self::NextTab => texts.menu_next_tab(),
             Self::PreviousTab => texts.menu_previous_tab(),
@@ -197,6 +202,7 @@ impl Command {
             Self::ToggleSidebar => keys!(CTRL, B),
             Self::QuickOpen => keys!(CTRL, P),
             Self::GoToLine => keys!(CTRL, G),
+            Self::GoToSymbol => keys!(CTRL_SHIFT, O),
             Self::FocusTree => keys!(CTRL_SHIFT, E),
             Self::NextTab => keys!(CTRL, Tab; CTRL, PageDown),
             Self::PreviousTab => keys!(CTRL_SHIFT, Tab; CTRL, PageUp),
@@ -216,6 +222,7 @@ impl Command {
             Self::Save
             | Self::SaveAs
             | Self::GoToLine
+            | Self::GoToSymbol
             | Self::Find
             | Self::FindNext
             | Self::FindPrevious
@@ -306,6 +313,7 @@ mod tests {
             Command::FocusTree,
             Command::Save,
             Command::GoToLine,
+            Command::GoToSymbol,
             Command::NextTab,
         ] {
             assert!(!command.is_available(&none), "{}", command.id());

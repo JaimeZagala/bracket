@@ -106,6 +106,39 @@ impl Worker {
     }
 }
 
+/// A symbol as Ctrl+Shift+O lists it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PaletteSymbol {
+    pub name: String,
+    pub kind: SymbolKind,
+    /// The symbol it is declared in, if any.
+    pub container: Option<String>,
+    /// 1-based.
+    pub line: usize,
+    pub name_range: Range<usize>,
+}
+
+/// The active document's symbols for the palette, or why there are none.
+pub enum SymbolList<'a> {
+    Ready {
+        symbols: &'a [PaletteSymbol],
+        /// Their names, for the fuzzy search.
+        names: &'a [String],
+    },
+    /// Still being worked out.
+    Pending,
+    Unsupported,
+    TooLarge,
+}
+
+/// The palette's list, built once per version of the outline.
+struct PaletteCache {
+    tab: u64,
+    version: u64,
+    symbols: Vec<PaletteSymbol>,
+    names: Vec<String>,
+}
+
 /// The outline shown, and for which version of which tab.
 struct Shown {
     tab: u64,
@@ -129,9 +162,53 @@ pub struct Outline {
     /// The symbol at the caret last frame; when it changes, it is scrolled into view.
     current: Option<usize>,
     scroll: (f32, f32),
+    palette: Option<PaletteCache>,
 }
 
 impl Outline {
+    /// The symbols of `tab` for Ctrl+Shift+O; `doc` gives their line numbers.
+    pub fn palette_list(&mut self, tab: u64, doc: &Document) -> SymbolList<'_> {
+        let Some(shown) = self.shown.as_ref().filter(|s| s.tab == tab) else {
+            return SymbolList::Pending;
+        };
+        let symbols = match &shown.found {
+            Found::Symbols(symbols) => symbols,
+            Found::Unsupported => return SymbolList::Unsupported,
+            Found::TooLarge => return SymbolList::TooLarge,
+        };
+        let fresh = self
+            .palette
+            .as_ref()
+            .is_some_and(|c| c.tab == tab && c.version == shown.version);
+        if !fresh {
+            let text = doc.buffer.text();
+            // The outline may be a little older than the text: positions are clamped.
+            let line_of = |at: usize| text.char_to_line(at.min(text.len_chars())) + 1;
+            let list: Vec<PaletteSymbol> = symbols
+                .iter()
+                .map(|s| PaletteSymbol {
+                    name: s.name.clone(),
+                    kind: s.kind,
+                    container: s.parent.map(|p| symbols[p].name.clone()),
+                    line: line_of(s.name_range.start),
+                    name_range: s.name_range.clone(),
+                })
+                .collect();
+            let names = list.iter().map(|s| s.name.clone()).collect();
+            self.palette = Some(PaletteCache {
+                tab,
+                version: shown.version,
+                symbols: list,
+                names,
+            });
+        }
+        let cache = self.palette.as_ref().expect("just built");
+        SymbolList::Ready {
+            symbols: &cache.symbols,
+            names: &cache.names,
+        }
+    }
+
     /// Keeps the outline in step with the active tab. Call every frame while it is visible.
     pub fn update(
         &mut self,
@@ -335,7 +412,7 @@ impl Outline {
 }
 
 /// The letter and colour that tell a symbol's kind at a glance.
-fn kind_badge(kind: SymbolKind) -> Badge {
+pub fn kind_badge(kind: SymbolKind) -> Badge {
     use SymbolKind::*;
     let (text, color) = match kind {
         Namespace => ("N", [0x6E, 0x76, 0x81]),
@@ -554,6 +631,22 @@ mod tests {
         assert_eq!(Outline::at_caret(outline.symbols(), caret), Some(1));
         let caret = text.find("class B").unwrap() + 3;
         assert_eq!(Outline::at_caret(outline.symbols(), caret), Some(3));
+    }
+
+    #[test]
+    fn the_palette_list_has_lines_and_containers() {
+        let ctx = egui::Context::default();
+        let mut outline = Outline::default();
+        let doc = doc("class A\n{\n  void M() { }\n}\n");
+        assert!(matches!(outline.palette_list(1, &doc), SymbolList::Pending));
+        wait(&mut outline, &ctx, &doc, Some("csharp"));
+        let SymbolList::Ready { symbols, names } = outline.palette_list(1, &doc) else {
+            panic!("the symbols are ready");
+        };
+        assert_eq!(names, ["A", "M"]);
+        assert_eq!(symbols[1].line, 3);
+        assert_eq!(symbols[1].container.as_deref(), Some("A"));
+        assert!(matches!(outline.palette_list(2, &doc), SymbolList::Pending));
     }
 
     #[test]

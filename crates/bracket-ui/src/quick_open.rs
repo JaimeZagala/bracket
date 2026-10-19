@@ -23,6 +23,7 @@ use eframe::egui::{
 
 use crate::commands::Command;
 use crate::i18n::Texts;
+use crate::outline::{PaletteSymbol, SymbolList, kind_badge};
 use crate::tabs;
 
 /// Results kept for one query.
@@ -218,6 +219,8 @@ pub enum PaletteAction {
     },
     /// `:line` in the active document.
     GoToLine(LinePosition),
+    /// `@symbol`: select this range (a symbol's name) in the active document.
+    GoTo(std::ops::Range<usize>),
     Run(Command),
     Close,
 }
@@ -322,8 +325,14 @@ impl QuickOpen {
         }
     }
 
+    /// Whether the palette lists the active document's symbols (`@`), so they must be ready.
+    pub fn wants_symbols(&self) -> bool {
+        Mode::of(&self.text) == Mode::Symbols
+    }
+
     /// Draws the palette. `indexed`: the number of files in the index, once it is built;
-    /// `commands`: the commands available now; `lines`: the active document's line count.
+    /// `commands`: the commands available now; `lines`: the active document's line count;
+    /// `symbols`: its symbols, for `@`.
     #[allow(clippy::too_many_arguments)]
     pub fn show(
         &mut self,
@@ -333,6 +342,7 @@ impl QuickOpen {
         indexed: Option<usize>,
         commands: &[PaletteCommand],
         lines: Option<usize>,
+        symbols: SymbolList<'_>,
         registry: &LanguageRegistry,
         texts: &Texts,
     ) -> Option<PaletteAction> {
@@ -345,6 +355,16 @@ impl QuickOpen {
             Mode::Commands => command_matches(commands, self.text[1..].trim()),
             _ => Vec::new(),
         };
+        let symbol_list: &[PaletteSymbol] = match &symbols {
+            SymbolList::Ready { symbols, .. } => symbols,
+            _ => &[],
+        };
+        let symbol_matches = match (&symbols, mode) {
+            (SymbolList::Ready { names, .. }, Mode::Symbols) => {
+                symbol_matches(names, self.text[1..].trim())
+            }
+            _ => Vec::new(),
+        };
         let (file, line) = parse_query(&self.text);
         let file = file.to_owned();
         let go_to_line = mode == Mode::Line && line.is_some();
@@ -353,6 +373,7 @@ impl QuickOpen {
         let count = match mode {
             Mode::Files => items.len(),
             Mode::Commands => matches.len(),
+            Mode::Symbols => symbol_matches.len(),
             Mode::Line => usize::from(go_to_line),
         };
         let pressed = |key| ctx.input_mut(|i| i.consume_key(Modifiers::NONE, key));
@@ -381,6 +402,9 @@ impl QuickOpen {
                 Mode::Commands => matches
                     .get(self.selected)
                     .map(|(i, _)| PaletteAction::Run(commands[*i].command)),
+                Mode::Symbols => symbol_matches
+                    .get(self.selected)
+                    .map(|(i, _)| PaletteAction::GoTo(symbol_list[*i].name_range.clone())),
                 Mode::Files => items.get(self.selected).map(|item| PaletteAction::Open {
                     path: item.path.clone(),
                     line,
@@ -432,6 +456,46 @@ impl QuickOpen {
                             if list_row(ui, &label, &[], go_to_line, None).clicked() {
                                 action = line.map(PaletteAction::GoToLine);
                             }
+                        }
+                        Mode::Symbols => {
+                            let message = match &symbols {
+                                SymbolList::Pending => Some(texts.symbols_pending()),
+                                SymbolList::Unsupported => Some(texts.outline_unsupported()),
+                                SymbolList::TooLarge => Some(texts.outline_too_large()),
+                                SymbolList::Ready { .. } if symbol_list.is_empty() => {
+                                    Some(texts.outline_none())
+                                }
+                                SymbolList::Ready { .. } if symbol_matches.is_empty() => {
+                                    Some(texts.symbols_no_results())
+                                }
+                                SymbolList::Ready { .. } => None,
+                            };
+                            if let Some(message) = message {
+                                ui.weak(message);
+                                return;
+                            }
+                            egui::ScrollArea::vertical()
+                                .max_height(ROW_HEIGHT * VISIBLE_ROWS)
+                                .auto_shrink([false, true])
+                                .show_rows(ui, ROW_HEIGHT, symbol_matches.len(), |ui, range| {
+                                    ui.spacing_mut().item_spacing.y = 0.0;
+                                    for i in range {
+                                        let (index, positions) = &symbol_matches[i];
+                                        let symbol = &symbol_list[*index];
+                                        let selected = i == self.selected;
+                                        let line = texts.symbol_line(&symbol.line.to_string());
+                                        let response =
+                                            symbol_row(ui, symbol, positions, &line, selected);
+                                        if selected {
+                                            response.scroll_to_me(None);
+                                        }
+                                        if response.clicked() {
+                                            action = Some(PaletteAction::GoTo(
+                                                symbol.name_range.clone(),
+                                            ));
+                                        }
+                                    }
+                                });
                         }
                         Mode::Commands => {
                             if matches.is_empty() {
@@ -517,6 +581,8 @@ enum Mode {
     Files,
     /// `>`: run a command.
     Commands,
+    /// `@`: go to a symbol of the active document.
+    Symbols,
     /// `:`: go to a line of the active document.
     Line,
 }
@@ -525,6 +591,8 @@ impl Mode {
     fn of(text: &str) -> Self {
         if text.starts_with('>') {
             Self::Commands
+        } else if text.starts_with('@') {
+            Self::Symbols
         } else if text.trim() == ":"
             || (text.trim_start().starts_with(':') && parse_query(text).0.is_empty())
         {
@@ -557,6 +625,91 @@ fn command_matches(commands: &[PaletteCommand], query: &str) -> Vec<(usize, Vec<
         .into_iter()
         .map(|m| (m.index, m.positions))
         .collect()
+}
+
+/// The symbols matching `query` (all of them, in document order, when it is empty), with the
+/// matched characters of each name.
+fn symbol_matches(names: &[String], query: &str) -> Vec<(usize, Vec<usize>)> {
+    if query.is_empty() {
+        return (0..names.len()).map(|i| (i, Vec::new())).collect();
+    }
+    fuzzy::search(names, &Query::new(query), LIMIT)
+        .into_iter()
+        .map(|m| (m.index, m.positions))
+        .collect()
+}
+
+/// One symbol: its kind, its name with the matched characters marked, the symbol it is in and,
+/// on the right, its line.
+fn symbol_row(
+    ui: &mut Ui,
+    symbol: &PaletteSymbol,
+    positions: &[usize],
+    line: &str,
+    selected: bool,
+) -> egui::Response {
+    let (rect, response) =
+        ui.allocate_exact_size(vec2(ui.available_width(), ROW_HEIGHT), Sense::click());
+    if !ui.is_rect_visible(rect) {
+        return response;
+    }
+    let visuals = ui.visuals().clone();
+    let painter = ui.painter();
+    let (text, weak, accent) = row_colors(&visuals, selected);
+    if selected {
+        painter.rect_filled(rect, 3.0, visuals.selection.bg_fill);
+    } else if response.hovered() {
+        painter.rect_filled(rect, 3.0, visuals.widgets.hovered.weak_bg_fill);
+    }
+    let font = TextStyle::Body.resolve(ui.style());
+    let center_y = rect.center().y;
+    let mut x = rect.left() + 8.0;
+    let badge_font = FontId::proportional((font.size * 0.7).round());
+    x += tabs::paint_badge(
+        painter,
+        &kind_badge(symbol.kind),
+        badge_font,
+        pos2(x, center_y),
+    ) + 6.0;
+    let line_galley = painter.layout_no_wrap(
+        line.to_owned(),
+        FontId::proportional(font.size * 0.85),
+        weak,
+    );
+    let right = rect.right() - 8.0 - line_galley.size().x;
+    painter.galley(
+        pos2(right, center_y - line_galley.size().y / 2.0),
+        line_galley,
+        weak,
+    );
+    let chars: Vec<char> = symbol.name.chars().collect();
+    let name = painter.layout_job(highlighted(
+        &chars,
+        0..chars.len(),
+        positions,
+        text,
+        accent,
+        font.size,
+    ));
+    let clip = painter.with_clip_rect(Rect::from_min_max(
+        pos2(x, rect.top()),
+        pos2(right - 8.0, rect.bottom()),
+    ));
+    let name_width = name.size().x;
+    clip.galley(pos2(x, center_y - name.size().y / 2.0), name, text);
+    if let Some(container) = &symbol.container {
+        let container = painter.layout_no_wrap(
+            container.clone(),
+            FontId::proportional(font.size * 0.85),
+            weak,
+        );
+        clip.galley(
+            pos2(x + name_width + 10.0, center_y - container.size().y / 2.0),
+            container,
+            weak,
+        );
+    }
+    response
 }
 
 /// One command: its label with the matched characters marked, and its shortcut on the right.
@@ -802,6 +955,26 @@ mod tests {
         let found = command_matches(&commands, "gtl");
         assert_eq!(found.len(), 1);
         assert_eq!(commands[found[0].0].command, Command::GoToLine);
+    }
+
+    #[test]
+    fn symbols_are_found_by_name_or_all_listed() {
+        let names = vec![
+            "Invoice".to_owned(),
+            "Compute".to_owned(),
+            "Total".to_owned(),
+        ];
+        assert_eq!(
+            symbol_matches(&names, "").len(),
+            3,
+            "all, in order, with no query"
+        );
+        let found = symbol_matches(&names, "cmp");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].0, 1);
+        assert_eq!(Mode::of("@total"), Mode::Symbols);
+        assert!(QuickOpen::new(Vec::new(), "@").wants_symbols());
+        assert!(!QuickOpen::new(Vec::new(), "").wants_symbols());
     }
 
     #[test]

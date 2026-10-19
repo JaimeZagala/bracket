@@ -36,7 +36,7 @@ use crate::find_bar::{FindAction, FindBar, ReplaceOutcome};
 use crate::fonts::{self, Fallback, FontSource, LoadedFallback};
 use crate::i18n::{self, LANGUAGES, Texts};
 use crate::measure::Probe;
-use crate::outline::{self, Outline};
+use crate::outline::{self, Outline, SymbolList};
 use crate::quick_open::{IndexEvent, IndexWorker, PaletteAction, PaletteCommand, QuickOpen};
 use crate::search_panel::{OpenMatch, ReplacePlan, SearchAction, SearchPanel, replace_in_document};
 use crate::session::{self, SessionKeeper};
@@ -1101,6 +1101,7 @@ impl BracketApp {
             Command::QuickOpen => return self.open_palette(""),
             Command::Palette => return self.open_palette(">"),
             Command::GoToLine => return self.open_palette(":"),
+            Command::GoToSymbol => return self.open_palette("@"),
             // Closing goes through the unsaved-changes check in handle_window_events.
             Command::Exit => ctx.send_viewport_cmd(ViewportCommand::Close),
         }
@@ -1870,11 +1871,14 @@ impl BracketApp {
                 shortcut: command.shortcut().map(|s| ctx.format_shortcut(&s)),
             })
             .collect();
-        let active = self.active_tab();
-        let lines = active
-            .loading
-            .is_none()
-            .then(|| active.doc.buffer.text().len_lines());
+        let active = &self.tabs[self.active];
+        let loaded = active.loading.is_none();
+        let lines = loaded.then(|| active.doc.buffer.text().len_lines());
+        let symbols = if loaded {
+            self.outline.palette_list(active.id, &active.doc)
+        } else {
+            SymbolList::Pending
+        };
         let Some(palette) = &mut self.quick_open else {
             return;
         };
@@ -1885,6 +1889,7 @@ impl BracketApp {
             self.indexed,
             &commands,
             lines,
+            symbols,
             &self.languages,
             self.texts,
         );
@@ -1905,6 +1910,11 @@ impl BracketApp {
                 let tab = &mut self.tabs[self.active];
                 if tab.loading.is_none() {
                     go_to(tab, (line, column.unwrap_or(1)));
+                }
+            }
+            PaletteAction::GoTo(range) => {
+                if self.tabs[self.active].loading.is_none() {
+                    self.select_match(range);
                 }
             }
             PaletteAction::Run(command) => return self.run_command(ctx, frame, command),
@@ -2241,7 +2251,13 @@ impl eframe::App for BracketApp {
         self.finish_file_ops(ctx);
         self.search.poll();
         self.poll_folder_replace();
-        if self.sidebar.visible && self.sidebar_mode == SidebarMode::Outline {
+        let outline_shown = self.sidebar.visible && self.sidebar_mode == SidebarMode::Outline;
+        if outline_shown
+            || self
+                .quick_open
+                .as_ref()
+                .is_some_and(QuickOpen::wants_symbols)
+        {
             let tab = &self.tabs[self.active];
             if tab.loading.is_none() {
                 let language = tab.language.as_deref();
