@@ -32,6 +32,7 @@ pub enum Command {
     GoToDefinition,
     NavigateBack,
     NavigateForward,
+    FindReferences,
     FocusTree,
     NextTab,
     PreviousTab,
@@ -63,7 +64,7 @@ const CTRL_SHIFT: Modifiers = Modifiers::COMMAND.plus(Modifiers::SHIFT);
 
 impl Command {
     /// In menu order.
-    pub const ALL: [Self; 27] = [
+    pub const ALL: [Self; 28] = [
         Self::New,
         Self::Open,
         Self::OpenFolder,
@@ -88,6 +89,7 @@ impl Command {
         Self::GoToDefinition,
         Self::NavigateBack,
         Self::NavigateForward,
+        Self::FindReferences,
         Self::FocusTree,
         Self::NextTab,
         Self::PreviousTab,
@@ -120,6 +122,7 @@ impl Command {
             Self::GoToDefinition => "go.definition",
             Self::NavigateBack => "go.back",
             Self::NavigateForward => "go.forward",
+            Self::FindReferences => "go.references",
             Self::FocusTree => "go.projectTree",
             Self::NextTab => "go.nextTab",
             Self::PreviousTab => "go.previousTab",
@@ -150,6 +153,7 @@ impl Command {
             | Self::GoToDefinition
             | Self::NavigateBack
             | Self::NavigateForward
+            | Self::FindReferences
             | Self::FocusTree
             | Self::NextTab
             | Self::PreviousTab => Menu::Go,
@@ -182,6 +186,7 @@ impl Command {
             Self::GoToDefinition => texts.menu_go_to_definition(),
             Self::NavigateBack => texts.menu_back(),
             Self::NavigateForward => texts.menu_forward(),
+            Self::FindReferences => texts.menu_find_references(),
             Self::FocusTree => texts.menu_focus_tree(),
             Self::NextTab => texts.menu_next_tab(),
             Self::PreviousTab => texts.menu_previous_tab(),
@@ -230,6 +235,7 @@ impl Command {
             Self::GoToDefinition => keys!(Modifiers::NONE, F12),
             Self::NavigateBack => keys!(Modifiers::ALT, ArrowLeft),
             Self::NavigateForward => keys!(Modifiers::ALT, ArrowRight),
+            Self::FindReferences => keys!(Modifiers::SHIFT, F12),
             Self::FocusTree => keys!(CTRL_SHIFT, E),
             Self::NextTab => keys!(CTRL, Tab; CTRL, PageDown),
             Self::PreviousTab => keys!(CTRL_SHIFT, Tab; CTRL, PageUp),
@@ -258,6 +264,7 @@ impl Command {
             | Self::Replace => state.active_loaded,
             Self::NextTab | Self::PreviousTab => state.tabs > 1,
             Self::GoToDefinition => state.active_loaded,
+            Self::FindReferences => state.has_project && state.active_loaded,
             Self::NavigateBack => state.can_go_back,
             Self::NavigateForward => state.can_go_forward,
             _ => true,
@@ -349,6 +356,7 @@ mod tests {
             Command::GoToDefinition,
             Command::NavigateBack,
             Command::NavigateForward,
+            Command::FindReferences,
             Command::Save,
             Command::GoToLine,
             Command::GoToSymbol,

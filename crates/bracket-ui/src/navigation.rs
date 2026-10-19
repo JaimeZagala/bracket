@@ -42,6 +42,12 @@ pub fn name_at(text: &Rope, pos: usize, language: Option<&str>) -> Option<(Strin
     Some((name, component))
 }
 
+/// Whether references to a name in `language` must match its case: they must, except in T-SQL
+/// and in text without a language.
+pub fn references_match_case(language: Option<&str>) -> bool {
+    language.is_some_and(|l| l != "tsql")
+}
+
 /// A place in a document: its tab, its file (to open it again if the tab was closed) and
 /// the caret's line and column, 1-based.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -141,6 +147,14 @@ mod tests {
             "lower case"
         );
         assert_eq!(name(text, 3, Some("html")), Some(("Counter".into(), false)));
+    }
+
+    #[test]
+    fn references_match_case_except_in_sql_and_plain_text() {
+        assert!(references_match_case(Some("csharp")));
+        assert!(references_match_case(Some("json")));
+        assert!(!references_match_case(Some("tsql")));
+        assert!(!references_match_case(None));
     }
 
     fn place(line: usize) -> Place {

@@ -94,6 +94,7 @@ La pestaña **Esquema** del panel lateral muestra los símbolos del documento ac
 - Sin proyecto, o en un fichero de fuera de él, busca entre los símbolos del propio documento.
 - Es aproximado: compara nombres, sin compilar. Un método con sobrecargas, o dos clases con el mismo nombre en espacios de nombres distintos, dan varios resultados.
 - **Alt+←** (**Ir → Atrás**) vuelve a donde estaba el cursor antes del último salto (ir a definición, a un símbolo, a una línea, a un fichero de Ctrl+P, a un resultado de búsqueda o a un símbolo del esquema) y **Alt+→** (**Ir → Adelante**) deshace la vuelta. Si la pestaña se cerró, el fichero se abre de nuevo. Se recuerdan los últimos 50 sitios.
+- **Mayús+F12** (**Ir → Buscar referencias**) busca el nombre del cursor como palabra completa en todo el proyecto y muestra los resultados en la pestaña **Buscar**. Distingue mayúsculas salvo en T-SQL y en texto sin lenguaje; quita el filtro de ficheros a incluir (las exclusiones se mantienen). Encuentra también comentarios, textos y otros símbolos con el mismo nombre: compara nombres, sin compilar.
 
 ## Pestañas
 

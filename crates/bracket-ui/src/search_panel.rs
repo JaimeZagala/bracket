@@ -139,6 +139,19 @@ impl SearchPanel {
         }
     }
 
+    /// Shift+F12: searches the whole project for `name` as a whole word, at once. The files to
+    /// include are cleared (the exclusions stay) and the keyboard stays in the editor.
+    pub fn search_references(&mut self, name: &str, match_case: bool) {
+        self.query = name.to_owned();
+        self.options = FindOptions {
+            match_case,
+            whole_word: true,
+            regex: false,
+        };
+        self.include.clear();
+        self.changed_at = Some(Instant::now() - DEBOUNCE);
+    }
+
     /// Searches again at once (after "Replace all" changed the files).
     pub fn refresh(&mut self) {
         if !self.query.is_empty() {
@@ -747,6 +760,28 @@ fn match_row(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn references_are_whole_words_in_every_file() {
+        let mut panel = SearchPanel {
+            include: "*.md".to_owned(),
+            exclude: "bin/".to_owned(),
+            options: FindOptions {
+                regex: true,
+                ..FindOptions::default()
+            },
+            ..SearchPanel::default()
+        };
+        panel.search_references("Total", true);
+        assert_eq!(panel.query, "Total");
+        assert!(panel.options.whole_word && panel.options.match_case && !panel.options.regex);
+        assert_eq!(
+            (panel.include.as_str(), panel.exclude.as_str()),
+            ("", "bin/")
+        );
+        assert!(panel.changed_at.is_some(), "it searches at once");
+        assert!(!panel.focus, "the keyboard stays in the editor");
+    }
     use std::fs;
 
     #[test]

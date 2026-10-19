@@ -184,6 +184,10 @@ impl Texts {
         self.get("menu_back")
     }
 
+    pub fn menu_find_references(&self) -> &str {
+        self.get("menu_find_references")
+    }
+
     pub fn menu_forward(&self) -> &str {
         self.get("menu_forward")
     }
@@ -981,6 +985,7 @@ mod tests {
                 ),
                 ("menu_back", t.menu_back().to_owned()),
                 ("menu_forward", t.menu_forward().to_owned()),
+                ("menu_find_references", t.menu_find_references().to_owned()),
                 ("definition_no_name", t.definition_no_name().to_owned()),
                 ("definition_none", t.definition_none("x")),
                 (

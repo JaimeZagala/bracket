@@ -94,6 +94,7 @@ The **Outline** tab of the side panel shows the active document's symbols as a t
 - Without a project, or in a file outside it, it looks among the document's own symbols.
 - It is approximate: it compares names, without compiling. A method with overloads, or two classes with the same name in different namespaces, give several results.
 - **Alt+←** (**Go → Back**) goes back to where the caret was before the last jump (go to definition, to a symbol, to a line, to a file from Ctrl+P, to a search result or to a symbol in the outline) and **Alt+→** (**Go → Forward**) undoes going back. If the tab was closed, the file opens again. The last 50 places are remembered.
+- **Shift+F12** (**Go → Find references**) searches the whole project for the name at the caret as a whole word and shows the results in the **Search** tab. It matches case except in T-SQL and in text without a language; it clears the filter of files to include (the exclusions stay). It also finds comments, strings and other symbols with the same name: it compares names, without compiling.
 
 ## Tabs
 

@@ -1134,6 +1134,7 @@ impl BracketApp {
             Command::GoToDefinition => self.go_to_definition(),
             Command::NavigateBack => self.navigate(ctx, true),
             Command::NavigateForward => self.navigate(ctx, false),
+            Command::FindReferences => self.find_references(),
             // Closing goes through the unsaved-changes check in handle_window_events.
             Command::Exit => ctx.send_viewport_cmd(ViewportCommand::Close),
         }
@@ -1287,6 +1288,24 @@ impl BracketApp {
             generation: self.definition_generation,
             local: index.is_none(),
         });
+    }
+
+    /// Shift+F12: the name at the caret, as a whole word, in the folder search.
+    fn find_references(&mut self) {
+        let tab = &self.tabs[self.active];
+        if self.project.is_none() || tab.loading.is_some() {
+            return;
+        }
+        let caret = tab.doc.buffer.selections().primary().head;
+        let language = tab.language.as_deref();
+        let Some((name, _)) = navigation::name_at(tab.doc.buffer.text(), caret, language) else {
+            self.status = Some(self.texts.definition_no_name().to_owned());
+            return;
+        };
+        let match_case = navigation::references_match_case(language);
+        self.search.search_references(&name, match_case);
+        self.sidebar.visible = true;
+        self.sidebar_mode = SidebarMode::Search;
     }
 
     /// The symbol index's answer to a go to definition: one place is gone to, several are

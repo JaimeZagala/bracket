@@ -14,6 +14,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - Ir a símbolo en el fichero: Ctrl+Mayús+O (o `@` en la paleta) lista los símbolos del documento activo, con su tipo, dónde están declarados y su línea, y se filtran escribiendo.
 - Ir a símbolo del proyecto: Ctrl+T (o `#` en la paleta) busca por nombre entre los símbolos de todos los ficheros del proyecto, con su tipo, dónde están declarados y su fichero, y abre el fichero en el símbolo.
 - Ir a definición: F12 o Ctrl+clic sobre un nombre busca dónde se declara, primero en el mismo fichero, después en su carpeta o espacio de nombres y luego en el resto del proyecto; si hay varios, se elige en la paleta. En Razor, `<MiComponente />` abre `MiComponente.razor`. Sin proyecto, busca en el propio documento. Historial de navegación: Alt+← y Alt+→ vuelven a donde estaba el cursor antes de cada salto.
+- Buscar referencias: Mayús+F12 busca el nombre del cursor como palabra completa en todo el proyecto, con los resultados en la pestaña Buscar; distingue mayúsculas salvo en T-SQL y en texto sin lenguaje. Es aproximado: compara nombres, sin compilar.
 - Índice de símbolos del proyecto: al abrir una carpeta se extraen en segundo plano, en paralelo, los símbolos de todos sus ficheros (hasta 1 MB cada uno) y se mantienen al día cuando los ficheros cambian, también los que otro programa modifica. Las pestañas con cambios sin guardar aportan su texto. El pie de Ctrl+P muestra cuántos símbolos hay. Es la base de Ctrl+T y de ir a definición.
 
 ## [0.2.0] - 2026-10-19
